@@ -1,0 +1,112 @@
+//! NOCTURN — Windows optimisation engine and AI desktop assistant.
+//!
+//! Module map:
+//! * `system`   — read-only inspection: hardware, telemetry, network, diagnostics, health
+//! * `tweaks`   — NOCTURN TWEAK: catalogue, preview, journaled apply, rollback
+//! * `startup`  — Startup Manager (reversible enable/disable)
+//! * `ai`       — NOCTURN AI: providers, tools, agent loop, conversations
+//! * `security` — allow-listed execution, secrets, elevation
+//! * `db`, `settings`, `logging`, `state`, `commands`
+
+mod ai;
+mod commands;
+mod db;
+mod error;
+mod logging;
+mod security;
+mod settings;
+mod startup;
+mod state;
+mod system;
+mod tweaks;
+mod util;
+
+use std::sync::Arc;
+
+use tauri::Manager;
+
+pub fn run() {
+    // When relaunched through UAC as the narrowly scoped elevated worker, do
+    // that job and exit without starting the UI.
+    if let Some(code) = security::elevation::maybe_run_worker() {
+        std::process::exit(code);
+    }
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }))
+        .setup(|app| {
+            let data_dir = app.path().app_data_dir()?;
+            let log_dir = app.path().app_log_dir().unwrap_or_else(|_| data_dir.join("logs"));
+            std::fs::create_dir_all(&data_dir)?;
+            if let Some(guard) = logging::init(&log_dir) {
+                // Keep the log writer alive for the whole process.
+                Box::leak(Box::new(guard));
+            }
+            tracing::info!(version = env!("CARGO_PKG_VERSION"), elevated = security::elevation::is_elevated(), "NOCTURN starting");
+
+            let db = db::Db::open(&data_dir.join("nocturn.db"))
+                .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
+            match tweaks::journal::recover_interrupted(&db) {
+                Ok(0) => {}
+                Ok(n) => tracing::warn!("{n} change(s) were interrupted by an earlier shutdown; they can be rolled back from History"),
+                Err(e) => tracing::error!("journal recovery failed: {e}"),
+            }
+            db.audit("info", "system", "app.start", None);
+
+            let state = Arc::new(state::AppState::new(db, data_dir, log_dir));
+            system::monitor::start(app.handle().clone(), state.telemetry.clone());
+
+            // Warm the hardware inventory in the background.
+            let warm = state.clone();
+            std::thread::spawn(move || {
+                let _ = warm.system_info(false);
+            });
+
+            app.manage(state);
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::app_info,
+            commands::get_settings,
+            commands::save_settings,
+            commands::list_audit,
+            commands::get_system_info,
+            commands::get_telemetry_history,
+            commands::get_processes,
+            commands::end_process,
+            commands::get_health,
+            commands::get_events,
+            commands::get_drivers,
+            commands::get_services,
+            commands::get_restore_status,
+            commands::network_overview,
+            commands::network_test,
+            commands::power_plans,
+            commands::set_power_plan,
+            commands::list_tweaks,
+            commands::list_profiles,
+            commands::preview_tweaks,
+            commands::apply_tweaks,
+            commands::rollback_transaction,
+            commands::list_history,
+            commands::get_transaction,
+            commands::list_startup,
+            commands::set_startup_enabled,
+            commands::ai_key_status,
+            commands::ai_set_key,
+            commands::ai_test_connection,
+            commands::ai_send,
+            commands::ai_cancel,
+            commands::ai_list_conversations,
+            commands::ai_get_conversation,
+            commands::ai_rename_conversation,
+            commands::ai_delete_conversation,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running NOCTURN");
+}

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0" stop-color="#1B1C21"/>
+      <stop offset="1" stop-color="#08080A"/>
+    </radialGradient>
+    <linearGradient id="moon" x1="0.2" y1="0.1" x2="0.8" y2="0.95">
+      <stop offset="0" stop-color="#F4F5F8"/>
+      <stop offset="0.55" stop-color="#C9CCD4"/>
+      <stop offset="1" stop-color="#7E828E"/>
+    </linearGradient>
+    <mask id="crescent">
+      <rect width="1024" height="1024" fill="black"/>
+      <circle cx="512" cy="512" r="300" fill="white"/>
+      <circle cx="628" cy="430" r="262" fill="black"/>
+    </mask>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <rect x="6" y="6" width="1012" height="1012" rx="219" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="4"/>
+  <rect width="1024" height="1024" fill="url(#moon)" mask="url(#crescent)"/>
+  <circle cx="742" cy="300" r="14" fill="#E9EBF0" opacity="0.9"/>
+</svg>
