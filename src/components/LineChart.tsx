@@ -23,6 +23,8 @@ interface Props {
   ticks?: number;
   area?: boolean;
   ariaLabel: string;
+  /** Tooltip time label; defaults to "Ns ago" for live charts. */
+  timeLabel?: (ts: number) => string;
 }
 
 function niceMax(v: number): number {
@@ -33,7 +35,7 @@ function niceMax(v: number): number {
   return step * exp;
 }
 
-export function LineChart({ series, times, height = 120, max, format, ticks = 2, area = true, ariaLabel }: Props) {
+export function LineChart({ series, times, height = 120, max, format, ticks = 2, area = true, ariaLabel, timeLabel }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(400);
   const [hover, setHover] = useState<number | null>(null);
@@ -128,7 +130,7 @@ export function LineChart({ series, times, height = 120, max, format, ticks = 2,
       </svg>
       {hover != null && (
         <div className="tip" style={{ left: Math.min(Math.max(hx, 70), width - 70), top: padT }}>
-          <div className="t">{secondsAgo === 0 ? "Now" : `${secondsAgo}s ago`}</div>
+          <div className="t">{timeLabel && hover != null ? timeLabel(times[hover]) : secondsAgo === 0 ? "Now" : `${secondsAgo}s ago`}</div>
           {series.map((s) => {
             const v = s.values[hover];
             return (

@@ -37,12 +37,13 @@ pub fn definitions() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "list_top_processes",
-            description: "Running processes grouped by name with combined CPU %, memory and disk activity, sorted by the chosen resource. Call this to find what is using CPU, RAM or disk.",
+            description: "Running processes grouped by name with combined CPU %, memory and disk activity, sorted by the chosen resource. Call this to find what is using CPU, RAM or disk. To check whether a specific app is running, pass its name in `name` (e.g. 'spotify') — the top-N list may not include it.",
             schema: json!({
                 "type": "object",
                 "properties": {
                     "sort_by": { "type": "string", "enum": ["cpu", "memory", "disk"], "description": "Resource to sort by." },
-                    "limit": { "type": "integer", "minimum": 1, "maximum": 40, "description": "How many process groups to return (default 15)." }
+                    "limit": { "type": "integer", "minimum": 1, "maximum": 40, "description": "How many process groups to return (default 15)." },
+                    "name": { "type": "string", "description": "Only return processes whose name contains this text (case-insensitive), e.g. 'spotify'." }
                 },
                 "additionalProperties": false
             }),
@@ -112,7 +113,7 @@ pub fn definitions() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "propose_plan",
-            description: "Present a set of changes to the user for approval. This does NOT apply anything: the user sees a preview of every change and decides. Only use IDs returned by list_optimisations and list_startup_apps. Call this only after inspecting the system, when you have a concrete recommendation. After calling it, tell the user what you proposed and why, and wait — never say the changes were made until you receive the result.",
+            description: "The ONLY way to change anything on this PC. Shows the user an approval card with a preview of every change; nothing happens until they click Apply. It can: apply optimisations (IDs from list_optimisations), disable startup apps (IDs from list_startup_apps), and close running apps (process names from list_top_processes). Use it whenever the user asks you to do one of these things or agrees to your suggestion — a chat message like 'yes' or 'you have my permission' is NOT the approval; the card is. After calling it, briefly say what the card contains and that they can review and apply it — never say the changes were made until you receive the result.",
             schema: json!({
                 "type": "object",
                 "properties": {
@@ -120,6 +121,7 @@ pub fn definitions() -> Vec<ToolDef> {
                     "summary": { "type": "string", "description": "Plain-language explanation of why these changes address the problem." },
                     "tweak_ids": { "type": "array", "items": { "type": "string" }, "description": "Optimisation IDs from list_optimisations." },
                     "disable_startup_ids": { "type": "array", "items": { "type": "string" }, "description": "Startup entry IDs from list_startup_apps to disable (non-destructive, reversible)." },
+                    "close_apps": { "type": "array", "items": { "type": "string" }, "description": "Apps to close, by name — 'Spotify', 'spotify.exe' or a name from list_top_processes. NOCTURN matches it to the running process. Closes every instance; unsaved work in that app is lost. Core Windows processes are refused." },
                     "confidence": { "type": "string", "enum": ["low", "medium", "high"], "description": "How confident you are that this addresses the user's problem." },
                     "expected_effect": { "type": "string", "description": "What the user should expect. Never promise specific FPS numbers." },
                     "verification": { "type": "string", "description": "How to check afterwards whether it helped." }
@@ -149,6 +151,13 @@ pub struct PlanStartup {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct PlanApp {
+    pub name: String,
+    pub instances: usize,
+    pub memory_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct PlanCard {
     pub plan_id: String,
     pub title: String,
@@ -158,6 +167,8 @@ pub struct PlanCard {
     pub verification: Option<String>,
     pub tweaks: Vec<PlanTweak>,
     pub startup: Vec<PlanStartup>,
+    #[serde(default)]
+    pub close_apps: Vec<PlanApp>,
     pub preview: Option<engine::Preview>,
 }
 
@@ -242,9 +253,14 @@ pub fn execute(state: &Shared, tool_use_id: &str, name: &str, input: &Value) -> 
         "list_top_processes" => {
             let sort = input.get("sort_by").and_then(|v| v.as_str()).unwrap_or("cpu");
             let limit = input.get("limit").and_then(|v| v.as_u64()).unwrap_or(15).clamp(1, 40) as usize;
-            let procs = state.telemetry.read().map(|t| t.processes.clone()).unwrap_or_default();
-            if procs.is_empty() {
+            let filter = input.get("name").and_then(|v| v.as_str()).map(|n| n.trim().to_ascii_lowercase()).filter(|n| !n.is_empty());
+            let all = state.telemetry.read().map(|t| t.processes.clone()).unwrap_or_default();
+            if all.is_empty() {
                 return err("process list not available yet; try again in a few seconds");
+            }
+            let procs: Vec<_> = all.iter().filter(|p| filter.as_ref().is_none_or(|f| p.name.to_ascii_lowercase().contains(f.as_str()))).cloned().collect();
+            if let (Some(f), true) = (&filter, procs.is_empty()) {
+                return ok(json!({ "matches": [], "message": format!("No running process name contains '{f}'. The app is not running.") }));
             }
             let mut groups: HashMap<String, (f32, u64, u64, usize, Option<String>)> = HashMap::new();
             for p in &procs {
@@ -271,13 +287,19 @@ pub fn execute(state: &Shared, tool_use_id: &str, name: &str, input: &Value) -> 
             }))
         }
         "list_startup_apps" => {
-            let items = crate::startup::list();
+            let items = crate::startup_insight::with_insights();
             ok(json!({
                 "count_enabled": items.iter().filter(|i| i.enabled).count(),
-                "items": items.iter().map(|i| json!({
-                    "id": i.id, "name": i.name, "enabled": i.enabled, "location": i.location_label,
-                    "command": clamp(&i.command, 300), "file_exists": i.file_exists, "needs_admin": i.requires_admin,
-                })).collect::<Vec<_>>(),
+                "items": items.iter().map(|i| {
+                    let ins = i.insight.clone().unwrap_or_default();
+                    json!({
+                        "id": i.id, "name": i.name, "enabled": i.enabled, "location": i.location_label,
+                        "command": clamp(&i.command, 300), "file_exists": i.file_exists, "needs_admin": i.requires_admin,
+                        "publisher_self_reported": ins.publisher, "description": ins.description,
+                        "signature": ins.signature, "windows_component": ins.windows_component, "review_flags": ins.review,
+                    })
+                }).collect::<Vec<_>>(),
+                "about_flags": "review_flags are rule-based prompts to double-check an entry, not malware verdicts. A valid signature means the file is unaltered since signing.",
                 "not_covered": "Scheduled tasks and services that start at boot are not listed here.",
             }))
         }
@@ -369,12 +391,18 @@ pub fn execute(state: &Shared, tool_use_id: &str, name: &str, input: &Value) -> 
             Ok(p) => ok(json!({ "plans": p })),
             Err(e) => err(e.to_string()),
         },
-        "propose_plan" => propose(tool_use_id, input),
+        "propose_plan" => {
+            let procs = state.telemetry.read().map(|t| t.processes.clone()).unwrap_or_default();
+            propose(tool_use_id, input, &procs)
+        }
         other => err(format!("unknown tool '{other}'")),
     }
 }
 
-fn propose(tool_use_id: &str, input: &Value) -> ToolOutput {
+/// Local model servers the assistant itself may be running on.
+const AI_RUNTIME: &[&str] = &["ollama.exe", "ollama app.exe", "llama-server.exe", "lm studio.exe", "lms.exe"];
+
+fn propose(tool_use_id: &str, input: &Value, running: &[crate::system::monitor::ProcessInfo]) -> ToolOutput {
     let title = input.get("title").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     let summary = input.get("summary").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
     if title.is_empty() || summary.is_empty() {
@@ -382,8 +410,35 @@ fn propose(tool_use_id: &str, input: &Value) -> ToolOutput {
     }
     let tweak_ids = str_arr(input, "tweak_ids");
     let startup_ids = str_arr(input, "disable_startup_ids");
-    if tweak_ids.is_empty() && startup_ids.is_empty() {
-        return err("the plan contains no changes; include tweak_ids and/or disable_startup_ids");
+    let app_names = str_arr(input, "close_apps");
+    if tweak_ids.is_empty() && startup_ids.is_empty() && app_names.is_empty() {
+        return err("the plan contains no changes; include tweak_ids, disable_startup_ids and/or close_apps");
+    }
+
+    let mut close_apps: Vec<PlanApp> = Vec::new();
+    for wanted in &app_names {
+        let Some(name) = crate::system::processes::resolve_name(wanted, running.iter().map(|p| p.name.as_str())) else {
+            let needle = wanted.trim().trim_end_matches(".exe").to_ascii_lowercase();
+            let mut similar: Vec<&str> = running.iter().map(|p| p.name.as_str()).filter(|n| !needle.is_empty() && n.to_ascii_lowercase().contains(&needle)).collect();
+            similar.sort_unstable();
+            similar.dedup();
+            return err(if similar.is_empty() {
+                format!("'{wanted}' is not running, so there is nothing to close. Tell the user.")
+            } else {
+                format!("No process is named exactly '{wanted}'. Running processes with similar names: {similar:?}. Use one of these exact names.")
+            });
+        };
+        if crate::system::processes::is_protected(&name) {
+            return err(format!("{name} is a core Windows process and can't be closed. Don't propose it."));
+        }
+        if AI_RUNTIME.contains(&name.to_ascii_lowercase().as_str()) {
+            return err(format!("{name} runs the local AI model this assistant uses; closing it would stop you mid-conversation. Leave it out of the plan and tell the user they can quit Ollama themselves when they're done chatting."));
+        }
+        if close_apps.iter().any(|a| a.name == name) {
+            continue;
+        }
+        let (instances, memory_bytes) = running.iter().filter(|p| p.name == name).fold((0, 0), |(n, m), p| (n + 1, m + p.memory));
+        close_apps.push(PlanApp { name, instances, memory_bytes });
     }
 
     let unknown: Vec<&String> = tweak_ids.iter().filter(|id| catalog::get(id).is_none()).collect();
@@ -425,12 +480,13 @@ fn propose(tool_use_id: &str, input: &Value) -> ToolOutput {
         verification: input.get("verification").and_then(|v| v.as_str()).map(String::from),
         tweaks,
         startup: plan_startup,
+        close_apps,
         preview,
     };
     let content = json!({
         "status": "presented_to_user",
         "message": "The plan is now shown to the user with a full preview. Nothing has been changed. Briefly explain the plan and wait for the user's decision; you will receive the outcome in a later message.",
-        "changes_in_plan": card.tweaks.len() + card.startup.len(),
+        "changes_in_plan": card.tweaks.len() + card.startup.len() + card.close_apps.len(),
         "values_already_set": already,
     });
     ToolOutput { content: content.to_string(), is_error: false, plan: Some(card) }
@@ -459,7 +515,7 @@ mod tests {
         let out = propose("t1", &json!({
             "title": "x", "summary": "y", "confidence": "high", "expected_effect": "z",
             "tweak_ids": ["disable_defender"]
-        }));
+        }), &[]);
         assert!(out.is_error);
         assert!(out.plan.is_none());
     }
@@ -469,7 +525,7 @@ mod tests {
         let out = propose("t2", &json!({
             "title": "Gaming", "summary": "because", "confidence": "medium", "expected_effect": "smoother",
             "tweak_ids": ["gaming.game_mode", "privacy.advertising_id_off"]
-        }));
+        }), &[]);
         assert!(!out.is_error, "{}", out.content);
         let card = out.plan.unwrap();
         assert_eq!(card.tweaks.len(), 2);
@@ -477,8 +533,30 @@ mod tests {
         assert!(out.content.contains("presented_to_user"));
     }
 
+    fn fake_proc(pid: u32, name: &str, memory: u64) -> crate::system::monitor::ProcessInfo {
+        crate::system::monitor::ProcessInfo { pid, parent: None, name: name.into(), exe: None, cpu: 0.0, memory, disk_read_bps: 0, disk_write_bps: 0, run_time_secs: 0, has_window: false }
+    }
+
+    #[test]
+    fn propose_close_apps_resolves_running_names() {
+        let running = [fake_proc(10, "Spotify.exe", 100), fake_proc(11, "Spotify.exe", 50), fake_proc(12, "csrss.exe", 1)];
+        let out = propose("t3", &json!({"title":"Free RAM","summary":"s","confidence":"high","expected_effect":"e","close_apps":["spotify","Spotify.exe"]}), &running);
+        assert!(!out.is_error, "{}", out.content);
+        let apps = out.plan.unwrap().close_apps;
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0].name, "Spotify.exe");
+        assert_eq!((apps[0].instances, apps[0].memory_bytes), (2, 150));
+
+        let not_running = propose("t4", &json!({"title":"a","summary":"b","confidence":"low","expected_effect":"c","close_apps":["discord"]}), &running);
+        assert!(not_running.is_error && not_running.plan.is_none());
+        let runtime = propose("t6", &json!({"title":"a","summary":"b","confidence":"low","expected_effect":"c","close_apps":["llama-server"]}), &[fake_proc(20, "llama-server.exe", 1)]);
+        assert!(runtime.is_error && runtime.content.contains("local AI model"));
+        let protected = propose("t5", &json!({"title":"a","summary":"b","confidence":"low","expected_effect":"c","close_apps":["csrss.exe"]}), &running);
+        assert!(protected.is_error && protected.plan.is_none());
+    }
+
     #[test]
     fn empty_plan_rejected() {
-        assert!(propose("t", &json!({"title":"a","summary":"b","confidence":"low","expected_effect":"c"})).is_error);
+        assert!(propose("t", &json!({"title":"a","summary":"b","confidence":"low","expected_effect":"c"}), &[]).is_error);
     }
 }

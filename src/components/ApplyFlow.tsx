@@ -3,7 +3,7 @@
 // Used by TWEAK pages, profiles, dashboard recommendations and AI plans.
 
 import { useEffect, useMemo, useState } from "react";
-import { api, errorMessage, type ApplyReport, type Preview, type Progress, type StartupItem, type TweakView } from "../lib/api";
+import { api, errorMessage, type ApplyReport, type CloseResult, type Preview, type Progress, type StartupItem, type TweakView } from "../lib/api";
 import { useApp } from "../lib/app";
 import { takesLabel } from "../lib/format";
 import { I } from "./Icons";
@@ -22,12 +22,17 @@ export function ApplyFlow() {
   const [ackAdvanced, setAckAdvanced] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [reports, setReports] = useState<ApplyReport[]>([]);
+  const [closed, setClosed] = useState<CloseResult[]>([]);
+  // Items the user unticked in the review. Keys: "t:<tweak>", "s:<startup>", "a:<app>".
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!intent) return;
     setPhase("loading");
     setError(null);
     setReports([]);
+    setClosed([]);
+    setExcluded(new Set());
     setProgress(null);
     setAckAdvanced(false);
     const jobs: Promise<unknown>[] = [api.tweaks().then(setTweaks)];
@@ -51,10 +56,23 @@ export function ApplyFlow() {
     () => (intent?.startupDisableIds ?? []).map((id) => startup.find((s) => s.id === id)).filter((s): s is StartupItem => !!s),
     [intent, startup],
   );
-  const advanced = (intent?.tweakIds ?? []).filter((id) => byId.get(id)?.risk === "advanced");
+  const on = (key: string) => !excluded.has(key);
+  const toggle = (key: string) =>
+    setExcluded((cur) => {
+      const n = new Set(cur);
+      n.has(key) ? n.delete(key) : n.add(key);
+      return n;
+    });
+  const tweakIds = (intent?.tweakIds ?? []).filter((id) => on(`t:${id}`));
+  const startupSel = startupRows.filter((s) => s.enabled && on(`s:${s.id}`));
+  const closeNames = (intent?.closeApps ?? []).filter((n) => on(`a:${n}`));
+  const liveItems = (preview?.items ?? []).filter((i) => i.will_change && on(`t:${i.tweak_id}`));
+  const advanced = tweakIds.filter((id) => byId.get(id)?.risk === "advanced");
   const needAck = advanced.length > 0 && (settings?.confirm_advanced ?? true);
-  const changeCount = (preview?.changes ?? 0) + startupRows.filter((s) => s.enabled).length;
-  const needsAdmin = (preview?.requires_admin ?? false) || startupRows.some((s) => s.requires_admin && s.enabled);
+  const changeCount = liveItems.length + startupSel.length + closeNames.length;
+  const needsAdmin = liveItems.some((i) => i.requires_admin) || startupSel.some((s) => s.requires_admin);
+  // Several items to choose from → show a checkbox on each.
+  const choosable = (preview ? groupByTweak(preview).length : 0) + startupRows.length + (intent?.closeApps?.length ?? 0) > 1;
 
   if (!intent) return null;
 
@@ -63,8 +81,18 @@ export function ApplyFlow() {
     const results = reports.flatMap((r) => r.results);
     const ok = results.filter((r) => r.status === "applied").length;
     const failed = results.filter((r) => r.status === "failed" || r.status === "skipped");
+    const closedText = closed
+      .map((c) => (c.ended && !c.failed ? `Closed ${c.name} (${c.ended} process(es)).` : `Could not fully close ${c.name}: ${c.error ?? "unknown error"}.`))
+      .join(" ");
+    const verified = failed.length
+      ? `${failed.length} not applied: ${failed.map((f) => `${f.target} (${f.error ?? f.status})`).join("; ")}.`
+      : results.length
+        ? "All changes verified."
+        : "";
+    const kept = [...excluded].map((k) => (k.startsWith("t:") ? byId.get(k.slice(2))?.title ?? k.slice(2) : k.startsWith("s:") ? `startup app ${startupRows.find((s) => s.id === k.slice(2))?.name ?? k.slice(2)}` : `app ${k.slice(2)}`));
+    const keptText = kept.length ? `The user unticked these items, so they were left unchanged: ${kept.join(", ")}.` : "";
     const summary = approved
-      ? `Applied ${ok} change(s). ${failed.length ? `${failed.length} not applied: ${failed.map((f) => `${f.target} (${f.error ?? f.status})`).join("; ")}.` : "All changes verified."} ${reports.flatMap((r) => r.notes).join(" ")}`.trim()
+      ? [results.length ? `Applied ${ok} setting change(s).` : "", verified, closedText, keptText, ...reports.flatMap((r) => r.notes)].filter(Boolean).join(" ")
       : "The user declined the plan. Nothing was changed.";
     intent?.onDone?.({ approved, txIds, summary });
     closeApply();
@@ -75,27 +103,34 @@ export function ApplyFlow() {
     setPhase("running");
     const out: ApplyReport[] = [];
     try {
-      if (intent.tweakIds.length) {
+      if (tweakIds.length) {
         out.push(
           await api.apply(
-            { tweak_ids: intent.tweakIds, source: intent.source, label: intent.label, create_restore_point: needsAdmin && restorePoint },
+            { tweak_ids: tweakIds, source: intent.source, label: intent.label, create_restore_point: needsAdmin && restorePoint },
             setProgress,
           ),
         );
       }
-      const toDisable = startupRows.filter((s) => s.enabled).map((s) => s.id);
+      const toDisable = startupSel.map((s) => s.id);
       if (toDisable.length) {
         out.push(await api.setStartup(toDisable, false, intent.source === "ai" ? "ai" : "user", setProgress));
+      }
+      let closeResults: CloseResult[] = [];
+      if (closeNames.length) {
+        setProgress({ txId: "", done: 0, total: closeNames.length, message: `Closing ${closeNames.join(", ")}…` });
+        closeResults = await api.closeApps(closeNames, intent.source === "ai" ? "ai" : "user");
+        setClosed(closeResults);
       }
       setReports(out);
       setPhase("done");
       bumpData();
       const results = out.flatMap((r) => r.results);
-      const failed = results.filter((r) => r.status === "failed").length;
+      const failed = results.filter((r) => r.status === "failed").length + closeResults.filter((c) => c.failed || !c.ended).length;
+      const applied = results.filter((r) => r.status === "applied").length + closeResults.filter((c) => c.ended && !c.failed).length;
       toast({
         tone: failed ? "warning" : "good",
-        title: failed ? "Some changes were not applied" : "Changes applied and verified",
-        detail: `${results.filter((r) => r.status === "applied").length} applied · ${failed} failed`,
+        title: failed ? "Some changes were not applied" : "Changes applied",
+        detail: `${applied} done · ${failed} failed`,
       });
     } catch (e) {
       setReports(out);
@@ -129,9 +164,10 @@ export function ApplyFlow() {
               {preview && groupByTweak(preview).map(([id, items]) => {
                 const t = byId.get(id);
                 return (
-                  <div key={id}>
+                  <div key={id} style={{ opacity: on(`t:${id}`) ? 1 : 0.45 }}>
                     <div className="row between">
                       <div className="row" style={{ gap: 8 }}>
+                        {choosable && <Pick checked={on(`t:${id}`)} onChange={() => toggle(`t:${id}`)} label={items[0].tweak_title} />}
                         <b style={{ fontWeight: 600 }}>{items[0].tweak_title}</b>
                         {t && <RiskTag risk={t.risk} />}
                         {items.some((i) => i.requires_admin) && (
@@ -167,13 +203,39 @@ export function ApplyFlow() {
                   <div className="small muted mt-1">Entries are switched off the same way Task Manager does it — nothing is deleted, and you can re-enable them any time.</div>
                   <div className="mt-1">
                     {startupRows.map((s) => (
-                      <div key={s.id} className={`change-row ${s.enabled ? "" : "same"}`}>
-                        <div>
-                          {s.name} <span className="target">{s.location_label}</span>
+                      <div key={s.id} className={`change-row ${s.enabled && on(`s:${s.id}`) ? "" : "same"}`}>
+                        <div className="row" style={{ gap: 8 }}>
+                          {choosable && s.enabled && <Pick checked={on(`s:${s.id}`)} onChange={() => toggle(`s:${s.id}`)} label={s.name} />}
+                          <span>
+                            {s.name} <span className="target">{s.location_label}</span>
+                          </span>
                         </div>
                         <div className="val">{s.enabled ? "Enabled" : "Disabled"}</div>
                         <div className="arrow">→</div>
                         <div className="val">{s.enabled ? "Disabled" : "already off"}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(intent.closeApps?.length ?? 0) > 0 && (
+                <div>
+                  <b style={{ fontWeight: 600 }}>Apps to close</b>
+                  <div className="small muted mt-1">
+                    Every window and background process of these apps is ended. Save your work in them first — unsaved changes are lost and this can't be undone, but you can simply reopen the app.
+                    {choosable && " Untick anything you want to keep open."}
+                  </div>
+                  <div className="mt-1">
+                    {intent.closeApps!.map((n) => (
+                      <div key={n} className={`change-row ${on(`a:${n}`) ? "" : "same"}`}>
+                        <div className="row" style={{ gap: 8 }}>
+                          {choosable && <Pick checked={on(`a:${n}`)} onChange={() => toggle(`a:${n}`)} label={n} />}
+                          <span>{n}</span>
+                        </div>
+                        <div className="val">Running</div>
+                        <div className="arrow">→</div>
+                        <div className="val">{on(`a:${n}`) ? "Closed" : "kept open"}</div>
                       </div>
                     ))}
                   </div>
@@ -190,7 +252,7 @@ export function ApplyFlow() {
                   Some changes affect all users, so Windows will ask for administrator approval once. NOCTURN only requests elevation for those specific changes.
                 </Note>
               )}
-              {changeCount === 0 && <Note tone="good">Everything here is already configured. There's nothing to change.</Note>}
+              {changeCount === 0 && (excluded.size > 0 ? <Note>Nothing is selected. Tick at least one item to apply.</Note> : <Note tone="good">Everything here is already configured. There's nothing to change.</Note>)}
             </div>
           )}
 
@@ -209,6 +271,27 @@ export function ApplyFlow() {
 
           {(phase === "done" || (phase === "error" && reports.length > 0)) && (
             <div className="stack" style={{ gap: 14 }}>
+              {closed.length > 0 && (
+                <div>
+                  {closed.map((c) => {
+                    const ok = c.ended > 0 && c.failed === 0;
+                    return (
+                      <div key={c.name} className="change-row">
+                        <div>
+                          <div>{c.name}</div>
+                          {c.error && !ok && <div className="small" style={{ color: "#ee8a8a" }}>{c.error}</div>}
+                        </div>
+                        <div className="val">{c.ended + c.failed} process(es)</div>
+                        <div className="arrow">→</div>
+                        <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+                          <span className="val">{ok ? "Closed" : c.ended ? `${c.ended} closed, ${c.failed} failed` : "Not closed"}</span>
+                          <StatusTag status={ok ? "applied" : "failed"} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               {reports.map((r) => (
                 <div key={r.tx_id} className="stack" style={{ gap: 8 }}>
                   <div className="row between">
@@ -311,3 +394,7 @@ function groupByTweak(p: Preview): [string, Preview["items"]][] {
   return [...m.entries()];
 }
 
+
+function Pick({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
+  return <input type="checkbox" className="check" checked={checked} onChange={onChange} aria-label={`Include ${label}`} />;
+}

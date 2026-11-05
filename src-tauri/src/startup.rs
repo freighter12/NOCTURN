@@ -25,6 +25,9 @@ pub struct StartupItem {
     pub file_path: Option<String>,
     pub file_exists: Option<bool>,
     pub requires_admin: bool,
+    /// Publisher, signature and review flags (see `startup_insight`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub insight: Option<crate::startup_insight::StartupInsight>,
 }
 
 fn run_key(loc: StartupLocation) -> Option<(RegKey, &'static str, u32)> {
@@ -153,6 +156,7 @@ pub fn list() -> Vec<StartupItem> {
                     location_label: loc.label(),
                     enabled: is_enabled(&approved),
                     requires_admin: loc.is_machine(),
+                    insight: None,
                 });
             }
         } else if let Some(dir) = startup_folder(loc) {
@@ -177,6 +181,7 @@ pub fn list() -> Vec<StartupItem> {
                     location_label: loc.label(),
                     enabled: is_enabled(&approved),
                     requires_admin: loc.is_machine(),
+                    insight: None,
                 });
             }
         }

@@ -5,8 +5,15 @@
 
 pub mod diagnostics;
 pub mod health;
+pub mod history;
 pub mod info;
 pub mod monitor;
+pub mod fileinfo;
+pub mod gpu;
 pub mod network;
+pub mod perf;
 pub mod power;
+pub mod process_control;
+pub mod process_view;
 pub mod processes;
+pub mod rules;

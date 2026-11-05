@@ -74,19 +74,27 @@ fn adapter_status(v: &Value) -> String {
 }
 
 pub fn overview() -> NetworkOverview {
+    // The four queries are independent and each spawns a process (~2 s of
+    // PowerShell start-up apiece), so run them concurrently.
+    let (adapters_r, dns_r, gw_r, wifi_info) = std::thread::scope(|sc| {
+        let a = sc.spawn(|| exec::powershell_json(PsScript::NetAdapters));
+        let d = sc.spawn(|| exec::powershell_json(PsScript::DnsServers));
+        let g = sc.spawn(|| exec::powershell_json(PsScript::DefaultGateways));
+        let w = sc.spawn(|| wifi().ok().flatten());
+        let join = |h: std::thread::ScopedJoinHandle<'_, AppResult<Value>>| h.join().unwrap_or_else(|_| Err(AppError::msg("query thread panicked")));
+        (join(a), join(d), join(g), w.join().ok().flatten())
+    });
     let mut warnings = Vec::new();
-    let adapters_raw = exec::powershell_json(PsScript::NetAdapters).map(as_array).unwrap_or_else(|e| {
-        warnings.push(format!("adapters: {e}"));
-        vec![]
-    });
-    let dns_raw = exec::powershell_json(PsScript::DnsServers).map(as_array).unwrap_or_else(|e| {
-        warnings.push(format!("DNS: {e}"));
-        vec![]
-    });
-    let gw_raw = exec::powershell_json(PsScript::DefaultGateways).map(as_array).unwrap_or_else(|e| {
-        warnings.push(format!("gateways: {e}"));
-        vec![]
-    });
+    let mut take = |r: AppResult<Value>, what: &str| match r {
+        Ok(v) => as_array(v),
+        Err(e) => {
+            warnings.push(format!("{what}: {e}"));
+            vec![]
+        }
+    };
+    let adapters_raw = take(adapters_r, "adapters");
+    let dns_raw = take(dns_r, "DNS");
+    let gw_raw = take(gw_r, "gateways");
 
     let adapters = adapters_raw
         .iter()
@@ -123,7 +131,7 @@ pub fn overview() -> NetworkOverview {
         })
         .collect();
 
-    NetworkOverview { adapters, wifi: wifi().ok().flatten(), warnings }
+    NetworkOverview { adapters, wifi: wifi_info, warnings }
 }
 
 pub fn parse_wlan(out: &str) -> Option<WifiInfo> {

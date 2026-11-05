@@ -57,8 +57,8 @@ pub async fn send(
     let settings = crate::settings::load(&state.db).ai;
     let api_key = secrets::get(secret_name(&settings.provider))?;
     if settings.provider == "anthropic" && api_key.is_none() {
-        return Err(AppError::Invalid(
-            "Add your Anthropic API key in Settings › AI assistant to start chatting.".into(),
+        return Err(AppError::Message(
+            "Add your Anthropic API key in Settings › NOCTURN AI to start chatting.".into(),
         ));
     }
 

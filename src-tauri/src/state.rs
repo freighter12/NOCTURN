@@ -28,6 +28,10 @@ pub struct AppState {
     pub data_dir: PathBuf,
     pub log_dir: PathBuf,
     pub telemetry: SharedTelemetry,
+    /// Saved per-app process rules, mirrored from the database.
+    pub rules: crate::system::rules::RuleCache,
+    /// Detected games and the live game session.
+    pub games: crate::games::GameState,
     sysinfo: RwLock<Option<SystemInfo>>,
     caches: Mutex<Caches>,
     pub ai: crate::ai::AiRuntime,
@@ -37,11 +41,15 @@ pub type Shared = Arc<AppState>;
 
 impl AppState {
     pub fn new(db: Db, data_dir: PathBuf, log_dir: PathBuf) -> Self {
+        let rules = crate::system::rules::RuleCache::default();
+        crate::system::rules::reload(&db, &rules);
         AppState {
             db,
             data_dir,
             log_dir,
             telemetry: Arc::new(RwLock::new(TelemetryStore::default())),
+            rules,
+            games: crate::games::GameState::default(),
             sysinfo: RwLock::new(None),
             caches: Mutex::new(Caches::default()),
             ai: crate::ai::AiRuntime::default(),

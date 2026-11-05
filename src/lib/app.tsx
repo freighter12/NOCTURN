@@ -1,10 +1,13 @@
 // App-wide context: navigation, toasts, settings, and the shared apply flow.
 
+import { listen } from "@tauri-apps/api/event";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { api, errorMessage, type AppSettings } from "./api";
+import { api, errorMessage, type Alert, type AppSettings } from "./api";
 
 export type PageId =
   | "overview"
+  | "hardware"
+  | "processes"
   | "tweak"
   | "gaming"
   | "diagnostics"
@@ -25,6 +28,8 @@ export interface Toast {
 export interface ApplyIntent {
   tweakIds: string[];
   startupDisableIds?: string[];
+  /** Process names to close (every instance). Not reversible. */
+  closeApps?: string[];
   source: string;
   label: string;
   title?: string;
@@ -76,6 +81,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setToasts((ts) => [...ts.slice(-3), { ...t, id }]);
     setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), t.action ? 9000 : 5500);
   }, []);
+
+  // Hardware threshold alerts from the telemetry thread.
+  useEffect(() => {
+    const un = listen<Alert>("alert", (e) =>
+      toast({ tone: "warning", title: e.payload.title, detail: e.payload.detail, action: { label: "Open Hardware", run: () => setPage("hardware") } }),
+    );
+    return () => {
+      un.then((f) => f());
+    };
+  }, [toast]);
 
   const value: Ctx = {
     page,

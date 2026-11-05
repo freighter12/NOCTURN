@@ -665,7 +665,7 @@ pub async fn test_connection(settings: &AiSettings, key: Option<String>) -> AppR
     Ok(ConnectionTest {
         ok: true,
         message: if has_model {
-            format!("Connected. {} models available.", models.len())
+            format!("Connected. {} model{} available.", models.len(), if models.len() == 1 { "" } else { "s" })
         } else {
             format!("Connected, but '{}' isn't in this account's model list.", settings.model)
         },

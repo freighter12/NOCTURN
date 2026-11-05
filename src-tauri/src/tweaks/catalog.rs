@@ -357,6 +357,8 @@ pub fn get(id: &str) -> Option<&'static Tweak> {
 pub struct Profile {
     pub id: &'static str,
     pub name: &'static str,
+    /// "system" (Tweak page profiles) or "gaming_mode" (Gaming page modes).
+    pub kind: &'static str,
     pub description: &'static str,
     pub tweaks: Vec<&'static str>,
 }
@@ -387,24 +389,67 @@ pub fn profiles() -> Vec<Profile> {
         "gaming.system_responsiveness",
         "network.throttling_index",
     ]);
+    let competitive = vec![
+        "gaming.game_mode",
+        "gaming.disable_background_recording",
+        "gaming.mouse_precision_off",
+        "gaming.power_high_performance",
+        "gaming.hardware_gpu_scheduling",
+        "performance.background_apps_off",
+        "privacy.feedback_prompts_off",
+    ];
+    let quality = vec!["gaming.game_mode", "gaming.disable_background_recording", "gaming.power_high_performance", "gaming.hardware_gpu_scheduling"];
+    let balanced_gaming = vec!["gaming.game_mode", "gaming.disable_background_recording", "gaming.hardware_gpu_scheduling"];
+    let streaming = vec!["gaming.game_mode", "gaming.power_high_performance", "gaming.hardware_gpu_scheduling", "privacy.feedback_prompts_off"];
     vec![
         Profile {
             id: "balanced",
             name: "Balanced",
+            kind: "system",
             description: "Safe everyday improvements: snappier menus, faster startup apps and fewer distractions. Nothing that costs battery life.",
             tweaks: balanced,
         },
         Profile {
             id: "gaming",
             name: "Gaming",
+            kind: "system",
             description: "Balanced, plus settings that favour games: no background recording, raw mouse input, High performance power plan and GPU scheduling.",
             tweaks: gaming,
         },
         Profile {
             id: "maximum",
             name: "Maximum Performance",
+            kind: "system",
             description: "Gaming, plus trade-offs that favour speed over looks and power efficiency. Includes Advanced settings — review each one.",
             tweaks: maximum,
+        },
+        Profile {
+            id: "mode.competitive",
+            name: "Competitive",
+            kind: "gaming_mode",
+            description: "For fast shooters and esports: raw mouse input, no background recording, apps kept from running in the background, and the CPU held at full clocks. Pair with low in-game settings for the highest frame rate your PC can deliver.",
+            tweaks: competitive,
+        },
+        Profile {
+            id: "mode.quality",
+            name: "Maximum Quality",
+            kind: "gaming_mode",
+            description: "Keeps the GPU fed for high in-game settings: High performance power plan, GPU scheduling and no background recording. Windows can't raise image quality itself — set that in the game.",
+            tweaks: quality,
+        },
+        Profile {
+            id: "mode.balanced",
+            name: "Balanced Gaming",
+            kind: "gaming_mode",
+            description: "The light touch: Game Mode, GPU scheduling and no background recording. Leaves power settings alone, so it's fine for laptops on battery.",
+            tweaks: balanced_gaming,
+        },
+        Profile {
+            id: "mode.streaming",
+            name: "Streaming",
+            kind: "gaming_mode",
+            description: "For playing while streaming or recording with OBS or similar: full CPU clocks and GPU scheduling, but background apps and mouse settings are left alone so your capture and chat tools keep working.",
+            tweaks: streaming,
         },
     ]
 }

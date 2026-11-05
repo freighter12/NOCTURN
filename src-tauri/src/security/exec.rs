@@ -121,22 +121,7 @@ pub enum SafeCommand {
     PowercfgSetActive(SchemeGuid),
     IpconfigFlushDns,
     NetshWlanInterfaces,
-    /// Read-only NVIDIA telemetry (temperature, utilisation). Only runs if the
-    /// tool exists at one of the two locations NVIDIA drivers install it to.
-    NvidiaSmiQuery,
     PowerShell(PsScript),
-}
-
-/// Fixed install locations of nvidia-smi (DCH driver, legacy driver).
-pub fn nvidia_smi_path() -> Option<PathBuf> {
-    let candidates = [
-        system32().join("nvidia-smi.exe"),
-        PathBuf::from(
-            std::env::var_os("ProgramFiles").unwrap_or_else(|| r"C:\Program Files".into()),
-        )
-        .join(r"NVIDIA Corporation\NVSMI\nvidia-smi.exe"),
-    ];
-    candidates.into_iter().find(|p| p.is_file())
 }
 
 impl SafeCommand {
@@ -154,13 +139,6 @@ impl SafeCommand {
             SafeCommand::NetshWlanInterfaces => (
                 sys32.join("netsh.exe"),
                 vec!["wlan".into(), "show".into(), "interfaces".into()],
-            ),
-            SafeCommand::NvidiaSmiQuery => (
-                nvidia_smi_path().unwrap_or_else(|| sys32.join("nvidia-smi.exe")),
-                vec![
-                    "--query-gpu=name,temperature.gpu,utilization.gpu".into(),
-                    "--format=csv,noheader,nounits".into(),
-                ],
             ),
             SafeCommand::PowerShell(script) => {
                 let src = format!(

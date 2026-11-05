@@ -40,6 +40,41 @@ impl Default for AiSettings {
     }
 }
 
+/// Hardware monitoring: sampling rate, pause, and alert thresholds.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct MonitorSettings {
+    /// Sampling interval: 1000, 2000 or 5000 ms.
+    pub interval_ms: u32,
+    /// Stop sampling hardware (process rules keep working at a slow rate).
+    pub paused: bool,
+    pub alerts: bool,
+    pub cpu_alert_pct: f32,
+    pub ram_alert_pct: f32,
+    pub gpu_temp_alert_c: f32,
+}
+
+impl Default for MonitorSettings {
+    fn default() -> Self {
+        MonitorSettings { interval_ms: 1000, paused: false, alerts: true, cpu_alert_pct: 95.0, ram_alert_pct: 92.0, gpu_temp_alert_c: 85.0 }
+    }
+}
+
+impl MonitorSettings {
+    /// Clamp user input to safe, meaningful values.
+    pub fn sanitised(mut self) -> Self {
+        self.interval_ms = match self.interval_ms {
+            0..=1500 => 1000,
+            1501..=3500 => 2000,
+            _ => 5000,
+        };
+        self.cpu_alert_pct = self.cpu_alert_pct.clamp(50.0, 100.0);
+        self.ram_alert_pct = self.ram_alert_pct.clamp(50.0, 100.0);
+        self.gpu_temp_alert_c = self.gpu_temp_alert_c.clamp(50.0, 110.0);
+        self
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct AppSettings {
@@ -50,11 +85,12 @@ pub struct AppSettings {
     /// Reduce UI motion.
     pub reduce_motion: bool,
     pub ai: AiSettings,
+    pub monitor: MonitorSettings,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
-        AppSettings { restore_point_default: true, confirm_advanced: true, reduce_motion: false, ai: AiSettings::default() }
+        AppSettings { restore_point_default: true, confirm_advanced: true, reduce_motion: false, ai: AiSettings::default(), monitor: MonitorSettings::default() }
     }
 }
 

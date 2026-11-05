@@ -11,7 +11,7 @@ use crate::error::{AppError, AppResult};
 use crate::security::{elevation, secrets};
 use crate::settings::{self, AppSettings};
 use crate::state::Shared;
-use crate::system::{diagnostics, health::HealthReport, info::SystemInfo, monitor, network, power, processes};
+use crate::system::{diagnostics, health::HealthReport, info::SystemInfo, monitor, network, power, process_control, process_view, processes};
 use crate::tweaks::{catalog, engine, journal, ChangeOp, Takes};
 
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> AppResult<T> + Send + 'static) -> AppResult<T> {
@@ -60,6 +60,7 @@ pub fn save_settings(state: State<'_, Shared>, value: AppSettings) -> AppResult<
     v.ai.model = v.ai.model.trim().to_string();
     v.ai.max_tokens = v.ai.max_tokens.clamp(1024, 128_000);
     v.ai.custom_instructions = crate::util::clamp(&v.ai.custom_instructions, 4000);
+    v.monitor = v.monitor.sanitised();
     settings::save(&state.db, &v)?;
     state.db.audit("info", "user", "settings.saved", None);
     Ok(v)
@@ -113,6 +114,139 @@ pub async fn end_process(state: State<'_, Shared>, pid: u32, name: String) -> Ap
         res
     })
     .await
+}
+
+/// Close whole apps by process name (every instance). Used by approved AI
+/// plans and bulk actions. Each name is checked against the protected list and
+/// every closure is written to the audit log with who asked for it.
+#[tauri::command]
+pub async fn close_apps(
+    state: State<'_, Shared>,
+    names: Vec<String>,
+    source: Option<String>,
+) -> AppResult<Vec<processes::CloseResult>> {
+    if names.is_empty() || names.len() > 20 {
+        return Err(AppError::Invalid("between 1 and 20 app names are required".into()));
+    }
+    if names.iter().any(|n| n.trim().is_empty() || n.len() > 260 || n.contains(['\\', '/'])) {
+        return Err(AppError::Invalid("app names must be plain process names like Spotify.exe".into()));
+    }
+    let actor = if source.as_deref() == Some("ai") { "ai" } else { "user" };
+    let st = state.inner().clone();
+    blocking(move || {
+        let results: Vec<_> = names.iter().map(|n| processes::close_app(n.trim())).collect();
+        for r in &results {
+            st.db.audit(
+                if r.failed == 0 && r.ended > 0 { "info" } else { "warn" },
+                actor,
+                "process.close_app",
+                Some(serde_json::json!({ "name": r.name, "ended": r.ended, "failed": r.failed, "error": r.error })),
+            );
+        }
+        Ok(results)
+    })
+    .await
+}
+
+// ------------------------------------------------------------- hardware
+
+/// Per-minute history for the last `minutes` (max 7 days), ≤ 360 points.
+#[tauri::command]
+pub async fn get_telemetry_range(state: State<'_, Shared>, minutes: i64) -> AppResult<Vec<crate::system::history::HistoryPoint>> {
+    let st = state.inner().clone();
+    blocking(move || crate::system::history::range(&st.db, chrono::Utc::now().timestamp_millis(), minutes, 360)).await
+}
+
+#[tauri::command]
+pub async fn get_storage_health() -> AppResult<crate::system::info::StorageHealth> {
+    blocking(|| Ok(crate::system::info::storage_health())).await
+}
+
+// ------------------------------------------------------------ processes
+
+#[tauri::command]
+pub fn process_overview(state: State<'_, Shared>) -> process_view::ProcOverview {
+    process_view::overview(&state)
+}
+
+#[tauri::command]
+pub async fn process_details(state: State<'_, Shared>, name: String) -> AppResult<process_view::ProcDetails> {
+    let st = state.inner().clone();
+    blocking(move || process_view::details(&st, &name)).await
+}
+
+/// Runtime change for every running instance; lasts until the app exits.
+#[tauri::command]
+pub async fn set_process_priority(
+    state: State<'_, Shared>,
+    name: String,
+    priority: process_control::Priority,
+) -> AppResult<Vec<process_view::ChangeOutcome>> {
+    let st = state.inner().clone();
+    blocking(move || {
+        let res = process_view::set_priority_all(&st, &name, priority);
+        st.db.audit(
+            if res.is_ok() { "info" } else { "warn" },
+            "user",
+            "process.priority",
+            Some(serde_json::json!({ "name": name, "priority": priority, "result": res.as_ref().map(|r| r.iter().filter(|o| o.ok).count()).map_err(|e| e.to_string()) })),
+        );
+        res
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn set_process_affinity(
+    state: State<'_, Shared>,
+    name: String,
+    mask: String,
+) -> AppResult<Vec<process_view::ChangeOutcome>> {
+    let m = crate::system::rules::parse_mask(&mask).ok_or_else(|| AppError::Invalid(format!("'{mask}' is not a valid CPU mask")))?;
+    let st = state.inner().clone();
+    blocking(move || {
+        let res = process_view::set_affinity_all(&st, &name, m);
+        st.db.audit(
+            if res.is_ok() { "info" } else { "warn" },
+            "user",
+            "process.affinity",
+            Some(serde_json::json!({ "name": name, "mask": format!("0x{m:x}"), "result": res.as_ref().map(|r| r.iter().filter(|o| o.ok).count()).map_err(|e| e.to_string()) })),
+        );
+        res
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn list_process_rules(state: State<'_, Shared>) -> AppResult<Vec<crate::system::rules::ProcessRule>> {
+    crate::system::rules::list(&state.db)
+}
+
+/// Saving a rule also applies it to instances already running.
+#[tauri::command]
+pub async fn save_process_rule(
+    state: State<'_, Shared>,
+    rule: crate::system::rules::ProcessRule,
+) -> AppResult<crate::system::rules::ProcessRule> {
+    let st = state.inner().clone();
+    blocking(move || {
+        let saved = crate::system::rules::save(&st.db, &st.rules, rule)?;
+        if saved.enabled {
+            let running: Vec<(u32, String)> = st
+                .telemetry
+                .read()
+                .map(|t| t.processes.iter().filter(|p| p.name.eq_ignore_ascii_case(&saved.name)).map(|p| (p.pid, p.name.clone())).collect())
+                .unwrap_or_default();
+            crate::system::rules::apply_to_new(&st.db, &st.rules, &running);
+        }
+        Ok(crate::system::rules::get(&st.db, &saved.name)?.unwrap_or(saved))
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn delete_process_rule(state: State<'_, Shared>, name: String) -> AppResult<()> {
+    crate::system::rules::delete(&state.db, &state.rules, &name)
 }
 
 #[tauri::command]
@@ -261,7 +395,12 @@ pub fn get_transaction(state: State<'_, Shared>, tx_id: String) -> AppResult<TxD
 
 #[tauri::command]
 pub async fn list_startup() -> AppResult<Vec<crate::startup::StartupItem>> {
-    blocking(|| Ok(crate::startup::list())).await
+    blocking(|| Ok(crate::startup_insight::with_insights())).await
+}
+
+#[tauri::command]
+pub fn list_startup_changes(state: State<'_, Shared>) -> AppResult<Vec<crate::startup_insight::StartupChange>> {
+    crate::startup_insight::recent_changes(&state.db, 30)
 }
 
 #[tauri::command]
@@ -355,4 +494,116 @@ pub fn ai_rename_conversation(state: State<'_, Shared>, id: String, title: Strin
 #[tauri::command]
 pub fn ai_delete_conversation(state: State<'_, Shared>, id: String) -> AppResult<()> {
     conv_store::delete(&state.db, &id)
+}
+
+// --------------------------------------------------------------- gaming
+
+#[derive(serde::Serialize)]
+pub struct GameView {
+    #[serde(flatten)]
+    pub game: crate::games::detect::Game,
+    pub running: bool,
+    pub profile: Option<crate::games::profile::GameProfile>,
+    pub sessions: usize,
+}
+
+#[tauri::command]
+pub async fn list_games(state: State<'_, Shared>, refresh: Option<bool>) -> AppResult<Vec<GameView>> {
+    let st = state.inner().clone();
+    blocking(move || {
+        let cached = st.games.games.read().map(|g| g.clone()).unwrap_or_default();
+        let games = if refresh.unwrap_or(false) || cached.is_empty() { crate::games::refresh(&st.db, &st.games) } else { cached };
+        let procs = st.telemetry.read().map(|t| t.processes.clone()).unwrap_or_default();
+        let running = crate::games::session::running_game(&games, &procs).map(|(g, _)| g.id.clone());
+        let profiles = crate::games::profile::all(&st.db).unwrap_or_default();
+        let counts: std::collections::HashMap<String, usize> = crate::games::session::list(&st.db, None, 1000)
+            .unwrap_or_default()
+            .into_iter()
+            .fold(Default::default(), |mut m, s| {
+                *m.entry(s.game_id).or_default() += 1;
+                m
+            });
+        Ok(games
+            .into_iter()
+            .map(|g| GameView {
+                running: running.as_deref() == Some(g.id.as_str()),
+                profile: profiles.iter().find(|p| p.game_id == g.id).cloned(),
+                sessions: counts.get(&g.id).copied().unwrap_or(0),
+                game: g,
+            })
+            .collect())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn add_custom_game(state: State<'_, Shared>, exe: String) -> AppResult<()> {
+    let st = state.inner().clone();
+    blocking(move || {
+        crate::games::add_custom(&st.db, exe.trim())?;
+        crate::games::refresh(&st.db, &st.games);
+        Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn remove_custom_game(state: State<'_, Shared>, exe: String) -> AppResult<()> {
+    let st = state.inner().clone();
+    blocking(move || {
+        crate::games::remove_custom(&st.db, &exe)?;
+        crate::games::refresh(&st.db, &st.games);
+        Ok(())
+    })
+    .await
+}
+
+#[derive(serde::Serialize)]
+pub struct GamingNow {
+    pub live: Option<crate::games::session::SessionSummary>,
+    pub game_cpu: Option<f32>,
+    pub game_mem: Option<u64>,
+    pub overlays: Vec<crate::games::session::Overlay>,
+}
+
+#[tauri::command]
+pub fn gaming_now(state: State<'_, Shared>) -> GamingNow {
+    let procs = state.telemetry.read().map(|t| t.processes.clone()).unwrap_or_default();
+    let live = state.games.live.lock().ok().and_then(|l| l.clone());
+    GamingNow {
+        game_cpu: live.as_ref().map(|l| l.game_cpu),
+        game_mem: live.as_ref().map(|l| l.game_mem),
+        live: live.map(|l| l.summary()),
+        overlays: crate::games::session::running_overlays(&procs),
+    }
+}
+
+#[tauri::command]
+pub fn list_game_sessions(state: State<'_, Shared>, game_id: Option<String>) -> AppResult<Vec<crate::games::session::SessionSummary>> {
+    crate::games::session::list(&state.db, game_id.as_deref(), 50)
+}
+
+#[tauri::command]
+pub async fn preview_game_profile(
+    state: State<'_, Shared>,
+    profile: crate::games::profile::GameProfile,
+) -> AppResult<Vec<crate::games::profile::ProfilePreviewItem>> {
+    let st = state.inner().clone();
+    blocking(move || crate::games::profile::preview(&st.db, &profile)).await
+}
+
+#[tauri::command]
+pub async fn apply_game_profile(
+    state: State<'_, Shared>,
+    profile: crate::games::profile::GameProfile,
+    game_name: String,
+    on_progress: Channel<engine::Progress>,
+) -> AppResult<crate::games::profile::ProfileOutcome> {
+    let st = state.inner().clone();
+    blocking(move || {
+        crate::games::profile::apply(&st.db, &st.data_dir, &st.rules, profile, &game_name, &|p| {
+            let _ = on_progress.send(p);
+        })
+    })
+    .await
 }

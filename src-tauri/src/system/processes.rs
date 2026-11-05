@@ -1,5 +1,6 @@
 //! Safe process management.
 
+use serde::Serialize;
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 use crate::error::{AppError, AppResult};
@@ -54,6 +55,70 @@ pub fn end_process(pid: u32, expected_name: &str) -> AppResult<()> {
     }
 }
 
+/// Outcome of closing every process of one app.
+#[derive(Debug, Clone, Serialize)]
+pub struct CloseResult {
+    pub name: String,
+    pub ended: usize,
+    pub failed: usize,
+    pub error: Option<String>,
+}
+
+/// Resolve a user/AI-supplied app name ("Spotify", "spotify.exe") to the exact
+/// process name in `running`, case-insensitively. `None` if not running.
+pub fn resolve_name<'a>(wanted: &str, running: impl IntoIterator<Item = &'a str>) -> Option<String> {
+    let w = wanted.trim().to_ascii_lowercase();
+    if w.is_empty() {
+        return None;
+    }
+    let with_exe = if w.ends_with(".exe") { w.clone() } else { format!("{w}.exe") };
+    running
+        .into_iter()
+        .find(|n| {
+            let n = n.to_ascii_lowercase();
+            n == w || n == with_exe
+        })
+        .map(String::from)
+}
+
+/// End every running process with this exact name. Protected Windows
+/// processes and NOCTURN itself are refused; each PID is re-checked by
+/// `end_process` so nothing else is hit if a PID was reused.
+pub fn close_app(name: &str) -> CloseResult {
+    let fail = |e: String| CloseResult { name: name.to_string(), ended: 0, failed: 0, error: Some(e) };
+    if is_protected(name) {
+        return fail(format!("{name} is a core Windows process and can't be closed from NOCTURN"));
+    }
+    let mut sys = match System::new() {
+        Ok(s) => s,
+        Err(e) => return fail(e.to_string()),
+    };
+    sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+    let me = std::process::id();
+    let pids: Vec<u32> = sys
+        .processes()
+        .iter()
+        .filter(|(pid, p)| pid.as_u32() != me && p.name().to_string_lossy().eq_ignore_ascii_case(name))
+        .map(|(pid, _)| pid.as_u32())
+        .collect();
+    if pids.is_empty() {
+        return fail("not running".into());
+    }
+    let (mut ended, mut failed, mut last) = (0, 0, None);
+    for pid in pids {
+        match end_process(pid, name) {
+            Ok(()) => ended += 1,
+            // A child process may exit by itself once its parent is ended.
+            Err(AppError::NotFound(_)) => ended += 1,
+            Err(e) => {
+                failed += 1;
+                last = Some(e.to_string());
+            }
+        }
+    }
+    CloseResult { name: name.to_string(), ended, failed, error: last }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -66,5 +131,18 @@ mod tests {
         assert!(!is_protected("chrome.exe"));
         assert!(end_process(4, "System").is_err());
         assert!(end_process(1234, "winlogon.exe").is_err());
+    }
+
+    #[test]
+    fn resolves_app_names_and_refuses_protected() {
+        let running = ["Spotify.exe", "brave.exe", "svchost.exe"];
+        assert_eq!(resolve_name("spotify", running).as_deref(), Some("Spotify.exe"));
+        assert_eq!(resolve_name("BRAVE.EXE", running).as_deref(), Some("brave.exe"));
+        assert_eq!(resolve_name("discord", running), None);
+        assert_eq!(resolve_name("  ", running), None);
+        let r = close_app("lsass.exe");
+        assert_eq!(r.ended, 0);
+        assert!(r.error.unwrap().contains("core Windows process"));
+        assert_eq!(close_app("definitely-not-running-nocturn-test.exe").error.as_deref(), Some("not running"));
     }
 }

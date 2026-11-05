@@ -4,6 +4,8 @@ import { AppProvider, useApp } from "./lib/app";
 import { Assistant } from "./pages/Assistant";
 import { Diagnostics } from "./pages/Diagnostics";
 import { Gaming } from "./pages/Gaming";
+import { Hardware } from "./pages/Hardware";
+import { Processes } from "./pages/Processes";
 import { History } from "./pages/History";
 import { Network } from "./pages/Network";
 import { Overview } from "./pages/Overview";
@@ -16,6 +18,10 @@ function Pages() {
   switch (page) {
     case "overview":
       return <Overview />;
+    case "hardware":
+      return <Hardware />;
+    case "processes":
+      return <Processes />;
     case "tweak":
       return <Tweak />;
     case "gaming":

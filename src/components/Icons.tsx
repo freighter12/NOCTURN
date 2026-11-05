@@ -17,6 +17,15 @@ export const I = {
   overview: (p: P) => (
     <svg {...base(p)}><rect x="2" y="2" width="5" height="6" rx="1.2" /><rect x="9" y="2" width="5" height="3.5" rx="1.2" /><rect x="9" y="7.5" width="5" height="6.5" rx="1.2" /><rect x="2" y="10" width="5" height="4" rx="1.2" /></svg>
   ),
+  chip: (p: P) => (
+    <svg {...base(p)}><rect x="4" y="4" width="8" height="8" rx="1.2" /><rect x="6.3" y="6.3" width="3.4" height="3.4" rx=".5" /><path d="M6 1.8V4M10 1.8V4M6 12v2.2M10 12v2.2M1.8 6H4M1.8 10H4M12 6h2.2M12 10h2.2" /></svg>
+  ),
+  processes: (p: P) => (
+    <svg {...base(p)}><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M2 6h12M5 9h2M5 11h4M10.5 9h1" /></svg>
+  ),
+  search: (p: P) => (
+    <svg {...base(p)}><circle cx="7" cy="7" r="4.2" /><path d="M10.2 10.2L13.5 13.5" /></svg>
+  ),
   tweak: (p: P) => (
     <svg {...base(p)}><path d="M3 4h6M12 4h1M3 8h1M7 8h6M3 12h6M12 12h1" /><circle cx="10.5" cy="4" r="1.5" /><circle cx="5.5" cy="8" r="1.5" /><circle cx="10.5" cy="12" r="1.5" /></svg>
   ),

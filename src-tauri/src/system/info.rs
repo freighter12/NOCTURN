@@ -389,6 +389,91 @@ pub fn collect() -> SystemInfo {
     })
 }
 
+// ---------------------------------------------------------- drive health
+
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct DriveHealth {
+    pub device_id: String,
+    pub model: String,
+    pub media_type: Option<String>,
+    pub bus_type: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub health: Option<String>,
+    pub temperature_c: Option<u32>,
+    pub temperature_max_c: Option<u32>,
+    /// Percentage of rated endurance used (SSDs).
+    pub wear_pct: Option<u32>,
+    pub power_on_hours: Option<u64>,
+    pub read_errors: Option<u64>,
+    pub write_errors: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct StorageHealth {
+    pub drives: Vec<DriveHealth>,
+    /// Whether Windows returned reliability counters (temperature, wear…).
+    pub reliability_available: bool,
+    pub note: Option<String>,
+}
+
+fn storage_health_inner() -> StorageHealth {
+    let mut out = StorageHealth::default();
+    let conn = match WMIConnection::with_namespace_path(r"ROOT\Microsoft\Windows\Storage") {
+        Ok(c) => c,
+        Err(e) => {
+            out.note = Some(format!("Storage information unavailable: {e}"));
+            return out;
+        }
+    };
+    match query(&conn, "SELECT DeviceId, FriendlyName, MediaType, BusType, Size, HealthStatus FROM MSFT_PhysicalDisk") {
+        Ok(rows) => {
+            out.drives = rows
+                .iter()
+                .map(|r| DriveHealth {
+                    device_id: s(r, "DeviceId").unwrap_or_default(),
+                    model: s(r, "FriendlyName").unwrap_or_else(|| "Disk".into()),
+                    media_type: media_type(u64v(r, "MediaType")),
+                    bus_type: bus_type(u64v(r, "BusType")),
+                    size_bytes: u64v(r, "Size"),
+                    health: health(u64v(r, "HealthStatus")),
+                    ..Default::default()
+                })
+                .collect()
+        }
+        Err(e) => out.note = Some(format!("Physical disks: {e}")),
+    }
+    match query(&conn, "SELECT DeviceId, Temperature, TemperatureMax, Wear, PowerOnHours, ReadErrorsTotal, WriteErrorsTotal FROM MSFT_StorageReliabilityCounter") {
+        Ok(rows) if !rows.is_empty() => {
+            out.reliability_available = true;
+            for r in &rows {
+                let id = s(r, "DeviceId").unwrap_or_default();
+                if let Some(d) = out.drives.iter_mut().find(|d| d.device_id == id) {
+                    // 0 means "not reported" for these counters.
+                    d.temperature_c = u32v(r, "Temperature");
+                    d.temperature_max_c = u32v(r, "TemperatureMax");
+                    d.wear_pct = u64v(r, "Wear").and_then(|w| u32::try_from(w).ok());
+                    d.power_on_hours = u64v(r, "PowerOnHours").filter(|&h| h > 0);
+                    d.read_errors = u64v(r, "ReadErrorsTotal");
+                    d.write_errors = u64v(r, "WriteErrorsTotal");
+                }
+            }
+        }
+        Ok(_) | Err(_) => {
+            out.note = Some(if elevation::is_elevated() {
+                "Your drives don't report temperature or wear to Windows.".into()
+            } else {
+                "Drive temperature and wear need administrator rights to read. Run NOCTURN as administrator to see them.".into()
+            });
+        }
+    }
+    out
+}
+
+/// Drive health, temperature and wear (temperature/wear usually need admin).
+pub fn storage_health() -> StorageHealth {
+    std::thread::spawn(storage_health_inner).join().unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -400,5 +485,13 @@ mod tests {
         assert!(!i.os.build.is_empty());
         assert!(!i.cpu.name.is_empty());
         assert!(i.memory_total_bytes.unwrap_or(0) > 0);
+    }
+
+    #[test]
+    fn storage_health_lists_drives_and_explains_gaps() {
+        let h = storage_health();
+        eprintln!("{h:?}");
+        assert!(!h.drives.is_empty(), "{:?}", h.note);
+        assert!(h.reliability_available || h.note.is_some(), "missing data must be explained");
     }
 }

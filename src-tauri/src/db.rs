@@ -74,6 +74,68 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX idx_messages_conv ON messages(conversation_id);
     "#,
+    // 2: per-app process rules (priority / affinity applied at launch).
+    r#"
+    CREATE TABLE process_rules (
+        name            TEXT PRIMARY KEY COLLATE NOCASE,
+        priority        TEXT,
+        affinity        TEXT,
+        enabled         INTEGER NOT NULL DEFAULT 1,
+        note            TEXT NOT NULL DEFAULT '',
+        created_at      TEXT NOT NULL,
+        updated_at      TEXT NOT NULL,
+        applied_count   INTEGER NOT NULL DEFAULT 0,
+        last_applied_at TEXT,
+        last_error      TEXT
+    );
+    "#,
+    // 3: per-minute hardware history (kept 7 days).
+    r#"
+    CREATE TABLE telemetry_minute (
+        ts          INTEGER PRIMARY KEY,
+        cpu         REAL NOT NULL,
+        cpu_max_core REAL NOT NULL,
+        mem_pct     REAL NOT NULL,
+        gpu         REAL,
+        gpu_temp    REAL,
+        gpu_power   REAL,
+        disk_read   INTEGER NOT NULL,
+        disk_write  INTEGER NOT NULL,
+        net_rx      INTEGER NOT NULL,
+        net_tx      INTEGER NOT NULL
+    );
+    "#,
+    // 4: gaming — per-game profiles, games added by hand, play sessions.
+    r#"
+    CREATE TABLE game_profiles (
+        game_id    TEXT PRIMARY KEY,
+        json       TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE TABLE custom_games (
+        exe      TEXT PRIMARY KEY COLLATE NOCASE,
+        added_at TEXT NOT NULL
+    );
+    CREATE TABLE game_sessions (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        game_id       TEXT NOT NULL,
+        game_name     TEXT NOT NULL,
+        exe           TEXT NOT NULL,
+        started_at    INTEGER NOT NULL,
+        ended_at      INTEGER NOT NULL,
+        samples       INTEGER NOT NULL,
+        avg_cpu       REAL NOT NULL,
+        avg_max_core  REAL NOT NULL,
+        avg_gpu       REAL,
+        peak_gpu_temp REAL,
+        avg_mem_pct   REAL NOT NULL,
+        game_mem_peak INTEGER NOT NULL,
+        gpu_bound_pct REAL NOT NULL,
+        cpu_bound_pct REAL NOT NULL,
+        profile_json  TEXT
+    );
+    CREATE INDEX idx_sessions_game ON game_sessions(game_id, started_at);
+    "#,
 ];
 
 #[derive(Clone)]

@@ -95,6 +95,57 @@ export interface GpuSample {
   vram_used: number | null;
   vram_total: number | null;
   temperature_c: number | null;
+  core_clock_mhz: number | null;
+  mem_clock_mhz: number | null;
+  max_core_clock_mhz: number | null;
+  power_w: number | null;
+  power_limit_w: number | null;
+  fan_pct: number | null;
+  /** "nvml" when NVIDIA sensors are available, otherwise "windows". */
+  source: string;
+}
+export interface DiskIo {
+  disk: string;
+  read_bps: number;
+  write_bps: number;
+  active_pct: number;
+}
+export interface HistoryPoint {
+  ts: number;
+  cpu: number;
+  cpu_max_core: number;
+  mem_pct: number;
+  gpu: number | null;
+  gpu_temp: number | null;
+  gpu_power: number | null;
+  disk_read: number;
+  disk_write: number;
+  net_rx: number;
+  net_tx: number;
+}
+export interface DriveHealth {
+  device_id: string;
+  model: string;
+  media_type: string | null;
+  bus_type: string | null;
+  size_bytes: number | null;
+  health: string | null;
+  temperature_c: number | null;
+  temperature_max_c: number | null;
+  wear_pct: number | null;
+  power_on_hours: number | null;
+  read_errors: number | null;
+  write_errors: number | null;
+}
+export interface StorageHealth {
+  drives: DriveHealth[];
+  reliability_available: boolean;
+  note: string | null;
+}
+export interface Alert {
+  kind: string;
+  title: string;
+  detail: string;
 }
 export interface DiskSample {
   mount: string;
@@ -107,6 +158,11 @@ export interface DiskSample {
 }
 export interface Sample {
   ts: number;
+  interval_ms: number;
+  commit_bytes: number | null;
+  commit_limit: number | null;
+  pages_per_sec: number | null;
+  disk_io: DiskIo[];
   cpu_usage: number;
   cpu_per_core: number[];
   cpu_freq_mhz: number;
@@ -121,6 +177,72 @@ export interface Sample {
   disks: DiskSample[];
   process_count: number;
   uptime_secs: number;
+}
+export type Priority = "idle" | "below_normal" | "normal" | "above_normal" | "high";
+export interface ProcessRule {
+  name: string;
+  priority: Priority | null;
+  affinity: string | null;
+  enabled: boolean;
+  note: string;
+  created_at: string;
+  updated_at: string;
+  applied_count: number;
+  last_applied_at: string | null;
+  last_error: string | null;
+}
+export type ProcFlag = "high_cpu" | "high_memory" | "disk_heavy";
+export interface ProcGroup {
+  name: string;
+  instances: number;
+  cpu: number;
+  memory: number;
+  disk_bps: number;
+  has_window: boolean;
+  exe: string | null;
+  protected: boolean;
+  cpu_avg: number;
+  cpu_peak: number;
+  mem_peak: number;
+  first_seen: number | null;
+  flags: ProcFlag[];
+  rule: ProcessRule | null;
+}
+export interface ProcOverview {
+  groups: ProcGroup[];
+  total_processes: number;
+  logical_cpus: number;
+  mem_total: number;
+  sampled_at: number | null;
+}
+export interface ProcInstance {
+  pid: number;
+  cpu: number;
+  memory: number;
+  exe: string | null;
+  has_window: boolean;
+  run_time_secs: number;
+  priority: string | null;
+  affinity: string | null;
+}
+export interface ProcDetails {
+  name: string;
+  protected: boolean;
+  instances: ProcInstance[];
+  system_mask: string;
+  logical_cpus: number;
+  rule: ProcessRule | null;
+}
+export interface ChangeOutcome {
+  pid: number;
+  ok: boolean;
+  error: string | null;
+}
+export interface CloseResult {
+  name: string;
+  ended: number;
+  failed: number;
+  error: string | null;
 }
 export interface ProcessInfo {
   pid: number;
@@ -347,6 +469,24 @@ export interface StartupItem {
   file_path: string | null;
   file_exists: boolean | null;
   requires_admin: boolean;
+  insight?: StartupInsight;
+}
+export type SignatureState = "valid" | "unsigned" | "invalid" | "unknown";
+export interface StartupInsight {
+  target: string | null;
+  publisher: string | null;
+  description: string | null;
+  signature: SignatureState | null;
+  windows_component: boolean;
+  review: string[];
+}
+export interface StartupChange {
+  tx_id: string;
+  target: string;
+  status: string;
+  source: string;
+  applied_at: string | null;
+  rolled_back_at: string | null;
 }
 
 // ---------------------------------------------------------------- settings
@@ -360,11 +500,20 @@ export interface AiSettings {
   allow_system_context: boolean;
   custom_instructions: string;
 }
+export interface MonitorSettings {
+  interval_ms: number;
+  paused: boolean;
+  alerts: boolean;
+  cpu_alert_pct: number;
+  ram_alert_pct: number;
+  gpu_temp_alert_c: number;
+}
 export interface AppSettings {
   restore_point_default: boolean;
   confirm_advanced: boolean;
   reduce_motion: boolean;
   ai: AiSettings;
+  monitor: MonitorSettings;
 }
 export interface AppInfo {
   version: string;
@@ -397,6 +546,7 @@ export interface PlanCard {
   verification: string | null;
   tweaks: { id: string; title: string; risk: Risk; requires_admin: boolean; reversible: boolean; caveat: string | null }[];
   startup: { id: string; name: string; requires_admin: boolean }[];
+  close_apps?: { name: string; instances: number; memory_bytes: number }[];
   preview: Preview | null;
 }
 export interface StoredMessage {
@@ -463,8 +613,18 @@ export const api = {
 
   systemInfo: (refresh = false) => invoke<SystemInfo>("get_system_info", { refresh }),
   telemetryHistory: () => invoke<Sample[]>("get_telemetry_history"),
+  telemetryRange: (minutes: number) => invoke<HistoryPoint[]>("get_telemetry_range", { minutes }),
+  storageHealth: () => invoke<StorageHealth>("get_storage_health"),
   processes: () => invoke<ProcessInfo[]>("get_processes"),
   endProcess: (pid: number, name: string) => invoke<void>("end_process", { pid, name }),
+  closeApps: (names: string[], source: "user" | "ai" = "user") => invoke<CloseResult[]>("close_apps", { names, source }),
+  processOverview: () => invoke<ProcOverview>("process_overview"),
+  processDetails: (name: string) => invoke<ProcDetails>("process_details", { name }),
+  setProcessPriority: (name: string, priority: Priority) => invoke<ChangeOutcome[]>("set_process_priority", { name, priority }),
+  setProcessAffinity: (name: string, mask: string) => invoke<ChangeOutcome[]>("set_process_affinity", { name, mask }),
+  processRules: () => invoke<ProcessRule[]>("list_process_rules"),
+  saveProcessRule: (rule: Pick<ProcessRule, "name" | "priority" | "affinity" | "enabled" | "note">) => invoke<ProcessRule>("save_process_rule", { rule }),
+  deleteProcessRule: (name: string) => invoke<void>("delete_process_rule", { name }),
   health: (force = false) => invoke<HealthReport>("get_health", { force }),
   events: () => invoke<EventEntry[]>("get_events"),
   drivers: () => invoke<DriverEntry[]>("get_drivers"),
@@ -491,6 +651,7 @@ export const api = {
   transaction: (txId: string) => invoke<{ summary: TxSummary; changes: ChangeRow[] }>("get_transaction", { txId }),
 
   startup: () => invoke<StartupItem[]>("list_startup"),
+  startupChanges: () => invoke<StartupChange[]>("list_startup_changes"),
   setStartup: (ids: string[], enabled: boolean, source: "user" | "ai" = "user", onProgress?: (p: Progress) => void) =>
     invoke<ApplyReport>("set_startup_enabled", { ids, enabled, source, onProgress: progressChannel(onProgress) }),
 

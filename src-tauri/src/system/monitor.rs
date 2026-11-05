@@ -1,11 +1,14 @@
 //! Live telemetry.
 //!
-//! A background thread samples CPU, memory, GPU, network and storage once per
-//! second and emits a `telemetry` event to the UI. It also keeps a short
-//! history (for charts) and a process snapshot (for the process view and the
-//! AI) refreshed every 3 seconds.
+//! A background thread samples CPU, memory, GPU, disk I/O, network and
+//! storage at the user's chosen interval (1/2/5 s) and emits a `telemetry`
+//! event to the UI. It keeps a short in-memory history for live charts,
+//! writes one averaged row per minute for the 7-day history, raises threshold
+//! alerts, and refreshes the process snapshot (~every 3 s) that the process
+//! manager, saved rules and the AI use. Monitoring can be paused; saved
+//! process rules keep working at a slow rate while it is.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -16,7 +19,11 @@ use sysinfo::{
 };
 use tauri::{AppHandle, Emitter};
 
-use crate::security::exec::{self, SafeCommand};
+use super::gpu::Nvidia;
+use super::history::{self, Alerts, MinuteAcc};
+use super::perf::{DiskIo, Perf};
+use super::process_control;
+use crate::state::Shared;
 
 const HISTORY: usize = 120;
 
@@ -27,8 +34,16 @@ pub struct GpuSample {
     pub usage: Option<f32>,
     pub vram_used: Option<u64>,
     pub vram_total: Option<u64>,
-    /// Only available from a vendor tool (currently nvidia-smi).
+    /// The fields below come from the vendor library (NVIDIA NVML) only.
     pub temperature_c: Option<f32>,
+    pub core_clock_mhz: Option<u32>,
+    pub mem_clock_mhz: Option<u32>,
+    pub max_core_clock_mhz: Option<u32>,
+    pub power_w: Option<f32>,
+    pub power_limit_w: Option<f32>,
+    pub fan_pct: Option<u32>,
+    /// "nvml" when vendor sensors are available, otherwise "windows".
+    pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -45,6 +60,7 @@ pub struct DiskSample {
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct Sample {
     pub ts: i64,
+    pub interval_ms: u32,
     pub cpu_usage: f32,
     pub cpu_per_core: Vec<f32>,
     pub cpu_freq_mhz: u64,
@@ -53,10 +69,16 @@ pub struct Sample {
     pub mem_available: u64,
     pub swap_total: u64,
     pub swap_used: u64,
+    /// Memory pressure: committed virtual memory vs the commit limit, and
+    /// hard page faults per second.
+    pub commit_bytes: Option<u64>,
+    pub commit_limit: Option<u64>,
+    pub pages_per_sec: Option<f32>,
     pub gpus: Vec<GpuSample>,
     pub net_rx_bps: u64,
     pub net_tx_bps: u64,
     pub disks: Vec<DiskSample>,
+    pub disk_io: Vec<DiskIo>,
     pub process_count: usize,
     pub uptime_secs: u64,
 }
@@ -73,7 +95,30 @@ pub struct ProcessInfo {
     pub disk_read_bps: u64,
     pub disk_write_bps: u64,
     pub run_time_secs: u64,
+    /// Owns a visible top-level window (an "app" rather than background work).
+    #[serde(default)]
+    pub has_window: bool,
 }
+
+/// Per-app usage since NOCTURN started (grouped by process name).
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct ProcStat {
+    pub name: String,
+    pub samples: u32,
+    pub cpu_sum: f64,
+    pub cpu_peak: f32,
+    pub mem_peak: u64,
+    pub first_seen: i64,
+    pub last_seen: i64,
+}
+
+impl ProcStat {
+    pub fn cpu_avg(&self) -> f32 {
+        if self.samples == 0 { 0.0 } else { (self.cpu_sum / self.samples as f64) as f32 }
+    }
+}
+
+const MAX_STATS: usize = 800;
 
 #[derive(Default)]
 pub struct TelemetryStore {
@@ -81,9 +126,36 @@ pub struct TelemetryStore {
     pub history: VecDeque<Sample>,
     pub processes: Vec<ProcessInfo>,
     pub processes_at: Option<i64>,
+    pub stats: HashMap<String, ProcStat>,
+    pub paused: bool,
 }
 
 pub type SharedTelemetry = Arc<RwLock<TelemetryStore>>;
+
+fn update_stats(stats: &mut HashMap<String, ProcStat>, list: &[ProcessInfo], now: i64) {
+    let mut groups: HashMap<String, (f32, u64, String)> = HashMap::new();
+    for p in list {
+        let g = groups.entry(p.name.to_ascii_lowercase()).or_insert((0.0, 0, p.name.clone()));
+        g.0 += p.cpu;
+        g.1 += p.memory;
+    }
+    for (key, (cpu, mem, name)) in groups {
+        let s = stats.entry(key).or_insert_with(|| ProcStat { name, first_seen: now, ..Default::default() });
+        s.samples += 1;
+        s.cpu_sum += cpu as f64;
+        s.cpu_peak = s.cpu_peak.max(cpu);
+        s.mem_peak = s.mem_peak.max(mem);
+        s.last_seen = now;
+    }
+    if stats.len() > MAX_STATS {
+        // Forget apps not seen for the longest time.
+        let mut v: Vec<(String, i64)> = stats.iter().map(|(k, s)| (k.clone(), s.last_seen)).collect();
+        v.sort_by_key(|(_, t)| *t);
+        for (k, _) in v.into_iter().take(stats.len() - MAX_STATS) {
+            stats.remove(&k);
+        }
+    }
+}
 
 fn disk_samples(disks: &Disks) -> Vec<DiskSample> {
     disks
@@ -101,65 +173,115 @@ fn disk_samples(disks: &Disks) -> Vec<DiskSample> {
         .collect()
 }
 
-fn nvidia_temps() -> Vec<(String, f32)> {
-    if exec::nvidia_smi_path().is_none() {
-        return vec![];
-    }
-    let Ok(out) = exec::run_with_timeout(&SafeCommand::NvidiaSmiQuery, Duration::from_secs(5)) else {
-        return vec![];
-    };
-    if !out.success() {
-        return vec![];
-    }
-    out.stdout
-        .lines()
-        .filter_map(|l| {
-            let mut parts = l.split(',').map(str::trim);
-            let name = parts.next()?.to_string();
-            let temp: f32 = parts.next()?.parse().ok()?;
-            Some((name, temp))
-        })
-        .collect()
-}
-
-pub fn start(app: AppHandle, store: SharedTelemetry) {
+pub fn start(app: AppHandle, state: Shared) {
     std::thread::Builder::new()
         .name("nocturn-telemetry".into())
-        .spawn(move || run(app, store))
+        .spawn(move || run(app, state))
         .expect("spawn telemetry thread");
 }
 
-fn run(app: AppHandle, store: SharedTelemetry) {
+/// Process snapshot + saved-rule application. Returns the process count.
+struct ProcScanner {
+    sys: Option<System>,
+    known: HashSet<u32>,
+    last: Instant,
+    logical: f32,
+}
+
+impl ProcScanner {
+    fn scan(&mut self, state: &Shared) -> usize {
+        let Some(ps) = self.sys.as_mut() else { return 0 };
+        let kind = ProcessRefreshKind::nothing().with_cpu().with_memory().with_disk_usage().with_exe(UpdateKind::OnlyIfNotSet);
+        ps.refresh_processes_specifics(ProcessesToUpdate::All, true, kind);
+        let window = self.last.elapsed().as_secs_f64().max(0.5);
+        self.last = Instant::now();
+        let windows = process_control::window_pids();
+        let list: Vec<ProcessInfo> = ps
+            .processes()
+            .values()
+            .map(|p| {
+                let du = p.disk_usage();
+                ProcessInfo {
+                    pid: p.pid().as_u32(),
+                    parent: p.parent().map(|x| x.as_u32()),
+                    name: p.name().to_string_lossy().into_owned(),
+                    exe: p.exe().map(|e| e.display().to_string()),
+                    cpu: (p.cpu_usage() / self.logical).clamp(0.0, 100.0),
+                    memory: p.memory(),
+                    disk_read_bps: (du.read_bytes as f64 / window) as u64,
+                    disk_write_bps: (du.written_bytes as f64 / window) as u64,
+                    run_time_secs: p.run_time(),
+                    has_window: windows.contains(&p.pid().as_u32()),
+                }
+            })
+            .collect();
+        // Saved rules apply once to each process that appeared since the last
+        // scan (on the first scan: everything already running).
+        let fresh: Vec<(u32, String)> = list.iter().filter(|p| !self.known.contains(&p.pid)).map(|p| (p.pid, p.name.clone())).collect();
+        self.known = list.iter().map(|p| p.pid).collect();
+        crate::system::rules::apply_to_new(&state.db, &state.rules, &fresh);
+        let n = list.len();
+        let now = chrono::Utc::now().timestamp_millis();
+        if let Ok(mut s) = state.telemetry.write() {
+            update_stats(&mut s.stats, &list, now);
+            s.processes = list;
+            s.processes_at = Some(now);
+        }
+        n
+    }
+}
+
+fn run(app: AppHandle, state: Shared) {
+    let store = state.telemetry.clone();
     let Ok(mut sys) = System::new_with_specifics(
-        RefreshKind::nothing()
-            .with_cpu(CpuRefreshKind::everything())
-            .with_memory(MemoryRefreshKind::everything()),
+        RefreshKind::nothing().with_cpu(CpuRefreshKind::everything()).with_memory(MemoryRefreshKind::everything()),
     ) else {
         tracing::error!("telemetry: could not initialise system sampler");
         return;
     };
-    let mut proc_sys = System::new().ok();
+    let logical = sys.cpus().len().max(1) as f32;
+    let mut procs = ProcScanner { sys: System::new().ok(), known: HashSet::new(), last: Instant::now(), logical };
     let mut gpus = Gpus::new_with_refreshed_list().ok();
     let mut nets = Networks::new_with_refreshed_list().ok();
     let mut disks = Disks::new_with_refreshed_list().ok();
-    let logical = sys.cpus().len().max(1) as f32;
+    let nvidia = Nvidia::new();
+    let mut perf = Perf::new();
+    if perf.is_none() {
+        tracing::warn!("telemetry: performance counters unavailable; disk I/O and memory pressure disabled");
+    }
 
-    let mut last_tick = Instant::now();
-    let mut tick: u64 = 0;
+    let mut cfg = crate::settings::load(&state.db).monitor;
     let mut disk_cache = disks.as_ref().map(disk_samples).unwrap_or_default();
-    let mut temps: Vec<(String, f32)> = nvidia_temps();
-    let proc_kind = ProcessRefreshKind::nothing()
-        .with_cpu()
-        .with_memory()
-        .with_disk_usage()
-        .with_exe(UpdateKind::OnlyIfNotSet);
+    let mut minute = MinuteAcc::default();
+    let mut alerts = Alerts::default();
+    let mut last_tick = Instant::now();
+    let mut last_disks = Instant::now();
+    let mut last_settings = Instant::now();
+    let mut last_prune: Option<Instant> = None;
+    let mut process_count = 0usize;
 
     loop {
-        std::thread::sleep(Duration::from_millis(1000));
+        std::thread::sleep(Duration::from_millis(if cfg.paused { 1000 } else { cfg.interval_ms as u64 }));
+        if last_settings.elapsed() >= Duration::from_secs(3) {
+            cfg = crate::settings::load(&state.db).monitor;
+            last_settings = Instant::now();
+            if let Ok(mut s) = store.write() {
+                s.paused = cfg.paused;
+            }
+        }
+
+        // Process scan roughly every 3 s (every 10 s while paused, for rules).
+        let proc_every = if cfg.paused { Duration::from_secs(10) } else { Duration::from_millis(2900) };
+        if procs.last.elapsed() >= proc_every || procs.known.is_empty() {
+            process_count = procs.scan(&state);
+        }
+        if cfg.paused {
+            last_tick = Instant::now();
+            continue;
+        }
+
         let elapsed = last_tick.elapsed().as_secs_f64().max(0.001);
         last_tick = Instant::now();
-        tick += 1;
-
         sys.refresh_cpu_all();
         sys.refresh_memory();
 
@@ -174,74 +296,59 @@ fn run(app: AppHandle, store: SharedTelemetry) {
                 tx += data.transmitted();
             }
         }
-
-        if tick % 15 == 0 {
+        if last_disks.elapsed() >= Duration::from_secs(15) {
             if let Some(d) = disks.as_mut() {
                 d.refresh(true);
                 disk_cache = disk_samples(d);
             }
+            last_disks = Instant::now();
         }
-        if tick % 5 == 0 {
-            temps = nvidia_temps();
-        }
+        let pf = perf.as_mut().map(|p| p.sample()).unwrap_or_default();
 
-        let gpu_samples = gpus
+        // Windows (sysinfo) gives usage/VRAM for every vendor; NVML adds
+        // temperature, clocks, power and fan for NVIDIA cards.
+        let nv = nvidia.sample();
+        let mut gpu_samples: Vec<GpuSample> = gpus
             .as_mut()
             .map(|g| {
                 g.refresh(true);
                 g.iter()
-                    .map(|gpu| {
-                        let name = gpu.model().unwrap_or("GPU").to_string();
-                        let temperature_c = temps
-                            .iter()
-                            .find(|(n, _)| name.contains(n.as_str()) || n.contains(name.as_str()))
-                            .map(|(_, t)| *t);
-                        GpuSample {
-                            usage: gpu.usage(),
-                            vram_used: gpu.used_memory(),
-                            vram_total: gpu.total_memory(),
-                            temperature_c,
-                            name,
-                        }
+                    .map(|gpu| GpuSample {
+                        name: gpu.model().unwrap_or("GPU").to_string(),
+                        usage: gpu.usage(),
+                        vram_used: gpu.used_memory(),
+                        vram_total: gpu.total_memory(),
+                        source: "windows".into(),
+                        ..Default::default()
                     })
                     .collect()
             })
             .unwrap_or_default();
-
-        // Process snapshot every 3 s.
-        let mut process_count = store.read().map(|s| s.processes.len()).unwrap_or(0);
-        if tick % 3 == 1 {
-            if let Some(ps) = proc_sys.as_mut() {
-                ps.refresh_processes_specifics(ProcessesToUpdate::All, true, proc_kind);
-                let window = 3.0f64;
-                let list: Vec<ProcessInfo> = ps
-                    .processes()
-                    .values()
-                    .map(|p| {
-                        let du = p.disk_usage();
-                        ProcessInfo {
-                            pid: p.pid().as_u32(),
-                            parent: p.parent().map(|x| x.as_u32()),
-                            name: p.name().to_string_lossy().into_owned(),
-                            exe: p.exe().map(|e| e.display().to_string()),
-                            cpu: (p.cpu_usage() / logical).clamp(0.0, 100.0),
-                            memory: p.memory(),
-                            disk_read_bps: (du.read_bytes as f64 / window) as u64,
-                            disk_write_bps: (du.written_bytes as f64 / window) as u64,
-                            run_time_secs: p.run_time(),
-                        }
-                    })
-                    .collect();
-                process_count = list.len();
-                if let Ok(mut s) = store.write() {
-                    s.processes = list;
-                    s.processes_at = Some(chrono::Utc::now().timestamp_millis());
+        for n in nv {
+            let target = gpu_samples.iter_mut().find(|g| g.name.contains(&n.name) || n.name.contains(&g.name));
+            let g = match target {
+                Some(g) => g,
+                None => {
+                    gpu_samples.push(GpuSample { name: n.name.clone(), ..Default::default() });
+                    gpu_samples.last_mut().unwrap()
                 }
-            }
+            };
+            g.usage = n.usage.or(g.usage);
+            g.vram_used = n.vram_used.or(g.vram_used);
+            g.vram_total = n.vram_total.or(g.vram_total);
+            g.temperature_c = n.temperature_c;
+            g.core_clock_mhz = n.core_clock_mhz;
+            g.mem_clock_mhz = n.mem_clock_mhz;
+            g.max_core_clock_mhz = n.max_core_clock_mhz;
+            g.power_w = n.power_w;
+            g.power_limit_w = n.power_limit_w;
+            g.fan_pct = n.fan_pct;
+            g.source = "nvml".into();
         }
 
         let sample = Sample {
             ts: chrono::Utc::now().timestamp_millis(),
+            interval_ms: cfg.interval_ms,
             cpu_usage: sys.global_cpu_usage(),
             cpu_per_core: sys.cpus().iter().map(|c| c.usage()).collect(),
             cpu_freq_mhz: sys.cpus().first().map(|c| c.frequency()).unwrap_or(0),
@@ -250,13 +357,34 @@ fn run(app: AppHandle, store: SharedTelemetry) {
             mem_available: sys.available_memory(),
             swap_total: sys.total_swap(),
             swap_used: sys.used_swap(),
+            commit_bytes: pf.commit_bytes,
+            commit_limit: pf.commit_limit,
+            pages_per_sec: pf.pages_per_sec,
             gpus: gpu_samples,
             net_rx_bps: (rx as f64 / elapsed) as u64,
             net_tx_bps: (tx as f64 / elapsed) as u64,
             disks: disk_cache.clone(),
+            disk_io: pf.disks,
             process_count,
             uptime_secs: System::uptime().unwrap_or(0),
         };
+
+        if let Some(done) = minute.add(&sample) {
+            if let Err(e) = history::store(&state.db, &done) {
+                tracing::warn!("telemetry history write failed: {e}");
+            }
+        }
+        if last_prune.is_none_or(|t| t.elapsed() >= Duration::from_secs(3600)) {
+            let _ = history::prune(&state.db, sample.ts);
+            last_prune = Some(Instant::now());
+        }
+        if state.games.games.read().map(|g| !g.is_empty()).unwrap_or(false) {
+            let procs_now = store.read().map(|s| s.processes.clone()).unwrap_or_default();
+            crate::games::observe(&state.db, &state.games, &procs_now, &sample);
+        }
+        for a in alerts.check(&sample, &cfg, Instant::now()) {
+            let _ = app.emit("alert", &a);
+        }
 
         if let Ok(mut s) = store.write() {
             s.history.push_back(sample.clone());

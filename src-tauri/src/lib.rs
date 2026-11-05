@@ -11,11 +11,13 @@
 mod ai;
 mod commands;
 mod db;
+mod games;
 mod error;
 mod logging;
 mod security;
 mod settings;
 mod startup;
+mod startup_insight;
 mod state;
 mod system;
 mod tweaks;
@@ -59,12 +61,14 @@ pub fn run() {
             db.audit("info", "system", "app.start", None);
 
             let state = Arc::new(state::AppState::new(db, data_dir, log_dir));
-            system::monitor::start(app.handle().clone(), state.telemetry.clone());
+            system::monitor::start(app.handle().clone(), state.clone());
 
             // Warm the hardware inventory in the background.
             let warm = state.clone();
             std::thread::spawn(move || {
                 let _ = warm.system_info(false);
+                let n = games::refresh(&warm.db, &warm.games).len();
+                tracing::info!("detected {n} installed game(s)");
             });
 
             app.manage(state);
@@ -77,8 +81,18 @@ pub fn run() {
             commands::list_audit,
             commands::get_system_info,
             commands::get_telemetry_history,
+            commands::get_telemetry_range,
+            commands::get_storage_health,
             commands::get_processes,
             commands::end_process,
+            commands::close_apps,
+            commands::process_overview,
+            commands::process_details,
+            commands::set_process_priority,
+            commands::set_process_affinity,
+            commands::list_process_rules,
+            commands::save_process_rule,
+            commands::delete_process_rule,
             commands::get_health,
             commands::get_events,
             commands::get_drivers,
@@ -96,7 +110,15 @@ pub fn run() {
             commands::list_history,
             commands::get_transaction,
             commands::list_startup,
+            commands::list_startup_changes,
             commands::set_startup_enabled,
+            commands::list_games,
+            commands::add_custom_game,
+            commands::remove_custom_game,
+            commands::gaming_now,
+            commands::list_game_sessions,
+            commands::preview_game_profile,
+            commands::apply_game_profile,
             commands::ai_key_status,
             commands::ai_set_key,
             commands::ai_test_connection,
