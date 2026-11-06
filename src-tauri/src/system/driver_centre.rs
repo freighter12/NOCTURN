@@ -267,8 +267,40 @@ fn is_virtual(device: &str) -> bool {
         .any(|k| d.contains(k))
 }
 
+/// Board maker from the PCI subsystem vendor of onboard (chipset, audio,
+/// network) devices — useful when the firmware reports a garbled board name.
+/// Graphics cards are skipped: their subsystem vendor is the card's maker.
+pub fn board_from_subsystems(drivers: &[Value]) -> Option<&'static str> {
+    let mut counts: HashMap<&'static str, usize> = HashMap::new();
+    for d in drivers {
+        if sv(d, "class").is_some_and(|c| c.eq_ignore_ascii_case("display")) {
+            continue;
+        }
+        let Some(id) = sv(d, "id").map(|s| s.to_ascii_uppercase()) else { continue };
+        if !id.starts_with("PCI\\") {
+            continue;
+        }
+        let Some(i) = id.find("SUBSYS_") else { continue };
+        let Some(vendor) = id.get(i + 11..i + 15).and_then(|h| u16::from_str_radix(h, 16).ok()) else { continue };
+        let key = match vendor {
+            0x1462 => "msi",
+            0x1043 => "asus",
+            0x1458 => "gigabyte",
+            0x1849 => "asrock",
+            0x1028 => "dell",
+            0x103C => "hp",
+            0x17AA => "lenovo",
+            _ => continue,
+        };
+        *counts.entry(key).or_default() += 1;
+    }
+    // Require a few devices so one add-in card can't decide it.
+    counts.into_iter().filter(|(_, n)| *n >= 3).max_by_key(|(_, n)| *n).map(|(k, _)| k)
+}
+
 pub fn analyse(v: &Value, board: Option<&'static str>, today: NaiveDate) -> DriverReport {
     let arr = |k: &str| v.get(k).cloned().map(exec::as_array).unwrap_or_default();
+    let board = board.or_else(|| board_from_subsystems(&arr("drivers")));
 
     let mut problems: Vec<ProblemDevice> = arr("problems")
         .iter()
@@ -503,6 +535,22 @@ mod tests {
     }
 
     #[test]
+    fn board_from_onboard_subsystem_ids() {
+        let d = |class: &str, id: &str| json!({ "class": class, "id": id });
+        let drivers = vec![
+            d("SYSTEM", r"PCI\VEN_1022&DEV_790B&SUBSYS_7C961462&REV_61\3&1"),
+            d("SYSTEM", r"PCI\VEN_1022&DEV_790E&SUBSYS_7C961462&REV_51\3&2"),
+            d("NET", r"PCI\VEN_10EC&DEV_8168&SUBSYS_7C961462&REV_15\4&3"),
+            // An ASUS graphics card must not make it an ASUS board.
+            d("DISPLAY", r"PCI\VEN_10DE&DEV_1E87&SUBSYS_86AC1043&REV_A1\4&4"),
+            d("DISPLAY", r"PCI\VEN_10DE&DEV_1E87&SUBSYS_86AC1043&REV_A1\4&5"),
+            d("DISPLAY", r"PCI\VEN_10DE&DEV_1E87&SUBSYS_86AC1043&REV_A1\4&6"),
+        ];
+        assert_eq!(board_from_subsystems(&drivers), Some("msi"));
+        assert_eq!(board_from_subsystems(&drivers[..2]), None, "needs at least three devices");
+    }
+
+    #[test]
     fn board_makers() {
         assert_eq!(board_link("Micro-Star International Co., Ltd.", ""), Some("msi"));
         assert_eq!(board_link("ASUSTeK COMPUTER INC.", ""), Some("asus"));
@@ -513,5 +561,9 @@ mod tests {
     fn real_report_runs() {
         let r = report("", "").unwrap();
         assert!(!r.key.is_empty());
+        println!("board link: {:?}", r.board_link.as_ref().map(|l| l.key));
+        for k in r.key.iter().filter(|k| k.group == "Network" || k.group == "Chipset") {
+            println!("{}: {} -> {:?}", k.group, k.device, k.link.as_ref().map(|l| l.key));
+        }
     }
 }
