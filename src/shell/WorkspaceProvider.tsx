@@ -6,6 +6,7 @@ import { errorMessage, library, type LibraryItem } from "../lib/api";
 import { useApp } from "../lib/app";
 import { AppIcon, whereItOpens } from "../library/tiles";
 import { usePrefs } from "./PrefsProvider";
+import { useMusic } from "../music/MusicProvider";
 import type { Workspace } from "./prefs";
 
 interface Ctx {
@@ -19,7 +20,9 @@ const WsCtx = createContext<Ctx | null>(null);
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { prefs, loaded, update } = usePrefs();
   const { toast } = useApp();
+  const m = useMusic();
   const [pending, setPending] = useState<{ ws: Workspace; items: LibraryItem[] } | null>(null);
+  const [playMusic, setPlayMusic] = useState(true);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [dontAsk, setDontAsk] = useState(false);
   const active = prefs.workspaces.list.find((w) => w.id === prefs.workspaces.active) ?? null;
@@ -65,22 +68,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         toast({ tone: "info", title: "Workspaces off", detail: "Back to your main Nocturn setup." });
         return;
       }
-      if (!ws.launch.length) {
+      const playlist = ws.playlist ? m.playlists.find((p) => p.id === ws.playlist) : undefined;
+      const all = ws.launch.length ? await library.list().catch(() => [] as LibraryItem[]) : [];
+      const items = ws.launch.map((x) => all.find((i) => i.id === x)).filter((i): i is LibraryItem => !!i);
+      if (!items.length && !playlist?.tracks.length) {
         toast({ tone: "info", title: `Switched to ${ws.name}` });
         return;
       }
-      const all = await library.list().catch(() => [] as LibraryItem[]);
-      const items = ws.launch.map((x) => all.find((i) => i.id === x)).filter((i): i is LibraryItem => !!i);
-      if (!items.length) return;
       if (prefs.workspaces.confirmLaunch) {
         setPicked(new Set(items.map((i) => i.id)));
         setDontAsk(false);
+        setPlayMusic(true);
         setPending({ ws, items });
       } else {
-        launchAll(ws, items);
+        if (playlist?.tracks.length) m.play(playlist.tracks);
+        if (items.length) launchAll(ws, items);
       }
     },
-    [prefs.workspaces, update, toast, launchAll],
+    [prefs.workspaces, update, toast, launchAll, m],
   );
 
   return (
@@ -90,11 +95,22 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && setPending(null)}>
           <div className="modal" role="dialog" aria-modal="true" aria-labelledby="ws-launch-title" style={{ maxWidth: 520 }}>
             <div className="modal-head">
-              <h2 id="ws-launch-title">Open {pending.ws.name}'s apps?</h2>
-              <p>These open in their own windows. Untick anything you don't need right now.</p>
+              <h2 id="ws-launch-title">Start {pending.ws.name}?</h2>
+              <p>Apps open in their own windows. Untick anything you don't need right now.</p>
             </div>
             <div className="modal-body">
               <div className="stack" style={{ gap: 6 }}>
+                {(() => {
+                  const pl = pending.ws.playlist ? m.playlists.find((p) => p.id === pending.ws.playlist) : undefined;
+                  return pl ? (
+                    <label className="pick">
+                      <input type="checkbox" className="check" checked={playMusic} onChange={(e) => setPlayMusic(e.target.checked)} />
+                      <span className="art art-empty" style={{ width: 28, height: 28 }}>♪</span>
+                      <span>Play {pl.name}</span>
+                      <span className="small dim" style={{ marginLeft: "auto" }}>Nocturn Music</span>
+                    </label>
+                  ) : null;
+                })()}
                 {pending.items.map((i) => (
                   <label key={i.id} className="pick">
                     <input type="checkbox" className="check" checked={picked.has(i.id)} onChange={() => setPicked((p) => { const n = new Set(p); n.has(i.id) ? n.delete(i.id) : n.add(i.id); return n; })} />
@@ -113,15 +129,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               <button className="btn ghost" onClick={() => setPending(null)}>Not now</button>
               <button
                 className="btn primary"
-                disabled={picked.size === 0}
+                disabled={picked.size === 0 && !playMusic}
                 onClick={() => {
                   if (dontAsk) update((p) => ({ ...p, workspaces: { ...p.workspaces, confirmLaunch: false } }));
                   const p = pending;
                   setPending(null);
-                  launchAll(p.ws, p.items.filter((i) => picked.has(i.id)));
+                  const pl = p.ws.playlist ? m.playlists.find((x) => x.id === p.ws.playlist) : undefined;
+                  if (playMusic && pl?.tracks.length) m.play(pl.tracks);
+                  const chosen = p.items.filter((i) => picked.has(i.id));
+                  if (chosen.length) launchAll(p.ws, chosen);
                 }}
               >
-                Open {picked.size}
+                Start
               </button>
             </div>
           </div>

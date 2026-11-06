@@ -53,6 +53,7 @@ windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Pe
 winreg = "0.56.0"
 nocturn-bench = { path = "bench" }
 wmi = "0.18.4"
+lofty = "0.25.5"
 
 [dev-dependencies]
 tempfile = "3.27.0"

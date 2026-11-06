@@ -12,6 +12,7 @@ import { usePrefs } from "../shell/PrefsProvider";
 import { BACKGROUNDS, isHexColour, type BackgroundStyle, type WidgetSlot, type Workspace } from "../shell/prefs";
 import { accentProblem, findTheme } from "../shell/theme";
 import { useWorkspaces } from "../shell/WorkspaceProvider";
+import { useMusic } from "../music/MusicProvider";
 
 interface Template {
   key: string;
@@ -40,6 +41,7 @@ const ACCENTS = ["#9fc3ff", "#a6e3cf", "#c8b6ff", "#f0c89a", "#f4a7b9", "#e8e08a
 function Editor({ ws, items, onChange, onDelete, onClose }: { ws: Workspace; items: LibraryItem[]; onChange: (w: Workspace) => void; onDelete: () => void; onClose: () => void }) {
   const { navigate } = useApp();
   const { prefs } = usePrefs();
+  const { playlists } = useMusic();
   const theme = findTheme(prefs.appearance.theme, prefs.appearance.customThemes);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const set = (patch: Partial<Workspace>) => onChange({ ...ws, ...patch });
@@ -124,7 +126,15 @@ function Editor({ ws, items, onChange, onDelete, onClose }: { ws: Workspace; ite
         </div>
       </Panel>
       {ws.widgets && <DashboardEditor title={`${ws.name}'s dashboard`} widgets={ws.widgets} onChange={(widgets) => set({ widgets })} />}
-      <Note>Music for a workspace (for example a focus playlist when Study starts) arrives with Nocturn Music.</Note>
+      <Panel title="Music" sub="Offer a Nocturn Music playlist when you switch to this workspace — for example a focus playlist for Study.">
+        <div className="row" style={{ gap: 8 }}>
+          <select className="select" value={ws.playlist ?? ""} aria-label="Workspace playlist" onChange={(e) => set({ playlist: e.target.value || null })}>
+            <option value="">No music</option>
+            {playlists.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.tracks.length} songs)</option>)}
+          </select>
+          {playlists.length === 0 && <button className="btn ghost sm" onClick={() => navigate("music")}>Create a playlist in Music <I.arrow /></button>}
+        </div>
+      </Panel>
     </div>
   );
 }

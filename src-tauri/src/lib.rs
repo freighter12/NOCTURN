@@ -14,6 +14,7 @@ mod customise;
 mod db;
 mod games;
 mod library;
+mod music;
 mod error;
 mod logging;
 mod security;
@@ -44,6 +45,28 @@ pub fn run() {
                 let _ = w.set_focus();
             }
         }))
+        // Nocturn Music playback and artwork: serves only indexed tracks,
+        // with byte ranges so seeking works (http://media.localhost/...).
+        .register_asynchronous_uri_scheme_protocol("media", |ctx, request, responder| {
+            let app = ctx.app_handle().clone();
+            std::thread::spawn(move || {
+                let range = request.headers().get("range").and_then(|v| v.to_str().ok()).map(String::from);
+                let served = match app.try_state::<Arc<state::AppState>>() {
+                    Some(st) => music::serve(&st.db, request.uri().path(), range.as_deref()),
+                    None => music::Served { status: 503, mime: "text/plain".into(), body: b"starting".to_vec(), range: None },
+                };
+                let mut b = tauri::http::Response::builder()
+                    .status(served.status)
+                    .header("Content-Type", served.mime)
+                    .header("Accept-Ranges", "bytes")
+                    .header("Access-Control-Allow-Origin", "*")
+                    .header("Cache-Control", "no-store");
+                if let Some((start, end, total)) = served.range {
+                    b = b.header("Content-Range", format!("bytes {start}-{end}/{total}"));
+                }
+                responder.respond(b.body(served.body).unwrap_or_default());
+            });
+        })
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let log_dir = app.path().app_log_dir().unwrap_or_else(|_| data_dir.join("logs"));
@@ -85,6 +108,22 @@ pub fn run() {
             commands::save_settings,
             commands::list_audit,
             commands::get_prefs,
+            commands::music_folders,
+            commands::music_add_folder,
+            commands::music_remove_folder,
+            commands::music_scan,
+            commands::music_tracks,
+            commands::music_set_like,
+            commands::music_record_play,
+            commands::music_history,
+            commands::music_clear_history,
+            commands::music_recommended,
+            commands::music_playlists,
+            commands::music_save_playlist,
+            commands::music_delete_playlist,
+            commands::music_lyrics,
+            commands::music_session,
+            commands::music_save_session,
             commands::library_list,
             commands::library_start_apps,
             commands::library_services,

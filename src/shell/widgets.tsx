@@ -12,6 +12,8 @@ import { useApp, useLoad } from "../lib/app";
 import { bytes, pct, rate } from "../lib/format";
 import { primaryGpu, useTelemetry } from "../lib/telemetry";
 import { usePrefs } from "./PrefsProvider";
+import { useMusic } from "../music/MusicProvider";
+import { Art } from "../music/Player";
 import type { WidgetType } from "./prefs";
 
 export interface WidgetDef {
@@ -167,12 +169,27 @@ function Network() {
 }
 
 function Music() {
+  const m = useMusic();
+  const t = m.current;
   return (
     <Card title="Nocturn Music" action={<Go to="music" label="Open" />}>
-      <div className="row" style={{ gap: 12 }}>
-        <div className="art-placeholder"><I.music /></div>
-        <div className="small muted">Nothing playing. Your music library will appear here.</div>
-      </div>
+      {t ? (
+        <div className="row" style={{ gap: 12 }}>
+          <Art track={t} size={52} />
+          <div className="stack" style={{ gap: 2, minWidth: 0, flex: 1 }}>
+            <b className="truncate">{t.title}</b>
+            <span className="small muted truncate">{t.artist}</span>
+          </div>
+          <button className="btn ghost icon sm" aria-label="Previous" onClick={m.prev}><I.prev /></button>
+          <button className="btn primary icon" aria-label={m.playing ? "Pause" : "Play"} onClick={m.toggle}>{m.playing ? <I.pause /> : <I.play />}</button>
+          <button className="btn ghost icon sm" aria-label="Next" onClick={m.next}><I.next /></button>
+        </div>
+      ) : (
+        <div className="row" style={{ gap: 12 }}>
+          <div className="art-placeholder"><I.music /></div>
+          <div className="small muted">{m.tracks.length ? `Nothing playing. ${m.tracks.length} songs in your library.` : "Add a music folder in Music › Sources to start your library."}</div>
+        </div>
+      )}
     </Card>
   );
 }

@@ -11,7 +11,7 @@ import { BACKGROUNDS, LOCKED_SECTIONS, sanitizeTheme, type BackgroundStyle, type
 import { OFFICIAL_THEMES, accentProblem, findTheme, readabilityProblem, type Theme, type ThemeTokens } from "../shell/theme";
 import { DashboardEditor, move } from "../shell/DashboardEditor";
 
-type Tab = "appearance" | "themes" | "layout" | "dashboard" | "accessibility";
+type Tab = "appearance" | "themes" | "layout" | "dashboard" | "music" | "accessibility";
 
 const ACCENTS = ["#dfe2e8", "#b9cdf5", "#9fc3ff", "#a6e3cf", "#c8b6ff", "#f0c89a", "#f4a7b9", "#e8e08a"];
 /** Deeper presets that stay readable on light themes. */
@@ -358,6 +358,32 @@ function Dashboard({ prefs, update }: { prefs: Prefs; update: (fn: (p: Prefs) =>
   );
 }
 
+// ------------------------------------------------------------------ music
+
+const MODES: { value: Prefs["music"]["playerMode"]; label: string; hint: string }[] = [
+  { value: "full", label: "Full", hint: "Large artwork, lyrics, queue and visualiser over the whole window." },
+  { value: "standard", label: "Standard", hint: "A bar along the bottom of the window." },
+  { value: "mini", label: "Mini", hint: "A small floating card in the corner." },
+  { value: "minimal", label: "Minimal", hint: "Just play/pause and the title, in a pill." },
+];
+
+function MusicPrefs({ prefs, set }: { prefs: Prefs; set: (fn: (m: Prefs["music"]) => Prefs["music"]) => void }) {
+  const mm = prefs.music;
+  return (
+    <Panel title="Player" sub="How Nocturn Music looks while it plays. You can also switch modes from the player itself.">
+      <Row label="Player mode" hint={MODES.find((x) => x.value === mm.playerMode)?.hint}>
+        <Seg value={mm.playerMode} onChange={(v) => set((x) => ({ ...x, playerMode: v }))} options={MODES.map(({ value, label }) => ({ value, label }))} />
+      </Row>
+      <Row label="Visualiser" hint="Animated bars in the full player. Static when reduce motion is on.">
+        <Toggle on={mm.visualiser} label="Visualiser" onChange={(v) => set((x) => ({ ...x, visualiser: v }))} />
+      </Row>
+      <Row label="Lyrics" hint="Show lyrics from the file or a matching .lrc file in the full player.">
+        <Toggle on={mm.showLyrics} label="Lyrics" onChange={(v) => set((x) => ({ ...x, showLyrics: v }))} />
+      </Row>
+    </Panel>
+  );
+}
+
 // ---------------------------------------------------------- accessibility
 
 function Accessibility({ prefs, set }: { prefs: Prefs; set: (fn: (x: Prefs["accessibility"]) => Prefs["accessibility"]) => void }) {
@@ -391,6 +417,7 @@ export function Studio() {
     themes: () => update((p) => ({ ...p, appearance: { ...p.appearance, theme: "nocturn" } })),
     layout: () => reset("navigation"),
     dashboard: () => reset("home"),
+    music: () => update((p) => ({ ...p, music: { ...p.music, playerMode: "standard", visualiser: true, showLyrics: true } })),
     accessibility: () => reset("accessibility"),
   };
   return (
@@ -419,6 +446,7 @@ export function Studio() {
             { value: "themes", label: "Themes" },
             { value: "layout", label: "Layout" },
             { value: "dashboard", label: "Dashboard" },
+            { value: "music", label: "Music" },
             { value: "accessibility", label: "Accessibility" },
           ]}
         />
@@ -428,9 +456,10 @@ export function Studio() {
       {tab === "themes" && <Themes prefs={prefs} update={update} />}
       {tab === "layout" && <Layout prefs={prefs} set={(fn) => update((p) => ({ ...p, navigation: fn(p.navigation) }))} />}
       {tab === "dashboard" && <Dashboard prefs={prefs} update={update} />}
+      {tab === "music" && <MusicPrefs prefs={prefs} set={(fn) => update((p) => ({ ...p, music: fn(p.music) }))} />}
       {tab === "accessibility" && <Accessibility prefs={prefs} set={(fn) => update((p) => ({ ...p, accessibility: fn(p.accessibility) }))} />}
       <div className="mt-2">
-        <Note>Music player customisation arrives with Nocturn Music. Windows' own taskbar, File Explorer and notification settings are under System › Windows settings.</Note>
+        <Note>Windows' own taskbar, File Explorer and notification settings are under System › Windows settings.</Note>
       </div>
     </div>
   );

@@ -1257,3 +1257,85 @@ export const library = {
   remove: (id: string) => invoke<void>("library_remove", { id }),
   launch: (id: string, deepLink?: string) => invoke<{ via: "app" | "browser"; detail: string }>("library_launch", { id, deepLink: deepLink ?? null }),
 };
+
+// ------------------------------------------------------------------ music
+
+export interface Track {
+  id: number;
+  source: string;
+  title: string;
+  artist: string;
+  album: string;
+  album_artist: string;
+  track_no: number | null;
+  disc_no: number | null;
+  year: number | null;
+  genre: string;
+  duration_ms: number;
+  has_art: boolean;
+  liked: boolean;
+  added_at: string;
+  plays: number;
+  last_played: string | null;
+}
+export interface PlaylistCover {
+  track_id?: number | null;
+  glyph?: string | null;
+  colour?: string | null;
+}
+export interface Playlist {
+  id: string;
+  name: string;
+  description: string;
+  cover: PlaylistCover;
+  tracks: number[];
+  created_at: string;
+  updated_at: string;
+}
+export interface MusicScanReport {
+  folders: number;
+  files: number;
+  added: number;
+  updated: number;
+  removed: number;
+  unreadable: number;
+}
+export interface Lyrics {
+  text: string;
+  synced: [number, string][];
+  source: string;
+}
+export interface MusicSession {
+  queue: number[];
+  index: number;
+  position_ms: number;
+  shuffle: boolean;
+  repeat: "off" | "all" | "one";
+}
+
+/** Playback and artwork URLs served by the backend's media protocol. */
+export const mediaUrl = (id: number) => `http://media.localhost/track/${id}`;
+export const artUrl = (id: number) => `http://media.localhost/art/${id}`;
+
+export const music = {
+  folders: () => invoke<string[]>("music_folders"),
+  addFolder: (path: string) => invoke<string>("music_add_folder", { path }),
+  removeFolder: (path: string) => invoke<void>("music_remove_folder", { path }),
+  scan: (onProgress?: (p: { folder: string; files: number }) => void) => {
+    const ch = new Channel<{ folder: string; files: number }>();
+    if (onProgress) ch.onmessage = onProgress;
+    return invoke<MusicScanReport>("music_scan", { onProgress: ch });
+  },
+  tracks: () => invoke<Track[]>("music_tracks"),
+  setLike: (id: number, liked: boolean) => invoke<void>("music_set_like", { id, liked }),
+  recordPlay: (id: number, ms: number) => invoke<void>("music_record_play", { id, ms }),
+  history: (limit = 200) => invoke<{ track_id: number; played_at: string }[]>("music_history", { limit }),
+  clearHistory: () => invoke<void>("music_clear_history"),
+  recommended: () => invoke<number[]>("music_recommended"),
+  playlists: () => invoke<Playlist[]>("music_playlists"),
+  savePlaylist: (playlist: { id?: string | null; name: string; description: string; cover: PlaylistCover; tracks: number[] }) => invoke<Playlist>("music_save_playlist", { playlist }),
+  deletePlaylist: (id: string) => invoke<void>("music_delete_playlist", { id }),
+  lyrics: (id: number) => invoke<Lyrics | null>("music_lyrics", { id }),
+  session: () => invoke<MusicSession>("music_session"),
+  saveSession: (session: MusicSession) => invoke<void>("music_save_session", { session }),
+};

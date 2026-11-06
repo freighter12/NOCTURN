@@ -66,6 +66,97 @@ pub fn save_settings(state: State<'_, Shared>, value: AppSettings) -> AppResult<
     Ok(v)
 }
 
+// ---------------------------------------------------------------- music
+
+#[tauri::command]
+pub fn music_folders(state: State<'_, Shared>) -> AppResult<Vec<String>> {
+    crate::music::folders(&state.db)
+}
+
+#[tauri::command]
+pub fn music_add_folder(state: State<'_, Shared>, path: String) -> AppResult<String> {
+    crate::music::add_folder(&state.db, &path)
+}
+
+#[tauri::command]
+pub fn music_remove_folder(state: State<'_, Shared>, path: String) -> AppResult<()> {
+    crate::music::remove_folder(&state.db, &path)
+}
+
+#[tauri::command]
+pub async fn music_scan(state: State<'_, Shared>, on_progress: Channel<crate::music::ScanProgress>) -> AppResult<crate::music::ScanReport> {
+    let st = state.inner().clone();
+    blocking(move || {
+        crate::music::scan(&st.db, &|p| {
+            let _ = on_progress.send(p);
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn music_tracks(state: State<'_, Shared>) -> AppResult<Vec<crate::music::Track>> {
+    let st = state.inner().clone();
+    blocking(move || crate::music::tracks(&st.db)).await
+}
+
+#[tauri::command]
+pub fn music_set_like(state: State<'_, Shared>, id: i64, liked: bool) -> AppResult<()> {
+    crate::music::set_like(&state.db, id, liked)
+}
+
+#[tauri::command]
+pub fn music_record_play(state: State<'_, Shared>, id: i64, ms: i64) -> AppResult<()> {
+    crate::music::record_play(&state.db, id, ms)
+}
+
+#[tauri::command]
+pub fn music_history(state: State<'_, Shared>, limit: Option<i64>) -> AppResult<Vec<crate::music::Play>> {
+    crate::music::history(&state.db, limit.unwrap_or(200).clamp(1, 2000))
+}
+
+#[tauri::command]
+pub fn music_clear_history(state: State<'_, Shared>) -> AppResult<()> {
+    crate::music::clear_history(&state.db)
+}
+
+#[tauri::command]
+pub async fn music_recommended(state: State<'_, Shared>) -> AppResult<Vec<i64>> {
+    let st = state.inner().clone();
+    blocking(move || Ok(crate::music::recommended(&crate::music::tracks(&st.db)?, 24))).await
+}
+
+#[tauri::command]
+pub fn music_playlists(state: State<'_, Shared>) -> AppResult<Vec<crate::music::Playlist>> {
+    crate::music::playlists(&state.db)
+}
+
+#[tauri::command]
+pub fn music_save_playlist(state: State<'_, Shared>, playlist: crate::music::PlaylistInput) -> AppResult<crate::music::Playlist> {
+    crate::music::save_playlist(&state.db, playlist)
+}
+
+#[tauri::command]
+pub fn music_delete_playlist(state: State<'_, Shared>, id: String) -> AppResult<()> {
+    crate::music::delete_playlist(&state.db, &id)
+}
+
+#[tauri::command]
+pub async fn music_lyrics(state: State<'_, Shared>, id: i64) -> AppResult<Option<crate::music::Lyrics>> {
+    let st = state.inner().clone();
+    blocking(move || crate::music::lyrics(&st.db, id)).await
+}
+
+#[tauri::command]
+pub fn music_session(state: State<'_, Shared>) -> crate::music::Session {
+    crate::music::session(&state.db)
+}
+
+#[tauri::command]
+pub fn music_save_session(state: State<'_, Shared>, session: crate::music::Session) -> AppResult<()> {
+    crate::music::save_session(&state.db, session)
+}
+
 // -------------------------------------------------------------- library
 
 #[tauri::command]

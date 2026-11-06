@@ -19,12 +19,14 @@ import { Maintenance } from "./pages/Maintenance";
 import { AppProfiles } from "./pages/AppProfiles";
 import { Tweak } from "./pages/Tweak";
 import { Home } from "./pages/Home";
-import { Coming } from "./pages/Coming";
 import { Studio } from "./pages/Studio";
 import { Library } from "./pages/Library";
 import { Workspaces } from "./pages/Workspaces";
 import { ErrorBoundary } from "./shell/ErrorBoundary";
 import { WorkspaceProvider } from "./shell/WorkspaceProvider";
+import { MusicProvider } from "./music/MusicProvider";
+import { Player } from "./music/Player";
+import { Music } from "./pages/Music";
 import { PrefsProvider, usePrefs } from "./shell/PrefsProvider";
 
 function GuardedPages() {
@@ -44,7 +46,7 @@ function Pages() {
     case "library":
       return <Library />;
     case "music":
-      return <Coming eyebrow="Nocturn Music" title="Music" desc="Your music library, playlists and queue — no ads, ever." phase="Phase 6" />;
+      return <Music />;
     case "workspaces":
       return <Workspaces />;
     case "studio":
@@ -91,6 +93,7 @@ function Shell() {
   const nav = prefs.navigation;
   return (
     <AppProvider>
+      <MusicProvider>
       <WorkspaceProvider>
       <div className="shell">
         <TitleBar />
@@ -100,9 +103,11 @@ function Shell() {
             <GuardedPages />
           </main>
         </div>
+        <Player />
       </div>
       <ApplyFlow />
       </WorkspaceProvider>
+      </MusicProvider>
     </AppProvider>
   );
 }

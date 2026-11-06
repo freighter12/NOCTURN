@@ -192,6 +192,58 @@ const MIGRATIONS: &[&str] = &[
         open_count     INTEGER NOT NULL DEFAULT 0
     );
     "#,
+    // 9: Nocturn Music (local catalogue source, playlists, likes, plays).
+    r#"
+    CREATE TABLE music_folders (
+        path     TEXT PRIMARY KEY,
+        added_at TEXT NOT NULL
+    );
+    CREATE TABLE music_tracks (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        source       TEXT NOT NULL DEFAULT 'local',
+        path         TEXT NOT NULL UNIQUE,
+        folder       TEXT NOT NULL,
+        title        TEXT NOT NULL,
+        artist       TEXT NOT NULL,
+        album        TEXT NOT NULL,
+        album_artist TEXT NOT NULL,
+        track_no     INTEGER,
+        disc_no      INTEGER,
+        year         INTEGER,
+        genre        TEXT NOT NULL DEFAULT '',
+        duration_ms  INTEGER NOT NULL,
+        has_art      INTEGER NOT NULL DEFAULT 0,
+        size         INTEGER NOT NULL,
+        mtime        INTEGER NOT NULL,
+        added_at     TEXT NOT NULL
+    );
+    CREATE INDEX idx_music_tracks_album ON music_tracks(album_artist, album);
+    CREATE TABLE music_likes (
+        track_id INTEGER PRIMARY KEY,
+        liked_at TEXT NOT NULL
+    );
+    CREATE TABLE music_plays (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        track_id  INTEGER NOT NULL,
+        played_at TEXT NOT NULL,
+        ms_played INTEGER NOT NULL
+    );
+    CREATE INDEX idx_music_plays_at ON music_plays(played_at);
+    CREATE TABLE music_playlists (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        cover_json  TEXT NOT NULL DEFAULT '{}',
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+    );
+    CREATE TABLE music_playlist_tracks (
+        playlist_id TEXT NOT NULL,
+        position    INTEGER NOT NULL,
+        track_id    INTEGER NOT NULL,
+        PRIMARY KEY (playlist_id, position)
+    );
+    "#,
 ];
 
 #[derive(Clone)]
