@@ -226,6 +226,8 @@ pub fn preview(ids: &[String]) -> AppResult<Preview> {
                     None,
                 ),
                 ChangeOp::FlushDns => ("—".into(), "Cache cleared".into(), true, None),
+                // Not produced by catalogue tweaks (Services page only).
+                ChangeOp::ServiceStartType { start, .. } => ("—".into(), start.label().into(), true, None),
                 // Not produced by catalogue tweaks (Customise page only).
                 ChangeOp::RegistryDelete { .. } => ("—".into(), "(not set — Windows default)".into(), true, None),
                 // Not produced by catalogue tweaks (Network page only).

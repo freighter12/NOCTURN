@@ -59,12 +59,13 @@ Last updated: 2026-11-06
 - ✅ Storage page: scan a drive or folder (junctions/symlinks never followed, OneDrive online-only files skipped so nothing downloads), folder usage map with drill-down, 200 largest files, duplicates (size → first 64 KiB → SHA-256), Recycle Bin size and empty (two-step confirm). Verified live: 680k files / 138 GB scanned in 38 s
 - ✅ Review-then-recycle: only files from the last scan, unchanged since, outside Windows/Program Files/ProgramData/system files; Windows warns before any permanent delete; at least one copy of every duplicate set is always kept; audit-logged. Verified live end to end on throwaway files
 - ✅ Customise page: 19 per-user settings in Taskbar (alignment, search, Task View, combine buttons, clock seconds, End task), File Explorer (extensions, hidden files, open-to, compact view, full path, recent/frequent in Home, sync-provider banners) and Notifications (banners, lock screen, sounds, welcome experience, "finish setting up"); choices are compiled in, HKCU only (elevated worker refuses them), preview → apply → Undo/History. "Windows default" removes the value via a new journaled `RegistryDelete` op instead of guessing a default; per-section and all-settings reset. Settings change broadcast after apply/rollback. Verified live: apply → registry 1 → Undo → 0; section-reset preview against the real values (not applied); real-registry round-trip test (apply, reset, roll back both → byte-identical original)
-- 🟡 "Restart File Explorer" button (for compact view, Home lists, sync banners): implemented with a two-step confirm, not exercised live because it closes open Explorer windows
-- ⬜ Service management: tiering, journaled start-type changes with rollback
+- ✅ "Restart File Explorer" button (for compact view, Home lists, sync banners), two-step confirm — verified by the user on their PC
+- ✅ Services page: native SCM enumeration (287 services in ~170 ms) with descriptions, program, publisher, account, dependencies and dependents; four tiers — Protected (security, updates, core; never changed, not even by rollback), Windows (read-only), Optional (31 reviewed Windows features, each saying what stops working; the program must be Microsoft's), Third-party (apps/drivers; anti-cheat, updater and driver-helper hints). Verified live on the real list, preview and refusals included
+- 🟡 Service start-type changes: journaled `ServiceStartType` op capturing start type + delayed flag, elevated worker re-reads the service and re-applies tier and dependency rules (refuses Disabled while an automatic service depends on it); only start types change, never stop/delete. Unit-tested and refusal path tested on real protected services; **apply/rollback not yet exercised** — needs a UAC approval
 
 ## Phase 6 — Testing and release
 
-- ✅ Rust unit/integration tests: 106 passing (3 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin)
+- ✅ Rust unit/integration tests: 115 passing (3 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin)
 - ✅ Frontend unit tests (vitest): chat transcript folding, formatters
 - ✅ Typecheck + production frontend build
 - ✅ All pages loaded in the real app with zero console errors (CDP walkthrough)
@@ -74,6 +75,6 @@ Last updated: 2026-11-06
 
 ## Deliberate limitations
 
-- Windows services are never modified; Defender, Update, firewall, UAC and SmartScreen are never touched.
+- Only start types of optional and third-party services can change (with approval); security, update and core services are protected. Defender, Update, firewall, UAC and SmartScreen are never touched.
 - Network reset, driver updates and BIOS settings (XMP/EXPO) are explained, not executed.
 - The assistant can't run commands; it can only propose catalogue changes the user approves.

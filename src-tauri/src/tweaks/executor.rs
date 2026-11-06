@@ -98,6 +98,7 @@ pub fn display_original(op: &ChangeOp, o: &Original) -> String {
             .and_then(|l| l.into_iter().find(|s| &s.guid == scheme).map(|s| s.name))
             .unwrap_or_else(|| scheme.clone()),
         (_, Original::Dns { servers }) => crate::system::dns::display(servers),
+        (_, Original::Service { config }) => config.label(),
         (_, Original::Nothing) => "—".into(),
     }
 }
@@ -112,6 +113,7 @@ pub(crate) fn capture_original(op: &ChangeOp) -> AppResult<Original> {
         }
         ChangeOp::PowerPlan { .. } => Original::PowerPlan { scheme: power::active_guid()? },
         ChangeOp::DnsServers { interface, ipv6, .. } => Original::Dns { servers: crate::system::dns::read(interface, *ipv6)? },
+        ChangeOp::ServiceStartType { name, .. } => Original::Service { config: crate::system::services::read_config(name)? },
         ChangeOp::FlushDns | ChangeOp::CleanTempFiles => Original::Nothing,
     })
 }
@@ -125,6 +127,7 @@ fn already_satisfied(op: &ChangeOp, original: &Original) -> bool {
         }
         (ChangeOp::PowerPlan { scheme }, Original::PowerPlan { scheme: cur }) => scheme == cur,
         (ChangeOp::DnsServers { servers, .. }, Original::Dns { servers: cur }) => servers == cur,
+        (ChangeOp::ServiceStartType { start, .. }, Original::Service { config }) => config.kind() == Some(*start),
         _ => false,
     }
 }
@@ -171,6 +174,11 @@ pub(crate) fn apply_local(op: &ChangeOp) -> AppResult<String> {
             let _ = maintenance::flush_dns();
             Ok(crate::system::dns::display(servers))
         }
+        ChangeOp::ServiceStartType { name, start, .. } => {
+            use crate::system::services;
+            let target = services::config_for(*start, services::read_config(name)?);
+            Ok(services::set_start(name, target)?.label())
+        }
         ChangeOp::FlushDns => maintenance::flush_dns(),
         ChangeOp::CleanTempFiles => {
             let r = maintenance::clean_temp()?;
@@ -210,6 +218,9 @@ pub(crate) fn restore_local(op: &ChangeOp, original: &Original) -> AppResult<Str
         (ChangeOp::DnsServers { interface, ipv6, .. }, Original::Dns { servers }) => {
             crate::system::dns::write(interface, *ipv6, servers)?;
             let _ = maintenance::flush_dns();
+        }
+        (ChangeOp::ServiceStartType { name, .. }, Original::Service { config }) => {
+            crate::system::services::set_start(name, *config)?;
         }
         _ => return Err(AppError::Invalid("one-time action; nothing to restore".into())),
     }

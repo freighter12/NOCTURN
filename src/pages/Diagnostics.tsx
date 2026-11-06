@@ -387,6 +387,7 @@ const SERVICE_NOTES: Record<string, string> = {
 };
 
 function Services() {
+  const { navigate } = useApp();
   const services = useLoad(() => api.services(), []);
   const [q, setQ] = useState("");
   const [running, setRunning] = useState(true);
@@ -399,7 +400,7 @@ function Services() {
   return (
     <div className="stack" style={{ gap: 14 }}>
       <Note>
-        Services are shown read-only. NOCTURN deliberately doesn't disable Windows services as a speed tweak — the gains are negligible on modern PCs and the side effects can be serious. Notes below explain the services people most often ask about.
+        A quick read-only list. To change how a service starts, use the <a href="#" onClick={(e) => { e.preventDefault(); navigate("services"); }}>Services</a> page, which explains each optional service and protects security and core ones. Disabling services is rarely a worthwhile speed-up on modern PCs.
       </Note>
       <section className="panel flush">
         <div className="panel-head" style={{ paddingBottom: 12 }}>

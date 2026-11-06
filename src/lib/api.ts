@@ -391,6 +391,41 @@ export interface PowerScheme {
 }
 
 
+// ---------------------------------------------------------------- services
+
+export type StartType = "automatic" | "automatic_delayed" | "manual" | "disabled";
+export type ServiceTier = "protected" | "windows" | "optional" | "third_party";
+export interface ServiceView {
+  name: string;
+  display_name: string;
+  description: string | null;
+  state: string;
+  pid: number | null;
+  start: { start: number; delayed: boolean };
+  start_kind: StartType | null;
+  start_label: string;
+  image: string | null;
+  account: string | null;
+  publisher: string | null;
+  tier: ServiceTier;
+  tier_reason: string;
+  note: string | null;
+  anti_cheat: boolean;
+  depends_on: string[];
+  dependents: string[];
+  allowed: StartType[];
+}
+export interface ServicePreviewItem {
+  name: string;
+  display_name: string;
+  current: string;
+  proposed: string;
+  will_change: boolean;
+  running: boolean;
+  warnings: string[];
+  refused: string | null;
+}
+
 // --------------------------------------------------------------- customise
 
 export type CustomSection = "taskbar" | "explorer" | "notifications";
@@ -876,6 +911,12 @@ export const api = {
     invoke<RollbackReport>("rollback_transaction", { txId, onProgress: progressChannel(onProgress) }),
   history: (limit = 100) => invoke<TxSummary[]>("list_history", { limit }),
   transaction: (txId: string) => invoke<{ summary: TxSummary; changes: ChangeRow[] }>("get_transaction", { txId }),
+
+  serviceList: () => invoke<ServiceView[]>("list_services"),
+  previewServices: (selections: { name: string; start: StartType }[]) => invoke<ServicePreviewItem[]>("preview_services", { selections }),
+  applyServices: (selections: { name: string; start: StartType }[], onProgress?: (p: Progress) => void) =>
+    invoke<ApplyReport>("apply_services", { selections, onProgress: progressChannel(onProgress) }),
+  serviceChanges: () => invoke<StartupChange[]>("list_service_changes"),
 
   customise: () => invoke<CustomSetting[]>("list_customise"),
   previewCustomise: (req: CustomRequest) => invoke<CustomPreviewItem[]>("preview_customise", req),

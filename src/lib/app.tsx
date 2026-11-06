@@ -15,6 +15,7 @@ export type PageId =
   | "network"
   | "storage"
   | "startup"
+  | "services"
   | "assistant"
   | "history"
   | "settings";

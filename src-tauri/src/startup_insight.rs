@@ -108,14 +108,19 @@ pub struct StartupChange {
 
 /// Recent startup changes NOCTURN made, from the change journal.
 pub fn recent_changes(db: &Db, limit: i64) -> AppResult<Vec<StartupChange>> {
+    recent_changes_for(db, "startup", limit)
+}
+
+/// Recent journaled changes made under one journal ID (startup, service, …).
+pub fn recent_changes_for(db: &Db, tweak_id: &str, limit: i64) -> AppResult<Vec<StartupChange>> {
     let conn = db.conn();
     let mut st = conn.prepare(
         "SELECT c.tx_id, c.target, c.status, t.source, c.applied_at, c.rolled_back_at
          FROM changes c JOIN transactions t ON t.id = c.tx_id
-         WHERE c.tweak_id = 'startup' ORDER BY c.id DESC LIMIT ?1",
+         WHERE c.tweak_id = ?1 ORDER BY c.id DESC LIMIT ?2",
     )?;
     let rows = st
-        .query_map([limit], |r| {
+        .query_map(rusqlite::params![tweak_id, limit], |r| {
             Ok(StartupChange { tx_id: r.get(0)?, target: r.get(1)?, status: r.get(2)?, source: r.get(3)?, applied_at: r.get(4)?, rolled_back_at: r.get(5)? })
         })?
         .collect::<Result<Vec<_>, _>>()?;

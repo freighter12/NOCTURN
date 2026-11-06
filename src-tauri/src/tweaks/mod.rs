@@ -215,6 +215,8 @@ pub enum ChangeOp {
     /// Static DNS servers for one adapter and address family; empty = automatic.
     /// `interface` is the adapter GUID, `alias` only labels it for people.
     DnsServers { interface: String, alias: String, ipv6: bool, servers: Vec<String> },
+    /// Start type of one Win32 service (Services page). `display` only labels it.
+    ServiceStartType { name: String, display: String, start: crate::system::services::StartType },
 }
 
 impl ChangeOp {
@@ -231,6 +233,7 @@ impl ChangeOp {
             ChangeOp::DnsServers { alias, ipv6, .. } => {
                 format!("DNS servers (IPv{}) — {alias}", if *ipv6 { 6 } else { 4 })
             }
+            ChangeOp::ServiceStartType { name, display, .. } => format!("Service \"{display}\" ({name}) — start type"),
         }
     }
 
@@ -239,7 +242,7 @@ impl ChangeOp {
             ChangeOp::Registry(s) => s.hive == Hive::Hklm,
             ChangeOp::RegistryDelete { hive, .. } => *hive == Hive::Hklm,
             ChangeOp::StartupApproval { location, .. } => location.is_machine(),
-            ChangeOp::DnsServers { .. } => true,
+            ChangeOp::DnsServers { .. } | ChangeOp::ServiceStartType { .. } => true,
             _ => false,
         }
     }
@@ -255,6 +258,8 @@ pub enum Original {
     PowerPlan { scheme: String },
     /// Static DNS servers before the change; empty = automatic.
     Dns { servers: Vec<String> },
+    /// A service's start configuration before the change.
+    Service { config: crate::system::services::StartConfig },
     /// One-shot actions have nothing to restore.
     Nothing,
 }

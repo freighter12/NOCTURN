@@ -38,6 +38,9 @@ export const I = {
   customise: (p: P) => (
     <svg {...base(p)}><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M2 10.5h12" /><path d="M4.5 12h1.5M7.5 12h1" /><path d="M5 5.5h6M5 7.5h3.5" /></svg>
   ),
+  services: (p: P) => (
+    <svg {...base(p)}><circle cx="8" cy="8" r="2.2" /><path d="M8 1.8v1.8M8 12.4v1.8M1.8 8h1.8M12.4 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M3.6 12.4l1.3-1.3M11.1 4.9l1.3-1.3" /></svg>
+  ),
   storage: (p: P) => (
     <svg {...base(p)}><rect x="2" y="3" width="12" height="10" rx="1.5" /><path d="M2 9.5h12" /><path d="M11 11.3h.01" strokeWidth="2" /></svg>
   ),

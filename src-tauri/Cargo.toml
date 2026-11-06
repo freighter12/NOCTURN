@@ -38,7 +38,7 @@ tracing = "0.1.44"
 tracing-appender = "0.2.5"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 uuid = { version = "1.29.0", features = ["v4", "serde"] }
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Performance", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_Security", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_System_Power", "Win32_NetworkManagement_WiFi", "Win32_Security_Credentials", "Win32_Security_WinTrust", "Win32_Security_Cryptography", "Win32_System_Com", "Win32_Storage_FileSystem", "Win32_System_Registry"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Performance", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_Security", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_System_Power", "Win32_NetworkManagement_WiFi", "Win32_Security_Credentials", "Win32_Security_WinTrust", "Win32_Security_Cryptography", "Win32_System_Com", "Win32_Storage_FileSystem", "Win32_System_Registry", "Win32_System_Services"] }
 winreg = "0.56.0"
 wmi = "0.18.4"
 

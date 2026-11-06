@@ -80,6 +80,14 @@ fn validate(tweak_id: &str, op: &ChangeOp, applying: bool) -> AppResult<()> {
             }
             dns::validate_servers(servers, *ipv6)
         }
+        ChangeOp::ServiceStartType { name, start, .. } => {
+            if tweak_id != crate::system::services::JOURNAL_ID {
+                return Err(AppError::Forbidden("service changes must use the service ID".into()));
+            }
+            // Re-reads the service and re-applies the tier and dependency
+            // rules here, in the elevated process.
+            crate::system::services::validate_elevated(name, *start, applying)
+        }
         _ => Err(AppError::Forbidden("this operation never runs elevated".into())),
     }
 }
@@ -94,6 +102,7 @@ fn original_fits(op: &ChangeOp, o: &Original) -> bool {
     matches!(
         (op, o),
         (ChangeOp::Registry(_) | ChangeOp::RegistryDelete { .. } | ChangeOp::StartupApproval { .. }, Original::Registry { .. }) | (ChangeOp::DnsServers { .. }, Original::Dns { .. })
+            | (ChangeOp::ServiceStartType { .. }, Original::Service { .. })
     )
 }
 

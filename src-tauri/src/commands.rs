@@ -427,6 +427,40 @@ pub async fn rollback_transaction(
     .await
 }
 
+// ------------------------------------------------------------- services
+
+#[tauri::command]
+pub async fn list_services() -> AppResult<Vec<crate::system::services::ServiceView>> {
+    blocking(crate::system::services::list).await
+}
+
+#[tauri::command]
+pub async fn preview_services(selections: Vec<crate::system::services::Selection>) -> AppResult<Vec<crate::system::services::PreviewItem>> {
+    blocking(move || crate::system::services::preview(&selections)).await
+}
+
+#[tauri::command]
+pub async fn apply_services(
+    state: State<'_, Shared>,
+    selections: Vec<crate::system::services::Selection>,
+    on_progress: Channel<engine::Progress>,
+) -> AppResult<engine::ApplyReport> {
+    let st = state.inner().clone();
+    blocking(move || {
+        let r = crate::system::services::apply(&st.db, &st.data_dir, &selections, &|p| {
+            let _ = on_progress.send(p);
+        });
+        st.invalidate_health();
+        r
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn list_service_changes(state: State<'_, Shared>) -> AppResult<Vec<crate::startup_insight::StartupChange>> {
+    crate::startup_insight::recent_changes_for(&state.db, crate::system::services::JOURNAL_ID, 30)
+}
+
 // ------------------------------------------------------------ customise
 
 #[tauri::command]
