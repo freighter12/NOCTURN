@@ -14,6 +14,7 @@ import { Startup } from "./pages/Startup";
 import { Storage } from "./pages/Storage";
 import { Customise } from "./pages/Customise";
 import { Services } from "./pages/Services";
+import { Benchmarks } from "./pages/Benchmarks";
 import { Tweak } from "./pages/Tweak";
 
 function Pages() {
@@ -23,6 +24,8 @@ function Pages() {
       return <Overview />;
     case "hardware":
       return <Hardware />;
+    case "benchmarks":
+      return <Benchmarks />;
     case "processes":
       return <Processes />;
     case "tweak":

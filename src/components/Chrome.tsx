@@ -44,6 +44,7 @@ const NAV: { id: PageId; label: string; icon: keyof typeof I; group?: string }[]
   { id: "overview", label: "Overview", icon: "overview" },
   { id: "hardware", label: "Hardware", icon: "chip", group: "Monitor" },
   { id: "processes", label: "Processes", icon: "processes" },
+  { id: "benchmarks", label: "Benchmarks", icon: "bench" },
   { id: "tweak", label: "NOCTURN Tweak", icon: "tweak", group: "Optimise" },
   { id: "customise", label: "Customise", icon: "customise" },
   { id: "gaming", label: "Gaming", icon: "gaming" },

@@ -451,6 +451,53 @@ pub async fn rollback_transaction(
     .await
 }
 
+// ------------------------------------------------------------ benchmarks
+
+#[tauri::command]
+pub async fn run_benchmark(
+    state: State<'_, Shared>,
+    suite: crate::system::bench::Suite,
+    target: Option<String>,
+    label: String,
+    on_progress: Channel<crate::system::bench::BenchProgress>,
+) -> AppResult<crate::system::bench::BenchRun> {
+    let st = state.inner().clone();
+    if st.games.live.lock().ok().is_some_and(|l| l.is_some()) {
+        return Err(AppError::Invalid("a game is running — benchmark results would be wrong, and the game would stutter. Close it first.".into()));
+    }
+    blocking(move || {
+        crate::system::bench::run(&st.db, suite, target, &label, &|p| {
+            let _ = on_progress.send(p);
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn cancel_benchmark() {
+    crate::system::bench::cancel();
+}
+
+#[tauri::command]
+pub fn list_benchmarks(state: State<'_, Shared>) -> AppResult<Vec<crate::system::bench::BenchRun>> {
+    crate::system::bench::history(&state.db, 200)
+}
+
+#[tauri::command]
+pub fn delete_benchmark(state: State<'_, Shared>, id: i64) -> AppResult<()> {
+    crate::system::bench::delete(&state.db, id)
+}
+
+#[tauri::command]
+pub fn rename_benchmark(state: State<'_, Shared>, id: i64, label: String) -> AppResult<()> {
+    crate::system::bench::rename(&state.db, id, &label)
+}
+
+#[tauri::command]
+pub async fn boot_times() -> AppResult<crate::system::bench::BootReport> {
+    blocking(crate::system::bench::boot_report).await
+}
+
 // ------------------------------------------------------------- services
 
 #[tauri::command]
@@ -671,6 +718,7 @@ pub struct GameView {
     pub running: bool,
     pub profile: Option<crate::games::profile::GameProfile>,
     pub sessions: usize,
+    pub not_game: bool,
 }
 
 #[tauri::command]
@@ -680,7 +728,9 @@ pub async fn list_games(state: State<'_, Shared>, refresh: Option<bool>) -> AppR
         let cached = st.games.games.read().map(|g| g.clone()).unwrap_or_default();
         let games = if refresh.unwrap_or(false) || cached.is_empty() { crate::games::refresh(&st.db, &st.games) } else { cached };
         let procs = st.telemetry.read().map(|t| t.processes.clone()).unwrap_or_default();
-        let running = crate::games::session::running_game(&games, &procs).map(|(g, _)| g.id.clone());
+        let hidden = crate::games::not_games(&st.db);
+        let playable: Vec<_> = games.iter().filter(|g| !hidden.contains(&g.id)).cloned().collect();
+        let running = crate::games::session::running_game(&playable, &procs).map(|(g, _)| g.id.clone());
         let profiles = crate::games::profile::all(&st.db).unwrap_or_default();
         let counts: std::collections::HashMap<String, usize> = crate::games::session::list(&st.db, None, 1000)
             .unwrap_or_default()
@@ -695,6 +745,7 @@ pub async fn list_games(state: State<'_, Shared>, refresh: Option<bool>) -> AppR
                 running: running.as_deref() == Some(g.id.as_str()),
                 profile: profiles.iter().find(|p| p.game_id == g.id).cloned(),
                 sessions: counts.get(&g.id).copied().unwrap_or(0),
+                not_game: hidden.contains(&g.id),
                 game: g,
             })
             .collect())
@@ -722,6 +773,11 @@ pub async fn remove_custom_game(state: State<'_, Shared>, exe: String) -> AppRes
         Ok(())
     })
     .await
+}
+
+#[tauri::command]
+pub fn set_not_game(state: State<'_, Shared>, id: String, not_game: bool) -> AppResult<()> {
+    crate::games::set_not_game(&state.db, &state.games, &id, not_game)
 }
 
 #[derive(serde::Serialize)]

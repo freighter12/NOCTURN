@@ -2328,6 +2328,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "futures-util",
+ "nocturn-bench",
  "nvml-wrapper",
  "reqwest",
  "rusqlite",
@@ -2348,6 +2349,13 @@ dependencies = [
  "windows",
  "winreg",
  "wmi",
+]
+
+[[package]]
+name = "nocturn-bench"
+version = "0.1.0"
+dependencies = [
+ "sha2",
 ]
 
 [[package]]

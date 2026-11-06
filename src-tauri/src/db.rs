@@ -149,6 +149,20 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX idx_network_tests_at ON network_tests(tested_at);
     "#,
+    // 6: benchmark runs (one row per run; metrics and context as JSON).
+    r#"
+    CREATE TABLE bench_runs (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        started_at   TEXT NOT NULL,
+        suite        TEXT NOT NULL,
+        target       TEXT,
+        label        TEXT NOT NULL,
+        duration_ms  INTEGER NOT NULL,
+        metrics_json TEXT NOT NULL,
+        context_json TEXT NOT NULL
+    );
+    CREATE INDEX idx_bench_runs_suite ON bench_runs(suite, started_at);
+    "#,
 ];
 
 #[derive(Clone)]

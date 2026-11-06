@@ -69,6 +69,8 @@ pub enum PsScript {
     /// Problem devices, drivers for the device classes people update, and
     /// non-inbox driver installs from the last 90 days. Read-only.
     DriverCentre,
+    /// Kernel start, sign-in and boot type for each boot in the last 60 days. Read-only.
+    BootTimes,
 }
 
 impl PsScript {
@@ -151,6 +153,19 @@ try {
   }
 } catch {}
 @{ problems=$problems; drivers=$drivers; installs=@($installs) } | ConvertTo-Json -Depth 4 -Compress"#,
+            PsScript::BootTimes => r#"
+$since = (Get-Date).AddDays(-60)
+function Q($h) { try { @(Get-WinEvent -FilterHashtable $h -ErrorAction Stop) } catch { @() } }
+$starts = Q @{ LogName='System'; ProviderName='Microsoft-Windows-Kernel-General'; Id=12; StartTime=$since }
+$logons = Q @{ LogName='System'; ProviderName='Microsoft-Windows-Winlogon'; Id=7001; StartTime=$since }
+$types = Q @{ LogName='System'; ProviderName='Microsoft-Windows-Kernel-Boot'; Id=27; StartTime=$since }
+$out = foreach ($s in $starts) {
+  $l = $logons | Where-Object { $_.TimeCreated -gt $s.TimeCreated } | Sort-Object TimeCreated | Select-Object -First 1
+  $t = $types | Where-Object { [math]::Abs(($_.TimeCreated - $s.TimeCreated).TotalSeconds) -lt 120 } | Select-Object -First 1
+  $bt = $null; if ($t) { $bt = (([xml]$t.ToXml()).Event.EventData.Data | Where-Object Name -eq 'BootType').'#text' }
+  @{ start=$s.TimeCreated.ToUniversalTime().ToString('o'); logon=$(if ($l) { $l.TimeCreated.ToUniversalTime().ToString('o') } else { $null }); boot_type=$bt }
+}
+@($out) | ConvertTo-Json -Depth 3 -Compress"#,
             PsScript::PendingReboot => r#"
 $r = @{
   cbs = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'

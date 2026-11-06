@@ -7,6 +7,7 @@ import { api, errorMessage, type Alert, type AppSettings } from "./api";
 export type PageId =
   | "overview"
   | "hardware"
+  | "benchmarks"
   | "processes"
   | "tweak"
   | "customise"

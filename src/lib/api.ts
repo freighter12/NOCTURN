@@ -391,6 +391,43 @@ export interface PowerScheme {
 }
 
 
+// -------------------------------------------------------------- benchmarks
+
+export type BenchSuite = "cpu" | "memory" | "storage" | "boot";
+export interface BenchMetric {
+  key: string;
+  label: string;
+  value: number;
+  unit: string;
+  higher_is_better: boolean;
+}
+export interface BenchRun {
+  id: number;
+  started_at: string;
+  suite: BenchSuite;
+  target: string | null;
+  label: string;
+  duration_ms: number;
+  metrics: BenchMetric[];
+  context: { power_plan: string | null; threads: number; cpu: string | null; notes: string[] };
+}
+export interface BenchProgress {
+  stage: string;
+  pct: number;
+}
+export interface BootEntry {
+  start: string;
+  logon: string | null;
+  to_sign_in: number | null;
+  boot_type: number | null;
+}
+export interface BootReport {
+  boots: BootEntry[];
+  firmware_s: number | null;
+  median_to_sign_in: number | null;
+  fast_startup: boolean | null;
+}
+
 // ------------------------------------------------------------ driver centre
 
 export interface SupportLink {
@@ -741,6 +778,8 @@ export interface GameView extends Game {
   running: boolean;
   profile: GameProfile | null;
   sessions: number;
+  /** Marked "not a game" by the user: listed, but never starts sessions. */
+  not_game: boolean;
 }
 export interface ProfilePreviewItem {
   kind: "registry" | "rule";
@@ -994,6 +1033,16 @@ export const api = {
   events: () => invoke<EventEntry[]>("get_events"),
   crashReport: () => invoke<CrashReport>("get_crash_report"),
   driverCentre: () => invoke<DriverReport>("get_driver_centre"),
+  runBenchmark: (suite: BenchSuite, target: string | null, label: string, onProgress?: (p: BenchProgress) => void) => {
+    const ch = new Channel<BenchProgress>();
+    if (onProgress) ch.onmessage = onProgress;
+    return invoke<BenchRun>("run_benchmark", { suite, target, label, onProgress: ch });
+  },
+  cancelBenchmark: () => invoke<void>("cancel_benchmark"),
+  benchmarks: () => invoke<BenchRun[]>("list_benchmarks"),
+  deleteBenchmark: (id: number) => invoke<void>("delete_benchmark", { id }),
+  renameBenchmark: (id: number, label: string) => invoke<void>("rename_benchmark", { id, label }),
+  bootTimes: () => invoke<BootReport>("boot_times"),
   openSupportLink: (key: string) => invoke<void>("open_support_link", { key }),
   drivers: () => invoke<DriverEntry[]>("get_drivers"),
   services: () => invoke<ServiceEntry[]>("get_services"),
@@ -1048,6 +1097,7 @@ export const api = {
   games: (refresh = false) => invoke<GameView[]>("list_games", { refresh }),
   addCustomGame: (exe: string) => invoke<void>("add_custom_game", { exe }),
   removeCustomGame: (exe: string) => invoke<void>("remove_custom_game", { exe }),
+  setNotGame: (id: string, notGame: boolean) => invoke<void>("set_not_game", { id, notGame }),
   gamingNow: () => invoke<GamingNow>("gaming_now"),
   gameSessions: (gameId?: string) => invoke<SessionSummary[]>("list_game_sessions", { gameId: gameId ?? null }),
   previewGameProfile: (profile: GameProfile) => invoke<ProfilePreviewItem[]>("preview_game_profile", { profile }),

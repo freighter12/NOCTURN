@@ -48,7 +48,7 @@ Last updated: 2026-11-06
 - ✅ Gaming optimiser backend: Steam/Epic/GOG + custom game detection, running-game detection, session recording with CPU/GPU-limited estimate, overlay detection, per-game profiles (GPU preference, fullscreen optimisations — journaled; priority/CPUs — launch rule)
 - ✅ Gaming page: live session + bottleneck panel, overlays, gaming modes via ApplyFlow, game library with add/remove, per-game profile editor (preview → apply → Undo), session history (verified in the real app with 10 Steam games; preview only — apply covered by the HKCU round-trip test)
 - ✅ Removing priority/CPUs from a game profile deletes the launch rule it created (never a user-made rule)
-- ⬜ Way to mark a detected entry as "not a game" (e.g. Steam utilities like Borderless Gaming currently start sessions)
+- ✅ "Not a game" marking on the Gaming page (with Undo and a restore list); marked entries never start sessions or block benchmarks. Verified live on Borderless Gaming
 - ⬜ Executable ranking picks the launcher for some games (Assetto Corsa: `AssettoCorsa.exe` ranked above `acs.exe`); the user can choose in the profile editor
 
 ## Advanced expansion — Priority 2
@@ -67,12 +67,13 @@ Last updated: 2026-11-06
 
 - ✅ Crash analyser (Diagnostics › Crashes): 90 days of blue screens (WER 1001 + Kernel-Power 41), unexpected shutdowns (forced power-off and sleep detected), EventLog 6008, WHEA hardware errors, app crashes (Application Error 1000, filtered by provider) and hangs; one incident's several records merged; 28 stop codes and 13 exception codes explained; faulting-module attribution (graphics driver, overlay, app's own code, generic Windows library); rule-based findings with steps; per-day timeline (validated palette, hover, table view) and Reliability Monitor stability index; crash-dump inventory; Ask AI per finding/app. Verified live on this PC: 1 unexpected shutdown (2 records merged), 8 app crashes in 4 apps, stability 8.2
 - ✅ Driver centre (Diagnostics › Drivers): problem devices with all Device Manager codes explained (code 45 phantoms excluded), unnamed devices identified from PCI/USB vendor IDs and class codes; drivers worth keeping current (graphics, network, audio, Bluetooth, chipset, storage) with age notes (chipset dates explained, not flagged), built-in vs maker drivers; non-inbox driver installs/updates from the Kernel-PnP log (90 days); official support pages only, opened from a fixed allow-list and audit-logged. Never downloads or installs drivers. Verified live: identified the unnamed code-28 device as an Intel Bluetooth adapter, RTX 2080 driver shown with NVIDIA link, 18 installs listed, link opened Settings, arbitrary URL refused
-- ⬜ Benchmarks
+- ✅ Benchmarks page: CPU (SHA-256 integer + f64 matmul GFLOPS, one core and all cores, scaling), memory (read/write/copy bandwidth, random-access latency), storage (sequential + 4K random QD1 read/write with the Windows cache bypassed, 1 GB temp file always deleted), boot time (firmware POST time, kernel start → sign-in per boot, fast-startup state); kernels in a separate always-optimised crate so dev builds report real numbers; runs stored with power plan/CPU context, renamable, compared against any earlier run of the same kind with a ±5% noise band and a power-plan-mismatch warning; refused while a game runs. Verified live: CPU 2.0/26.6 GB/s SHA-256, 10.2/79.5 GFLOPS; memory 29.8 GB/s read, 91 ns; SATA SSD 532/443 MB/s, 7.4k 4K IOPS; boot 20 s firmware + 15 s; second CPU run reported "no real change" (all within 3%)
+- ⬜ FPS / frame-time capture (needs Intel PresentMon — not bundled yet)
 - ⬜ Scheduled maintenance
 
 ## Phase 6 — Testing and release
 
-- ✅ Rust unit/integration tests: 129 passing (3 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin)
+- ✅ Rust unit/integration tests: 136 passing (4 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin, storage benchmark)
 - ✅ Frontend unit tests (vitest): chat transcript folding, formatters
 - ✅ Typecheck + production frontend build
 - ✅ All pages loaded in the real app with zero console errors (CDP walkthrough)

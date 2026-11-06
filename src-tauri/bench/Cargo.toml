@@ -1,0 +1,9 @@
+[package]
+name = "nocturn-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "NOCTURN benchmark kernels. Always built optimised (see the parent profile overrides) so dev builds report real numbers."
+
+[dependencies]
+sha2 = "0.10"

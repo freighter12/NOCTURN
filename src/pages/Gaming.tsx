@@ -255,6 +255,7 @@ function GameLibrary() {
   const [adding, setAdding] = useState(false);
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
 
   // Keep the running badge fresh without re-scanning launchers.
   useEffect(() => {
@@ -263,8 +264,25 @@ function GameLibrary() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const list = games.data ?? [];
+  const list = (games.data ?? []).filter((g) => !g.not_game);
+  const hidden = (games.data ?? []).filter((g) => g.not_game);
   const current = list.find((g) => g.id === selected) ?? null;
+
+  async function markNotGame(g: GameView, notGame: boolean) {
+    try {
+      await api.setNotGame(g.id, notGame);
+      if (notGame && selected === g.id) setSelected(null);
+      toast({
+        tone: "good",
+        title: notGame ? `${g.name} won't be treated as a game` : `${g.name} restored`,
+        detail: notGame ? "It won't start game sessions or block benchmarks. Restore it from the bottom of the list." : undefined,
+        action: notGame ? { label: "Undo", run: () => api.setNotGame(g.id, false).then(() => games.reload()) } : undefined,
+      });
+      games.reload();
+    } catch (e) {
+      toast({ tone: "critical", title: "Couldn't update", detail: errorMessage(e) });
+    }
+  }
 
   async function add() {
     const exe = path.trim().replace(/^"(.*)"$/, "$1");
@@ -351,6 +369,18 @@ function GameLibrary() {
                 </div>
                 {g.running && <span className="tag good">Running</span>}
                 {g.profile && <span className="tag solid">Profile</span>}
+                {!g.id.startsWith("custom:") && (
+                  <button
+                    className="btn ghost sm"
+                    title="Utilities and tools from a game store (e.g. Borderless Gaming, Wallpaper Engine) can be excluded"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      markNotGame(g, true);
+                    }}
+                  >
+                    Not a game
+                  </button>
+                )}
                 {g.id.startsWith("custom:") && (
                   <button
                     className="btn ghost sm icon"
@@ -367,6 +397,26 @@ function GameLibrary() {
               </div>
             ))}
           </div>
+          {hidden.length > 0 && (
+            <div className="mt-1">
+              <button className="btn ghost sm" onClick={() => setShowHidden((v) => !v)}>
+                {showHidden ? "Hide" : "Show"} {hidden.length} marked as not a game
+              </button>
+              {showHidden && (
+                <div className="list">
+                  {hidden.map((g) => (
+                    <div key={g.id} className="list-item" style={{ alignItems: "center" }}>
+                      <div className="body">
+                        <div className="title muted">{g.name}</div>
+                        <div className="desc">{g.launcher} · not tracked as a game</div>
+                      </div>
+                      <button className="btn ghost sm" onClick={() => markNotGame(g, false)}>Restore</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </Panel>
         {current && <GameProfileEditor game={current} onClose={() => setSelected(null)} onSaved={games.reload} />}
       </div>

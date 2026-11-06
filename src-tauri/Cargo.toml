@@ -16,6 +16,17 @@ opt-level = "s"
 panic = "abort"
 strip = true
 
+# Benchmark kernels are always optimised, even in dev builds, so the numbers
+# NOCTURN shows match a release build.
+[profile.dev.package.nocturn-bench]
+opt-level = 3
+
+[profile.dev.package.sha2]
+opt-level = 3
+
+[profile.release.package.nocturn-bench]
+opt-level = 3
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -40,6 +51,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 uuid = { version = "1.29.0", features = ["v4", "serde"] }
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Performance", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_Security", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_System_Power", "Win32_NetworkManagement_WiFi", "Win32_Security_Credentials", "Win32_Security_WinTrust", "Win32_Security_Cryptography", "Win32_System_Com", "Win32_Storage_FileSystem", "Win32_System_Registry", "Win32_System_Services"] }
 winreg = "0.56.0"
+nocturn-bench = { path = "bench" }
 wmi = "0.18.4"
 
 [dev-dependencies]

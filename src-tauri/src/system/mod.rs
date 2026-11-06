@@ -3,6 +3,7 @@
 //! `power::set_active` and `processes::end_process`, which are only reachable
 //! through journaled / audited command handlers.
 
+pub mod bench;
 pub mod crash;
 pub mod diagnostics;
 pub mod driver_centre;
