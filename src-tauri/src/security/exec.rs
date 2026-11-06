@@ -62,6 +62,10 @@ pub enum PsScript {
     Services,
     /// Whether Windows is waiting for a restart (servicing, Windows Update, file renames).
     PendingReboot,
+    /// Crash-related events (last 90 days): bugchecks, unexpected shutdowns,
+    /// app crashes/hangs, WHEA hardware errors, clean start/stop markers and
+    /// the reliability (stability) index. Read-only.
+    CrashEvents,
 }
 
 impl PsScript {
@@ -97,6 +101,34 @@ try {
 Get-CimInstance Win32_PnPSignedDriver | Where-Object { $_.DeviceName -and $_.DriverProviderName -and $_.DriverProviderName -ne 'Microsoft' } | Select-Object DeviceName, DeviceClass, DriverProviderName, DriverVersion, @{n='DriverDate';e={ if ($_.DriverDate) { $_.DriverDate.ToString('yyyy-MM-dd') } else { $null } }}, IsSigned | Sort-Object DeviceClass, DeviceName | ConvertTo-Json -Depth 3 -Compress"#,
             PsScript::Services => r#"
 Get-CimInstance Win32_Service | Select-Object Name, DisplayName, StartMode, State, PathName | ConvertTo-Json -Depth 3 -Compress"#,
+            PsScript::CrashEvents => r#"
+$since = (Get-Date).AddDays(-90)
+function T($e) { $e.TimeCreated.ToUniversalTime().ToString('o') }
+function P($e, $i) { if ($e.Properties.Count -gt $i -and $null -ne $e.Properties[$i].Value) { [string]$e.Properties[$i].Value } else { '' } }
+function Q($h, $max) { try { @(Get-WinEvent -FilterHashtable $h -MaxEvents $max -ErrorAction Stop) } catch { @() } }
+$out = @()
+foreach ($e in (Q @{ LogName='System'; ProviderName='Microsoft-Windows-Kernel-Power'; Id=41; StartTime=$since } 200)) {
+  $d = @{}; foreach ($x in ([xml]$e.ToXml()).Event.EventData.Data) { $d[$x.Name] = [string]$x.'#text' }
+  $out += @{ kind='unexpected_shutdown'; time=(T $e); code=$d['BugcheckCode']; p1=$d['BugcheckParameter1']; sleep=$d['SleepInProgress']; power_button=$d['PowerButtonTimestamp']; long_press=$d['LongPowerButtonPressDetected'] }
+}
+foreach ($e in (Q @{ LogName='System'; ProviderName='Microsoft-Windows-WER-SystemErrorReporting'; Id=1001; StartTime=$since } 200)) {
+  $out += @{ kind='bugcheck'; time=(T $e); text=(P $e 0); dump=(P $e 1) }
+}
+foreach ($e in (Q @{ LogName='System'; ProviderName='EventLog'; Id=6005,6006,6008; StartTime=$since } 600)) {
+  $out += @{ kind=('eventlog_' + $e.Id); time=(T $e) }
+}
+foreach ($e in (Q @{ LogName='System'; ProviderName='Microsoft-Windows-WHEA-Logger'; StartTime=$since } 200)) {
+  $out += @{ kind='whea'; time=(T $e); id=$e.Id; level=$e.Level; text=$(if ($e.Message) { $e.Message.Substring(0, [Math]::Min(300, $e.Message.Length)) } else { '' }) }
+}
+foreach ($e in (Q @{ LogName='Application'; ProviderName='Application Error'; Id=1000; StartTime=$since } 400)) {
+  $out += @{ kind='app_crash'; time=(T $e); app=(P $e 0); app_version=(P $e 1); module=(P $e 3); module_version=(P $e 4); code=(P $e 6); app_path=(P $e 10); module_path=(P $e 11) }
+}
+foreach ($e in (Q @{ LogName='Application'; ProviderName='Application Hang'; Id=1002; StartTime=$since } 200)) {
+  $out += @{ kind='app_hang'; time=(T $e); app=(P $e 0); app_version=(P $e 1); app_path=(P $e 5) }
+}
+$stab = @()
+try { $stab = @(Get-CimInstance Win32_ReliabilityStabilityMetrics -ErrorAction Stop | Where-Object { $_.TimeGenerated -gt $since } | Select-Object -First 2200 | ForEach-Object { @{ time=$_.TimeGenerated.ToUniversalTime().ToString('o'); index=[double]$_.SystemStabilityIndex } }) } catch {}
+@{ events=@($out); stability=@($stab) } | ConvertTo-Json -Depth 4 -Compress"#,
             PsScript::PendingReboot => r#"
 $r = @{
   cbs = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'

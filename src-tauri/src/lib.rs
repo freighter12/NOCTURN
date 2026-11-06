@@ -97,6 +97,7 @@ pub fn run() {
             commands::delete_process_rule,
             commands::get_health,
             commands::get_events,
+            commands::get_crash_report,
             commands::get_drivers,
             commands::get_services,
             commands::get_restore_status,

@@ -262,6 +262,11 @@ pub async fn get_events(state: State<'_, Shared>) -> AppResult<Vec<diagnostics::
 }
 
 #[tauri::command]
+pub async fn get_crash_report() -> AppResult<crate::system::crash::CrashReport> {
+    blocking(crate::system::crash::report).await
+}
+
+#[tauri::command]
 pub async fn get_drivers() -> AppResult<Vec<diagnostics::DriverEntry>> {
     blocking(diagnostics::drivers).await
 }

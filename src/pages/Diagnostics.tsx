@@ -2,6 +2,7 @@
 // Windows event log, drivers, services (read-only) and restore points.
 
 import { useMemo, useState } from "react";
+import { Crashes } from "../components/Crashes";
 import { I } from "../components/Icons";
 import { Empty, ErrorNote, Loading, Note, PageHead, Panel, Seg, Spinner } from "../components/ui";
 import { api, type EventEntry, type SystemInfo } from "../lib/api";
@@ -9,7 +10,7 @@ import { useApp, useLoad } from "../lib/app";
 import { bytes, date, duration, relative } from "../lib/format";
 import { useTelemetry } from "../lib/telemetry";
 
-type Tab = "hardware" | "events" | "drivers" | "services" | "restore";
+type Tab = "crashes" | "hardware" | "events" | "drivers" | "services" | "restore";
 
 export function Diagnostics() {
   const [tab, setTab] = useState<Tab>("hardware");
@@ -30,6 +31,7 @@ export function Diagnostics() {
         value={tab}
         onChange={setTab}
         options={[
+          { value: "crashes", label: "Crashes" },
           { value: "hardware", label: "Hardware & Windows" },
           { value: "events", label: "Event log" },
           { value: "drivers", label: "Drivers" },
@@ -38,6 +40,7 @@ export function Diagnostics() {
         ]}
       />
       <div className="mt-2">
+        {tab === "crashes" && <Crashes />}
         {tab === "hardware" && <Hardware />}
         {tab === "events" && <Events />}
         {tab === "drivers" && <Drivers />}

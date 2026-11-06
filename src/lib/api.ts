@@ -391,6 +391,74 @@ export interface PowerScheme {
 }
 
 
+// ----------------------------------------------------------------- crashes
+
+export type CrashArea = "graphics" | "driver" | "memory" | "storage" | "hardware" | "power" | "overlay" | "app" | "windows" | "unknown";
+export interface CrashIncident {
+  time: string;
+  kind: "blue_screen" | "unexpected_shutdown" | "hardware_error";
+  code: string | null;
+  code_name: string | null;
+  area: CrashArea;
+  area_label: string;
+  explanation: string;
+  dump: string | null;
+  evidence: string[];
+}
+export interface CrashCounted {
+  name: string;
+  count: number;
+  detail: string | null;
+}
+export interface CrashAppGroup {
+  app: string;
+  path: string | null;
+  version: string | null;
+  crashes: number;
+  hangs: number;
+  last: string;
+  modules: CrashCounted[];
+  codes: CrashCounted[];
+  area: CrashArea;
+  area_label: string;
+  explanation: string;
+}
+export interface CrashFinding {
+  severity: "good" | "info" | "warning" | "critical";
+  title: string;
+  detail: string;
+  steps: string[];
+}
+export interface CrashDay {
+  day: string;
+  blue_screens: number;
+  shutdowns: number;
+  app_crashes: number;
+  hangs: number;
+}
+export interface DumpFile {
+  path: string;
+  size: number;
+  modified: string | null;
+}
+export interface CrashReport {
+  window_days: number;
+  generated_at: string;
+  blue_screens: number;
+  unexpected_shutdowns: number;
+  hardware_errors: number;
+  app_crashes: number;
+  app_hangs: number;
+  clean_boots: number;
+  last_system_crash: string | null;
+  findings: CrashFinding[];
+  incidents: CrashIncident[];
+  apps: CrashAppGroup[];
+  daily: CrashDay[];
+  stability: [string, number][];
+  dumps: { minidumps: DumpFile[] | null; memory_dmp: DumpFile | null };
+}
+
 // ---------------------------------------------------------------- services
 
 export type StartType = "automatic" | "automatic_delayed" | "manual" | "disabled";
@@ -879,6 +947,7 @@ export const api = {
   deleteProcessRule: (name: string) => invoke<void>("delete_process_rule", { name }),
   health: (force = false) => invoke<HealthReport>("get_health", { force }),
   events: () => invoke<EventEntry[]>("get_events"),
+  crashReport: () => invoke<CrashReport>("get_crash_report"),
   drivers: () => invoke<DriverEntry[]>("get_drivers"),
   services: () => invoke<ServiceEntry[]>("get_services"),
   restoreStatus: () => invoke<RestoreStatus>("get_restore_status"),

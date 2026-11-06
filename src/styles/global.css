@@ -204,6 +204,8 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after 
 .chart .tip .r { display: flex; align-items: center; gap: 7px; }
 .chart .tip .r b { font-weight: 600; color: var(--ink-0); font-variant-numeric: tabular-nums; }
 .chart .tip .r span { color: var(--ink-2); }
+.chart .tip .r i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; }
 .linekey { display: inline-block; width: 12px; height: 2px; border-radius: 2px; flex: none; }
 .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-1); }
 .legend .item { display: flex; align-items: center; gap: 6px; }

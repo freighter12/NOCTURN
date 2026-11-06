@@ -63,9 +63,16 @@ Last updated: 2026-11-06
 - ✅ Services page: native SCM enumeration (287 services in ~170 ms) with descriptions, program, publisher, account, dependencies and dependents; four tiers — Protected (security, updates, core; never changed, not even by rollback), Windows (read-only), Optional (31 reviewed Windows features, each saying what stops working; the program must be Microsoft's), Third-party (apps/drivers; anti-cheat, updater and driver-helper hints). Verified live on the real list, preview and refusals included
 - ✅ Service start-type changes: journaled `ServiceStartType` op capturing start type + delayed flag, elevated worker re-reads the service and re-applies tier and dependency rules (refuses Disabled while an automatic service depends on it); only start types change, never stop/delete. Verified live with UAC: Retail Demo Service Manual → Disabled (elevated worker captured the original) → rolled back from History → Manual; refusal path tested on real protected services
 
+## Advanced expansion — Priority 3
+
+- ✅ Crash analyser (Diagnostics › Crashes): 90 days of blue screens (WER 1001 + Kernel-Power 41), unexpected shutdowns (forced power-off and sleep detected), EventLog 6008, WHEA hardware errors, app crashes (Application Error 1000, filtered by provider) and hangs; one incident's several records merged; 28 stop codes and 13 exception codes explained; faulting-module attribution (graphics driver, overlay, app's own code, generic Windows library); rule-based findings with steps; per-day timeline (validated palette, hover, table view) and Reliability Monitor stability index; crash-dump inventory; Ask AI per finding/app. Verified live on this PC: 1 unexpected shutdown (2 records merged), 8 app crashes in 4 apps, stability 8.2
+- ⬜ Driver centre
+- ⬜ Benchmarks
+- ⬜ Scheduled maintenance
+
 ## Phase 6 — Testing and release
 
-- ✅ Rust unit/integration tests: 115 passing (3 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin)
+- ✅ Rust unit/integration tests: 122 passing (3 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin)
 - ✅ Frontend unit tests (vitest): chat transcript folding, formatters
 - ✅ Typecheck + production frontend build
 - ✅ All pages loaded in the real app with zero console errors (CDP walkthrough)
