@@ -379,6 +379,8 @@ export interface TweakView {
 export interface Profile {
   id: string;
   name: string;
+  /** "system" (Tweak page profiles) or "gaming_mode" (Gaming page modes). */
+  kind: "system" | "gaming_mode";
   description: string;
   tweaks: string[];
 }
@@ -487,6 +489,77 @@ export interface StartupChange {
   source: string;
   applied_at: string | null;
   rolled_back_at: string | null;
+}
+
+// ------------------------------------------------------------------ gaming
+
+export interface Game {
+  /** "steam:730", "epic:Fortnite", "gog:…", "custom:<exe path>" */
+  id: string;
+  name: string;
+  launcher: string;
+  install_dir: string | null;
+  /** Likely game executables, most relevant first. */
+  exes: string[];
+}
+export type GpuPreference = "default" | "power_saving" | "high_performance";
+export interface GameProfile {
+  game_id: string;
+  exe: string;
+  priority: Priority | null;
+  /** Hex CPU mask; null = all CPUs. */
+  affinity: string | null;
+  gpu_preference: GpuPreference | null;
+  disable_fso: boolean;
+  updated_at: string;
+}
+export interface GameView extends Game {
+  running: boolean;
+  profile: GameProfile | null;
+  sessions: number;
+}
+export interface ProfilePreviewItem {
+  kind: "registry" | "rule";
+  title: string;
+  target: string;
+  current: string;
+  proposed: string;
+  will_change: boolean;
+  note: string | null;
+}
+export interface ProfileOutcome {
+  report: ApplyReport | null;
+  rule: ProcessRule | null;
+  rule_error: string | null;
+}
+export interface SessionSummary {
+  id: number | null;
+  game_id: string;
+  game_name: string;
+  exe: string;
+  /** Unix ms. */
+  started_at: number;
+  ended_at: number;
+  samples: number;
+  avg_cpu: number;
+  avg_max_core: number;
+  avg_gpu: number | null;
+  peak_gpu_temp: number | null;
+  avg_mem_pct: number;
+  game_mem_peak: number;
+  gpu_bound_pct: number;
+  cpu_bound_pct: number;
+  verdict: string;
+}
+export interface Overlay {
+  process: string;
+  label: string;
+}
+export interface GamingNow {
+  live: SessionSummary | null;
+  game_cpu: number | null;
+  game_mem: number | null;
+  overlays: Overlay[];
 }
 
 // ---------------------------------------------------------------- settings
@@ -654,6 +727,15 @@ export const api = {
   startupChanges: () => invoke<StartupChange[]>("list_startup_changes"),
   setStartup: (ids: string[], enabled: boolean, source: "user" | "ai" = "user", onProgress?: (p: Progress) => void) =>
     invoke<ApplyReport>("set_startup_enabled", { ids, enabled, source, onProgress: progressChannel(onProgress) }),
+
+  games: (refresh = false) => invoke<GameView[]>("list_games", { refresh }),
+  addCustomGame: (exe: string) => invoke<void>("add_custom_game", { exe }),
+  removeCustomGame: (exe: string) => invoke<void>("remove_custom_game", { exe }),
+  gamingNow: () => invoke<GamingNow>("gaming_now"),
+  gameSessions: (gameId?: string) => invoke<SessionSummary[]>("list_game_sessions", { gameId: gameId ?? null }),
+  previewGameProfile: (profile: GameProfile) => invoke<ProfilePreviewItem[]>("preview_game_profile", { profile }),
+  applyGameProfile: (profile: GameProfile, gameName: string, onProgress?: (p: Progress) => void) =>
+    invoke<ProfileOutcome>("apply_game_profile", { profile, gameName, onProgress: progressChannel(onProgress) }),
 
   aiKeyStatus: () => invoke<{ anthropic: boolean; openai_compatible: boolean }>("ai_key_status"),
   aiSetKey: (provider: string, key: string | null) => invoke<void>("ai_set_key", { provider, key }),

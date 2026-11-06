@@ -7,18 +7,11 @@ import { I } from "../components/Icons";
 import { Empty, ErrorNote, Loading, Note, PageHead, Panel, Seg, Spinner, Toggle } from "../components/ui";
 import { api, errorMessage, type Priority, type ProcDetails, type ProcGroup, type ProcOverview, type ProcessRule } from "../lib/api";
 import { useApp, useLoad } from "../lib/app";
+import { maskBits, PRIORITIES, toMask } from "../lib/cpu";
 import { bytes, duration, relative } from "../lib/format";
 
 type Filter = "all" | "apps" | "background" | "flagged";
 type Sort = "cpu" | "memory" | "disk" | "name";
-
-const PRIORITIES: { value: Priority; label: string; hint: string }[] = [
-  { value: "idle", label: "Low", hint: "Runs only when nothing else needs the CPU." },
-  { value: "below_normal", label: "Below normal", hint: "Good for background work you don't want competing with games." },
-  { value: "normal", label: "Normal", hint: "Windows' default for almost every app." },
-  { value: "above_normal", label: "Above normal", hint: "Gets CPU time ahead of normal apps. Usually enough for games." },
-  { value: "high", label: "High", hint: "Can make the rest of Windows sluggish under heavy load. Use sparingly." },
-];
 
 const FLAG_LABEL: Record<string, string> = { high_cpu: "High CPU", high_memory: "High memory", disk_heavy: "Heavy disk" };
 const FLAG_HINT: Record<string, string> = {
@@ -162,20 +155,6 @@ function Stat({ label, value, foot }: { label: string; value: number | undefined
 }
 
 // -------------------------------------------------------------- details
-
-function maskBits(mask: string | null | undefined): Set<number> {
-  const out = new Set<number>();
-  if (!mask) return out;
-  let v = BigInt(mask);
-  for (let i = 0; v > 0n; i++, v >>= 1n) if (v & 1n) out.add(i);
-  return out;
-}
-
-function toMask(bits: Set<number>): string {
-  let v = 0n;
-  for (const b of bits) v |= 1n << BigInt(b);
-  return `0x${v.toString(16)}`;
-}
 
 function DetailPanel({ group, onClose, onRulesChanged }: { group: ProcGroup; logical: number; onClose: () => void; onRulesChanged: () => void }) {
   const { toast } = useApp();

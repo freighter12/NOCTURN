@@ -35,7 +35,7 @@ codebase on 2026-11-05. Status per module: **Exists** (working today),
 
 ## Phases
 
-### Priority 1 (in progress)
+### Priority 1 (done 2026-11-06 — four gaming modes shipped: Competitive, Maximum Quality, Balanced Gaming, Streaming)
 1. **Process manager** — new *Processes* page: search, app/background split, priority and affinity changes (never Realtime, never protected processes), resource-heavy flags, session usage statistics, saved per-app rules applied automatically when the app starts (audited).
 2. **Hardware monitor** — new *Hardware* page: NVML GPU telemetry replacing `nvidia-smi`, disk read/write and memory-pressure counters, per-minute history stored for 7 days, refresh rate and pause, warning thresholds with alerts.
 3. **Startup intelligence** — publisher and description from version info, Authenticode check, rule-based "review this" flags with reasons, per-entry "Ask AI", NOCTURN change list.

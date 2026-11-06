@@ -23,7 +23,7 @@ export function Tweak() {
 
       <div className="section-title" style={{ marginTop: 0 }}>Profiles</div>
       <div className="grid cols-4">
-        {profiles.data?.map((p) => {
+        {profiles.data?.filter((p) => p.kind === "system").map((p) => {
           const views = tweaks.data?.filter((t) => p.tweaks.includes(t.id)) ?? [];
           const done = views.filter((t) => t.status.state === "applied").length;
           const advanced = views.filter((t) => t.risk === "advanced").length;

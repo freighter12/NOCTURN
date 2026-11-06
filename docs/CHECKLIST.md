@@ -2,7 +2,7 @@
 
 Status key: ✅ done and verified · 🟡 done, not fully verified · ⬜ not started
 
-Last updated: 2026-11-05
+Last updated: 2026-11-06
 
 ## Phase 1–2 — Foundations
 
@@ -40,9 +40,20 @@ Last updated: 2026-11-05
 - 🟡 Live conversation against a real provider not exercised in this environment (no API key configured)
 - ✅ Settings: provider, model, effort, max tokens, system-access toggle, custom instructions, connection test
 
+## Advanced expansion — Priority 1 (see ROADMAP.md)
+
+- ✅ Process manager page: search, app/background split, priority + affinity, heavy flags, per-app launch rules
+- ✅ Hardware page: NVML GPU telemetry, disk I/O, memory pressure, 7-day history, refresh rate/pause, alerts
+- ✅ Startup intelligence: publisher, description, Authenticode, "review this" reasons
+- ✅ Gaming optimiser backend: Steam/Epic/GOG + custom game detection, running-game detection, session recording with CPU/GPU-limited estimate, overlay detection, per-game profiles (GPU preference, fullscreen optimisations — journaled; priority/CPUs — launch rule)
+- ✅ Gaming page: live session + bottleneck panel, overlays, gaming modes via ApplyFlow, game library with add/remove, per-game profile editor (preview → apply → Undo), session history (verified in the real app with 10 Steam games; preview only — apply covered by the HKCU round-trip test)
+- ✅ Removing priority/CPUs from a game profile deletes the launch rule it created (never a user-made rule)
+- ⬜ Way to mark a detected entry as "not a game" (e.g. Steam utilities like Borderless Gaming currently start sessions)
+- ⬜ Executable ranking picks the launcher for some games (Assetto Corsa: `AssettoCorsa.exe` ranked above `acs.exe`); the user can choose in the profile editor
+
 ## Phase 6 — Testing and release
 
-- ✅ Rust unit/integration tests: 49 passing (1 ignored destructive round-trip test, run manually)
+- ✅ Rust unit/integration tests: 83 passing (1 ignored destructive round-trip test, run manually)
 - ✅ Frontend unit tests (vitest): chat transcript folding, formatters
 - ✅ Typecheck + production frontend build
 - ✅ All nine pages loaded in the real app with zero console errors (CDP walkthrough)

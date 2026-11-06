@@ -160,15 +160,33 @@ fn registry_ops(p: &GameProfile) -> Vec<(PlannedOp, ProfilePreviewItem)> {
     out
 }
 
+const RULE_NOTE_PREFIX: &str = "Game profile: ";
+
+/// A launch rule created by a game profile (as opposed to one the user made
+/// on the Processes page, which profiles never remove).
+fn profile_owned(r: &ProcessRule) -> bool {
+    r.note.starts_with(RULE_NOTE_PREFIX)
+}
+
 fn rule_item(p: &GameProfile, existing: Option<&ProcessRule>) -> Option<ProfilePreviewItem> {
-    if p.priority.is_none() && p.affinity.is_none() {
-        return None;
-    }
     let describe = |pri: Option<Priority>, aff: Option<&str>| {
         let mut parts = vec![pri.map(|x| x.label().to_string()).unwrap_or_else(|| "priority unchanged".into())];
         parts.push(aff.and_then(rules::parse_mask).map(|m| format!("{} CPUs", m.count_ones())).unwrap_or_else(|| "all CPUs".into()));
         parts.join(", ")
     };
+    if p.priority.is_none() && p.affinity.is_none() {
+        // Dropping priority/CPUs from a profile removes the rule it created.
+        let r = existing.filter(|r| profile_owned(r))?;
+        return Some(ProfilePreviewItem {
+            kind: "rule",
+            title: "Priority and CPUs at launch".into(),
+            target: format!("Process rule for {}", exe_name(&p.exe)),
+            current: describe(r.priority, r.affinity.as_deref()),
+            proposed: "no rule (removed)".into(),
+            will_change: true,
+            note: Some("Already-running instances keep their current priority until the game restarts.".into()),
+        });
+    }
     let proposed = describe(p.priority, p.affinity.as_deref());
     let current = existing.map(|r| describe(r.priority, r.affinity.as_deref())).unwrap_or_else(|| "no rule".into());
     Some(ProfilePreviewItem {
@@ -207,7 +225,7 @@ pub fn apply(db: &Db, data_dir: &Path, rule_cache: &RuleCache, p: GameProfile, g
             priority: p.priority,
             affinity: p.affinity.clone(),
             enabled: true,
-            note: format!("Game profile: {game_name}"),
+            note: format!("{RULE_NOTE_PREFIX}{game_name}"),
             created_at: String::new(),
             updated_at: String::new(),
             applied_count: 0,
@@ -219,7 +237,13 @@ pub fn apply(db: &Db, data_dir: &Path, rule_cache: &RuleCache, p: GameProfile, g
             Err(e) => (None, Some(e.to_string())),
         }
     } else {
-        (None, None)
+        match rules::get(db, &exe_name(&p.exe)) {
+            Ok(Some(r)) if profile_owned(&r) => match rules::delete(db, rule_cache, &r.name) {
+                Ok(()) => (None, None),
+                Err(e) => (None, Some(e.to_string())),
+            },
+            _ => (None, None),
+        }
     };
     save(db, &p)?;
     db.audit("info", "user", "game.profile.applied", Some(serde_json::json!({ "game": p.game_id, "exe": p.exe, "tx": report.as_ref().map(|r| &r.tx_id) })));
@@ -313,6 +337,19 @@ mod tests {
         assert_eq!(get(&db, "custom:test").unwrap().unwrap().exe, exe);
         // Second preview: nothing left to change.
         assert!(preview(&db, &p).unwrap().iter().all(|i| !i.will_change));
+        // Dropping the priority removes the rule the profile created…
+        let no_rule = GameProfile { priority: None, ..p.clone() };
+        let items = preview(&db, &no_rule).unwrap();
+        assert!(items.iter().any(|i| i.kind == "rule" && i.will_change && i.proposed.contains("removed")), "{items:?}");
+        let out2 = apply(&db, dir.path(), &cache, no_rule.clone(), "Test Game", &|_| {}).unwrap();
+        assert!(out2.report.is_none() && out2.rule_error.is_none());
+        assert!(rules::get(&db, "NocturnTestGame.exe").unwrap().is_none());
+        assert!(preview(&db, &no_rule).unwrap().iter().all(|i| i.kind != "rule"));
+        // …but never a rule the user made themselves.
+        let mine = ProcessRule { name: "NocturnTestGame.exe".into(), priority: Some(Priority::High), affinity: None, enabled: true, note: String::new(), created_at: String::new(), updated_at: String::new(), applied_count: 0, last_applied_at: None, last_error: None };
+        rules::save(&db, &cache, mine).unwrap();
+        apply(&db, dir.path(), &cache, no_rule, "Test Game", &|_| {}).unwrap();
+        assert!(rules::get(&db, "NocturnTestGame.exe").unwrap().is_some());
         // Roll back: both values removed again.
         let rb = engine::rollback(&db, &report.tx_id, &|_| {}).unwrap();
         assert!(rb.results.iter().all(|r| r.status == "rolled_back"), "{:?}", rb.results);
