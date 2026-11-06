@@ -4,6 +4,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { I } from "../components/Icons";
+import { PrivacyPanel } from "../components/Privacy";
 import { ErrorNote, Loading, Note, PageHead, Panel, Spinner, Toggle } from "../components/ui";
 import { api, errorMessage, type AiSettings, type AppInfo, type AppSettings, type ConnectionTest } from "../lib/api";
 import { useApp } from "../lib/app";
@@ -55,11 +56,12 @@ export function Settings() {
 
   return (
     <div className="page">
-      <PageHead eyebrow="Settings" title="Settings" desc="Configure NOCTURN AI and how changes are applied." />
+      <PageHead eyebrow="Settings" title="Settings" desc="NOCTURN AI, how changes are applied, and your privacy. Looks and layout are in Customise." />
 
       <div className="grid" style={{ gridTemplateColumns: "minmax(0, 1.5fr) minmax(0, 1fr)", alignItems: "start" }}>
         <div className="stack" style={{ gap: 14 }}>
           <AiPanel ai={draft.ai} setAi={setAi} dirty={dirty} saving={saving} onSave={() => save(draft)} onReset={() => setDraft(settings)} />
+          <PrivacyPanel />
         </div>
 
         <div className="stack" style={{ gap: 14 }}>

@@ -15,6 +15,7 @@ mod db;
 mod games;
 mod library;
 mod music;
+mod privacy;
 mod error;
 mod logging;
 mod security;
@@ -108,6 +109,8 @@ pub fn run() {
             commands::save_settings,
             commands::list_audit,
             commands::get_prefs,
+            commands::privacy_overview,
+            commands::privacy_clear,
             commands::music_folders,
             commands::music_add_folder,
             commands::music_remove_folder,

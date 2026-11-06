@@ -66,6 +66,21 @@ pub fn save_settings(state: State<'_, Shared>, value: AppSettings) -> AppResult<
     Ok(v)
 }
 
+// -------------------------------------------------------------- privacy
+
+#[tauri::command]
+pub fn privacy_overview(state: State<'_, Shared>) -> AppResult<crate::privacy::PrivacyOverview> {
+    let ai = settings::load(&state.db).ai;
+    let configured = secrets::exists(ai::secret_name(&ai.provider));
+    let endpoint = configured.then(|| if ai.provider == "anthropic" { "Anthropic (api.anthropic.com)".to_string() } else { ai.base_url.clone() });
+    crate::privacy::overview(&state.db, &state.data_dir, endpoint)
+}
+
+#[tauri::command]
+pub fn privacy_clear(state: State<'_, Shared>, category: String) -> AppResult<()> {
+    crate::privacy::clear(&state.db, &category)
+}
+
 // ---------------------------------------------------------------- music
 
 #[tauri::command]

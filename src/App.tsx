@@ -1,39 +1,45 @@
 import { ApplyFlow } from "./components/ApplyFlow";
 import { Sidebar, TitleBar } from "./components/Chrome";
 import { AppProvider, useApp } from "./lib/app";
-import { Assistant } from "./pages/Assistant";
-import { Diagnostics } from "./pages/Diagnostics";
-import { Gaming } from "./pages/Gaming";
-import { Hardware } from "./pages/Hardware";
-import { Processes } from "./pages/Processes";
-import { History } from "./pages/History";
-import { Network } from "./pages/Network";
-import { Overview } from "./pages/Overview";
-import { Settings } from "./pages/Settings";
-import { Startup } from "./pages/Startup";
-import { Storage } from "./pages/Storage";
-import { Customise } from "./pages/Customise";
-import { Services } from "./pages/Services";
-import { Benchmarks } from "./pages/Benchmarks";
-import { Maintenance } from "./pages/Maintenance";
-import { AppProfiles } from "./pages/AppProfiles";
-import { Tweak } from "./pages/Tweak";
 import { Home } from "./pages/Home";
-import { Studio } from "./pages/Studio";
-import { Library } from "./pages/Library";
-import { Workspaces } from "./pages/Workspaces";
 import { ErrorBoundary } from "./shell/ErrorBoundary";
 import { WorkspaceProvider } from "./shell/WorkspaceProvider";
 import { MusicProvider } from "./music/MusicProvider";
 import { Player } from "./music/Player";
-import { Music } from "./pages/Music";
 import { PrefsProvider, usePrefs } from "./shell/PrefsProvider";
+import { lazy, Suspense } from "react";
+import { Loading } from "./components/ui";
+
+// Pages load the first time they're opened.
+const Assistant = lazy(() => import("./pages/Assistant").then((m) => ({ default: m.Assistant })));
+const Diagnostics = lazy(() => import("./pages/Diagnostics").then((m) => ({ default: m.Diagnostics })));
+const Gaming = lazy(() => import("./pages/Gaming").then((m) => ({ default: m.Gaming })));
+const Hardware = lazy(() => import("./pages/Hardware").then((m) => ({ default: m.Hardware })));
+const Processes = lazy(() => import("./pages/Processes").then((m) => ({ default: m.Processes })));
+const History = lazy(() => import("./pages/History").then((m) => ({ default: m.History })));
+const Network = lazy(() => import("./pages/Network").then((m) => ({ default: m.Network })));
+const Overview = lazy(() => import("./pages/Overview").then((m) => ({ default: m.Overview })));
+const Settings = lazy(() => import("./pages/Settings").then((m) => ({ default: m.Settings })));
+const Startup = lazy(() => import("./pages/Startup").then((m) => ({ default: m.Startup })));
+const Storage = lazy(() => import("./pages/Storage").then((m) => ({ default: m.Storage })));
+const Customise = lazy(() => import("./pages/Customise").then((m) => ({ default: m.Customise })));
+const Services = lazy(() => import("./pages/Services").then((m) => ({ default: m.Services })));
+const Benchmarks = lazy(() => import("./pages/Benchmarks").then((m) => ({ default: m.Benchmarks })));
+const Maintenance = lazy(() => import("./pages/Maintenance").then((m) => ({ default: m.Maintenance })));
+const AppProfiles = lazy(() => import("./pages/AppProfiles").then((m) => ({ default: m.AppProfiles })));
+const Tweak = lazy(() => import("./pages/Tweak").then((m) => ({ default: m.Tweak })));
+const Studio = lazy(() => import("./pages/Studio").then((m) => ({ default: m.Studio })));
+const Library = lazy(() => import("./pages/Library").then((m) => ({ default: m.Library })));
+const Workspaces = lazy(() => import("./pages/Workspaces").then((m) => ({ default: m.Workspaces })));
+const Music = lazy(() => import("./pages/Music").then((m) => ({ default: m.Music })));
 
 function GuardedPages() {
   const { page, navigate } = useApp();
   return (
     <ErrorBoundary resetKey={page} onHome={() => navigate("home")}>
-      <Pages />
+      <Suspense fallback={<div className="page"><Loading label="Opening…" /></div>}>
+        <Pages />
+      </Suspense>
     </ErrorBoundary>
   );
 }
