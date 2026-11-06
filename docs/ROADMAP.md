@@ -41,10 +41,10 @@ codebase on 2026-11-05. Status per module: **Exists** (working today),
 3. **Startup intelligence** — publisher and description from version info, Authenticode check, rule-based "review this" flags with reasons, per-entry "Ask AI", NOCTURN change list.
 4. **Gaming optimiser** — Steam/Epic/GOG game detection, running-game detection, per-game profiles (priority, affinity, GPU preference, fullscreen optimisations — journaled and reversible), overlay detection, bottleneck monitor and session history, five gaming modes previewed through the existing approval flow.
 
-### Priority 2 (done 2026-11-06 — pending UAC checks: DNS apply, service apply)
+### Priority 2 (done and verified 2026-11-06)
 Network (traceroute, DNS providers, history), storage (folder map, large files, duplicates, review-then-delete to Recycle Bin), customisation categories, service management with tiering and journaled start-type changes.
 
-### Priority 3
+### Priority 3 (in progress — order: crash analyser, driver centre, benchmarks, scheduled maintenance)
 Benchmarking (CPU/memory/storage, boot time, PresentMon FPS), crash analyser, driver centre, scheduled maintenance.
 
 ### Priority 4
