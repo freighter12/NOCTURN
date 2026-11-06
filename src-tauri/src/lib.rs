@@ -83,6 +83,8 @@ pub fn run() {
             commands::get_settings,
             commands::save_settings,
             commands::list_audit,
+            commands::get_prefs,
+            commands::save_prefs,
             commands::get_system_info,
             commands::get_telemetry_history,
             commands::get_telemetry_range,

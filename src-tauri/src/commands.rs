@@ -66,6 +66,28 @@ pub fn save_settings(state: State<'_, Shared>, value: AppSettings) -> AppResult<
     Ok(v)
 }
 
+/// The UI preference document (themes, layout, navigation, widgets, player
+/// mode…). The frontend validates every field and falls back to defaults, so
+/// the backend only enforces shape and size.
+const PREFS_KEY: &str = "ui.prefs";
+const PREFS_MAX_BYTES: usize = 256 * 1024;
+
+#[tauri::command]
+pub fn get_prefs(state: State<'_, Shared>) -> AppResult<Value> {
+    Ok(state.db.get_setting::<Value>(PREFS_KEY)?.unwrap_or(Value::Null))
+}
+
+#[tauri::command]
+pub fn save_prefs(state: State<'_, Shared>, prefs: Value) -> AppResult<()> {
+    if !prefs.is_object() {
+        return Err(AppError::Invalid("preferences must be an object".into()));
+    }
+    if prefs.to_string().len() > PREFS_MAX_BYTES {
+        return Err(AppError::Invalid("preferences are too large (custom images belong in files, not preferences)".into()));
+    }
+    state.db.set_setting(PREFS_KEY, &prefs)
+}
+
 #[tauri::command]
 pub fn list_audit(state: State<'_, Shared>, limit: Option<i64>) -> AppResult<Vec<Value>> {
     let conn = state.db.conn();

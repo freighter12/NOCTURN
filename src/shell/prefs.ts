@@ -1,0 +1,189 @@
+// The central preference document. Every UI module reads its preferences from
+// here instead of keeping its own; Experience Studio edits them. Stored by the
+// backend as one JSON document (`ui.prefs`).
+//
+// `sanitize` is the safety net: whatever is stored (an old version, a hand
+// edit, a bug), each field is checked on its own and falls back to its
+// default, so one bad value can never make the interface unusable.
+
+import type { PageId } from "../lib/app";
+
+export const PREFS_VERSION = 1;
+
+export type WidgetType = "vitals" | "health" | "storage" | "network" | "quick" | "music" | "apps" | "ask" | "gaming";
+export type WidgetSize = "s" | "m" | "l";
+export interface WidgetSlot {
+  /** Unique per slot, so the same widget type can appear twice. */
+  id: string;
+  type: WidgetType;
+  size: WidgetSize;
+}
+
+export type PlayerMode = "full" | "standard" | "mini" | "minimal";
+export type SidebarSide = "left" | "right";
+
+export interface Prefs {
+  version: number;
+  appearance: {
+    /** ID of an official or custom theme. */
+    theme: string;
+    /** Overrides the theme's accent; null = the theme's own. */
+    accent: string | null;
+    /** Corner radius scale, 0 (square) – 2 (very round); 1 = default. */
+    radius: number;
+    /** Panel transparency 0–0.6 (0 = opaque). */
+    transparency: number;
+    /** Background blur in px behind translucent panels, 0–24. */
+    blur: number;
+    /** Panel shadows. */
+    shadows: boolean;
+    /** Panel borders. */
+    borders: boolean;
+    highContrast: boolean;
+  };
+  navigation: {
+    /** Section order (section IDs). Unknown IDs are dropped, missing ones appended. */
+    order: string[];
+    /** Hidden section IDs (System and Settings can't be hidden). */
+    hidden: string[];
+    /** Pinned page IDs, shown at the top of the sidebar. */
+    pinned: PageId[];
+    /** Sections expanded in the sidebar. */
+    expanded: string[];
+    startPage: PageId;
+    sidebar: SidebarSide;
+    compact: boolean;
+  };
+  home: {
+    widgets: WidgetSlot[];
+  };
+  music: {
+    playerMode: PlayerMode;
+    volume: number;
+    visualiser: boolean;
+    showLyrics: boolean;
+  };
+  workspaces: {
+    active: string | null;
+  };
+  accessibility: {
+    reduceMotion: boolean;
+    /** Text size multiplier 0.85–1.4. */
+    fontScale: number;
+    /** Whole-interface zoom 0.8–1.5. */
+    uiScale: number;
+  };
+}
+
+export const DEFAULT_WIDGETS: WidgetSlot[] = [
+  { id: "w-vitals", type: "vitals", size: "l" },
+  { id: "w-quick", type: "quick", size: "m" },
+  { id: "w-health", type: "health", size: "m" },
+  { id: "w-music", type: "music", size: "m" },
+  { id: "w-apps", type: "apps", size: "m" },
+  { id: "w-storage", type: "storage", size: "s" },
+  { id: "w-network", type: "network", size: "s" },
+  { id: "w-ask", type: "ask", size: "m" },
+];
+
+export const DEFAULT_PREFS: Prefs = {
+  version: PREFS_VERSION,
+  appearance: { theme: "nocturn", accent: null, radius: 1, transparency: 0, blur: 0, shadows: true, borders: true, highContrast: false },
+  navigation: {
+    order: ["home", "library", "music", "workspaces", "ai", "gaming", "system", "studio", "settings"],
+    hidden: [],
+    pinned: [],
+    expanded: ["system"],
+    startPage: "home",
+    sidebar: "left",
+    compact: false,
+  },
+  home: { widgets: DEFAULT_WIDGETS },
+  music: { playerMode: "standard", volume: 0.8, visualiser: true, showLyrics: true },
+  workspaces: { active: null },
+  accessibility: { reduceMotion: false, fontScale: 1, uiScale: 1 },
+};
+
+/** Sections that can never be hidden, so the user can always get back. */
+export const LOCKED_SECTIONS = ["system", "settings"];
+export const WIDGET_TYPES: WidgetType[] = ["vitals", "health", "storage", "network", "quick", "music", "apps", "ask", "gaming"];
+
+// ------------------------------------------------------------------ checks
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+const num = (v: unknown, min: number, max: number, d: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : d);
+const bool = (v: unknown, d: boolean) => (typeof v === "boolean" ? v : d);
+const str = (v: unknown, d: string, max = 80) => (typeof v === "string" && v.length > 0 && v.length <= max ? v : d);
+const oneOf = <T extends string>(v: unknown, allowed: readonly T[], d: T): T => (allowed.includes(v as T) ? (v as T) : d);
+const strList = (v: unknown, allowed?: readonly string[], max = 50) =>
+  Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === "string" && (!allowed || allowed.includes(x))))].slice(0, max) : null;
+
+/** #rgb or #rrggbb only. */
+export const isHexColour = (v: unknown): v is string => typeof v === "string" && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v);
+
+/**
+ * Turn anything that was stored into a valid preference document.
+ * `pages` / `sections` are the IDs that exist in this build.
+ */
+export function sanitize(raw: unknown, pages: readonly string[], sections: readonly string[]): Prefs {
+  const d = DEFAULT_PREFS;
+  const r = isObj(raw) ? raw : {};
+  const a = isObj(r.appearance) ? r.appearance : {};
+  const n = isObj(r.navigation) ? r.navigation : {};
+  const h = isObj(r.home) ? r.home : {};
+  const m = isObj(r.music) ? r.music : {};
+  const w = isObj(r.workspaces) ? r.workspaces : {};
+  const x = isObj(r.accessibility) ? r.accessibility : {};
+
+  // Order: keep the stored order of known sections, append any new ones.
+  const stored = strList(n.order, sections) ?? [];
+  const order = [...stored, ...d.navigation.order.filter((s) => sections.includes(s) && !stored.includes(s)), ...sections.filter((s) => !stored.includes(s) && !d.navigation.order.includes(s))];
+  const hidden = (strList(n.hidden, sections) ?? []).filter((s) => !LOCKED_SECTIONS.includes(s));
+
+  let widgets: WidgetSlot[] = d.home.widgets;
+  if (Array.isArray(h.widgets)) {
+    const seen = new Set<string>();
+    widgets = h.widgets
+      .filter(isObj)
+      .map((s) => ({ id: str(s.id, "", 40), type: oneOf(s.type, WIDGET_TYPES, "vitals"), size: oneOf<WidgetSize>(s.size, ["s", "m", "l"], "m"), ok: WIDGET_TYPES.includes(s.type as WidgetType) }))
+      .filter((s) => s.ok && s.id && !seen.has(s.id) && seen.add(s.id))
+      .map(({ id, type, size }) => ({ id, type, size }))
+      .slice(0, 24);
+  }
+
+  return {
+    version: PREFS_VERSION,
+    appearance: {
+      theme: str(a.theme, d.appearance.theme, 40),
+      accent: isHexColour(a.accent) ? a.accent : null,
+      radius: num(a.radius, 0, 2, d.appearance.radius),
+      transparency: num(a.transparency, 0, 0.6, d.appearance.transparency),
+      blur: num(a.blur, 0, 24, d.appearance.blur),
+      shadows: bool(a.shadows, d.appearance.shadows),
+      borders: bool(a.borders, d.appearance.borders),
+      highContrast: bool(a.highContrast, d.appearance.highContrast),
+    },
+    navigation: {
+      order,
+      hidden,
+      pinned: (strList(n.pinned, pages, 12) ?? []) as PageId[],
+      expanded: strList(n.expanded, sections) ?? d.navigation.expanded,
+      startPage: oneOf(n.startPage, pages as readonly PageId[], d.navigation.startPage),
+      sidebar: oneOf<SidebarSide>(n.sidebar, ["left", "right"], "left"),
+      compact: bool(n.compact, false),
+    },
+    home: { widgets },
+    music: {
+      playerMode: oneOf<PlayerMode>(m.playerMode, ["full", "standard", "mini", "minimal"], d.music.playerMode),
+      volume: num(m.volume, 0, 1, d.music.volume),
+      visualiser: bool(m.visualiser, d.music.visualiser),
+      showLyrics: bool(m.showLyrics, d.music.showLyrics),
+    },
+    workspaces: { active: typeof w.active === "string" && w.active.length <= 64 ? w.active : null },
+    accessibility: {
+      reduceMotion: bool(x.reduceMotion, d.accessibility.reduceMotion),
+      fontScale: num(x.fontScale, 0.85, 1.4, 1),
+      uiScale: num(x.uiScale, 0.8, 1.5, 1),
+    },
+  };
+}

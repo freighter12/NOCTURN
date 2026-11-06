@@ -80,6 +80,17 @@ Last updated: 2026-11-06
 - ✅ Release hardening: clippy pass (machine-applicable fixes applied; 16 cosmetic lints left), test child processes reaped, no runtime unwrap/expect outside invariants, CSP and capabilities reviewed (strict CSP, window-only permissions), dev-only UI test hook verified absent from the production bundle
 - ✅ Driver centre detects the board maker from onboard PCI subsystem IDs when the firmware name is garbled (verified: MSI on this PC)
 
+## Ecosystem expansion (see ECOSYSTEM.md)
+
+- ✅ Phase 1 — audit, plan (docs/ECOSYSTEM.md), baseline green
+- ✅ Phase 2 — shell: data-driven navigation (Home, Library, Music, Workspaces, AI, Gaming, System, Customise, Settings; every existing page keeps its ID, all 22 reachable with zero console errors), expandable groups, pinned pages, compact and right-hand sidebar support; central preference document (, versioned, sanitised field by field with 6 tests; System/Settings can't be hidden); data-driven themes applied live via CSS variables; text sizes follow a font-scale token; Home dashboard with 9 widget types laid out from preferences. Old Customise page renamed Windows settings (System)
+- ⬜ Phase 3 — Experience Studio
+- ⬜ Phase 4 — App Library
+- ⬜ Phase 5 — Workspaces
+- ⬜ Phase 6 — Nocturn Music foundation
+- ⬜ Phase 7 — AI ecosystem integration
+- ⬜ Phase 8 — Polish and testing
+
 ## Phase 6 — Testing and release
 
 - ✅ Rust unit/integration tests: 138 passing + 2 benchmark-kernel tests (4 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin, storage benchmark)

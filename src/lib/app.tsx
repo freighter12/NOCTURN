@@ -2,9 +2,15 @@
 
 import { listen } from "@tauri-apps/api/event";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { usePrefs } from "../shell/PrefsProvider";
 import { api, errorMessage, type Alert, type AppSettings } from "./api";
 
 export type PageId =
+  | "home"
+  | "library"
+  | "music"
+  | "workspaces"
+  | "studio"
   | "overview"
   | "hardware"
   | "benchmarks"
@@ -79,7 +85,16 @@ interface Ctx {
 const AppCtx = createContext<Ctx | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [page, setPage] = useState<PageId>("overview");
+  const { prefs, loaded: prefsLoaded } = usePrefs();
+  const [page, setPage] = useState<PageId>("home");
+  // Open on the chosen start page once preferences are read.
+  const started = useRef(false);
+  useEffect(() => {
+    if (prefsLoaded && !started.current) {
+      started.current = true;
+      setPage(prefs.navigation.startPage);
+    }
+  }, [prefsLoaded, prefs.navigation.startPage]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [settings, setSettingsState] = useState<AppSettings | null>(null);
   const [applyIntent, setApplyIntent] = useState<ApplyIntent | null>(null);
@@ -91,8 +106,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     api.getSettings().then(setSettingsState).catch(() => {});
   }, []);
   useEffect(() => {
-    document.body.classList.toggle("reduce-motion", !!settings?.reduce_motion);
-  }, [settings?.reduce_motion]);
+    document.body.classList.toggle("reduce-motion", !!settings?.reduce_motion || prefs.accessibility.reduceMotion);
+  }, [settings?.reduce_motion, prefs.accessibility.reduceMotion]);
 
   const toast = useCallback((t: Omit<Toast, "id">) => {
     const id = ++seq.current;

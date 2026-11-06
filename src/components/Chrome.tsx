@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import logo from "../logo.png";
 import { api, type AppInfo } from "../lib/api";
 import { useApp, type PageId } from "../lib/app";
+import { ALL_PAGES, SECTIONS, sectionOf, type NavSection } from "../shell/nav";
+import { usePrefs } from "../shell/PrefsProvider";
 import { pct } from "../lib/format";
 import { useTelemetry } from "../lib/telemetry";
 import { I } from "./Icons";
@@ -40,43 +42,62 @@ export function TitleBar() {
   );
 }
 
-const NAV: { id: PageId; label: string; icon: keyof typeof I; group?: string }[] = [
-  { id: "overview", label: "Overview", icon: "overview" },
-  { id: "hardware", label: "Hardware", icon: "chip", group: "Monitor" },
-  { id: "processes", label: "Processes", icon: "processes" },
-  { id: "benchmarks", label: "Benchmarks", icon: "bench" },
-  { id: "tweak", label: "NOCTURN Tweak", icon: "tweak", group: "Optimise" },
-  { id: "customise", label: "Customise", icon: "customise" },
-  { id: "profiles", label: "App profiles", icon: "profiles" },
-  { id: "gaming", label: "Gaming", icon: "gaming" },
-  { id: "diagnostics", label: "System Diagnostics", icon: "diagnostics" },
-  { id: "network", label: "Network", icon: "network" },
-  { id: "storage", label: "Storage", icon: "storage" },
-  { id: "startup", label: "Startup Manager", icon: "startup" },
-  { id: "services", label: "Services", icon: "services" },
-  { id: "maintenance", label: "Maintenance", icon: "maintenance" },
-  { id: "assistant", label: "AI Assistant", icon: "assistant", group: "Assist" },
-  { id: "history", label: "History", icon: "history" },
-  { id: "settings", label: "Settings", icon: "settings" },
-];
-
 export function Sidebar() {
   const { page, navigate } = useApp();
+  const { prefs, update } = usePrefs();
   const [info, setInfo] = useState<AppInfo | null>(null);
   useEffect(() => {
     api.appInfo().then(setInfo).catch(() => {});
   }, []);
+  const nav = prefs.navigation;
+  const sections = nav.order.map((id) => SECTIONS.find((s) => s.id === id)).filter((s): s is NavSection => !!s && !nav.hidden.includes(s.id));
+  const current = sectionOf(page);
+  const toggle = (id: string) =>
+    update((p) => ({ ...p, navigation: { ...p.navigation, expanded: p.navigation.expanded.includes(id) ? p.navigation.expanded.filter((x) => x !== id) : [...p.navigation.expanded, id] } }));
+
+  const item = (id: PageId, label: string, icon: keyof typeof I, sub = false) => {
+    const Icon = I[icon];
+    return (
+      <button key={`${sub ? "c" : "p"}-${id}`} className={`nav-item ${sub ? "sub" : ""} ${page === id ? "active" : ""}`} aria-current={page === id ? "page" : undefined} title={nav.compact ? label : undefined} onClick={() => navigate(id)}>
+        <Icon />
+        <span className="label">{label}</span>
+      </button>
+    );
+  };
+
   return (
     <nav className="sidebar" aria-label="Main">
-      {NAV.map((n) => {
-        const Icon = I[n.icon];
+      {nav.pinned.length > 0 && (
+        <>
+          <div className="group-label">Pinned</div>
+          {nav.pinned.map((id) => {
+            const p = ALL_PAGES.find((x) => x.id === id);
+            return p ? item(p.id, p.label, p.icon) : null;
+          })}
+          <div className="group-label">Nocturn</div>
+        </>
+      )}
+      {sections.map((s) => {
+        if (!s.children) return item(s.page!, s.label, s.icon);
+        const Icon = I[s.icon];
+        const open = nav.expanded.includes(s.id);
+        const here = current?.id === s.id;
         return (
-          <div key={n.id} style={{ display: "contents" }}>
-            {n.group && <div className="group-label">{n.group}</div>}
-            <button className={`nav-item ${page === n.id ? "active" : ""}`} aria-current={page === n.id ? "page" : undefined} onClick={() => navigate(n.id)}>
+          <div key={s.id} style={{ display: "contents" }}>
+            <button
+              className={`nav-item section ${here && !open ? "active" : ""} ${here ? "here" : ""}`}
+              aria-expanded={open}
+              title={nav.compact ? s.label : undefined}
+              onClick={() => {
+                toggle(s.id);
+                if (!open && !here) navigate(s.children![0].id);
+              }}
+            >
               <Icon />
-              {n.label}
+              <span className="label">{s.label}</span>
+              <span className="chev" aria-hidden>{open ? "▾" : "▸"}</span>
             </button>
+            {open && s.children.map((c) => item(c.id, c.label, c.icon, true))}
           </div>
         );
       })}

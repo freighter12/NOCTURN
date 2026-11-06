@@ -123,7 +123,7 @@ export function Customise() {
   return (
     <div className="page">
       <PageHead
-        eyebrow="Customise"
+        eyebrow="System › Windows settings"
         title="Taskbar, File Explorer and notifications"
         desc="Everyday Windows settings in one place. Each change is previewed, applies to your account only (no administrator approval), and can be undone from History. “Windows default” removes NOCTURN's value so Windows behaves as it does out of the box."
         actions={

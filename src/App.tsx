@@ -18,10 +18,23 @@ import { Benchmarks } from "./pages/Benchmarks";
 import { Maintenance } from "./pages/Maintenance";
 import { AppProfiles } from "./pages/AppProfiles";
 import { Tweak } from "./pages/Tweak";
+import { Home } from "./pages/Home";
+import { Coming } from "./pages/Coming";
+import { PrefsProvider, usePrefs } from "./shell/PrefsProvider";
 
 function Pages() {
   const { page } = useApp();
   switch (page) {
+    case "home":
+      return <Home />;
+    case "library":
+      return <Coming eyebrow="Library" title="Your apps and services" desc="Installed apps, Nocturn apps and connected services, organised your way." phase="Phase 4" />;
+    case "music":
+      return <Coming eyebrow="Nocturn Music" title="Music" desc="Your music library, playlists and queue — no ads, ever." phase="Phase 6" />;
+    case "workspaces":
+      return <Coming eyebrow="Workspaces" title="Workspaces" desc="Environments for gaming, study, creative work and more." phase="Phase 5" />;
+    case "studio":
+      return <Coming eyebrow="Experience Studio" title="Customise Nocturn" desc="Themes, colours, layout, navigation and your dashboard." phase="Phase 3" />;
     case "overview":
       return <Overview />;
     case "hardware":
@@ -59,12 +72,14 @@ function Pages() {
   }
 }
 
-export function App() {
+function Shell() {
+  const { prefs } = usePrefs();
+  const nav = prefs.navigation;
   return (
     <AppProvider>
       <div className="shell">
         <TitleBar />
-        <div className="body">
+        <div className={["body", nav.sidebar === "right" ? "right" : "", nav.compact ? "compact" : ""].filter(Boolean).join(" ")}>
           <Sidebar />
           <main className="main" id="main">
             <Pages />
@@ -73,5 +88,13 @@ export function App() {
       </div>
       <ApplyFlow />
     </AppProvider>
+  );
+}
+
+export function App() {
+  return (
+    <PrefsProvider>
+      <Shell />
+    </PrefsProvider>
   );
 }

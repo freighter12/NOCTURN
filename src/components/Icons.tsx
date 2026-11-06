@@ -95,6 +95,51 @@ export const I = {
   plus: (p: P) => (
     <svg {...base(p)}><path d="M8 3v10M3 8h10" /></svg>
   ),
+  library: (p: P) => (
+    <svg {...base(p)}><rect x="2" y="2" width="5" height="5" rx="1.2" /><rect x="9" y="2" width="5" height="5" rx="1.2" /><rect x="2" y="9" width="5" height="5" rx="1.2" /><rect x="9" y="9" width="5" height="5" rx="1.2" /></svg>
+  ),
+  music: (p: P) => (
+    <svg {...base(p)}><path d="M6 12.2V3.6l7-1.6v8.6" /><circle cx="4.3" cy="12.2" r="1.8" /><circle cx="11.3" cy="10.6" r="1.8" /></svg>
+  ),
+  workspaces: (p: P) => (
+    <svg {...base(p)}><rect x="1.8" y="4.2" width="9.5" height="8" rx="1.3" /><path d="M4.6 4.2V3a1 1 0 011-1h7.6a1 1 0 011 1v6.6a1 1 0 01-1 1h-1.9" /></svg>
+  ),
+  studio: (p: P) => (
+    <svg {...base(p)}><path d="M8 1.8a6.2 6.2 0 100 12.4c.9 0 1.3-.6 1.1-1.3l-.3-.9c-.3-.9.4-1.7 1.3-1.7h1.6a2.5 2.5 0 002.5-2.5A6.2 6.2 0 008 1.8z" /><circle cx="5" cy="7" r=".6" fill="currentColor" /><circle cx="7.8" cy="4.8" r=".6" fill="currentColor" /><circle cx="10.7" cy="6.2" r=".6" fill="currentColor" /></svg>
+  ),
+  play: (p: P) => (
+    <svg {...base(p)}><path d="M5 3.2v9.6l7.6-4.8z" fill="currentColor" /></svg>
+  ),
+  pause: (p: P) => (
+    <svg {...base(p)}><path d="M5 3v10M11 3v10" strokeWidth="2.2" /></svg>
+  ),
+  next: (p: P) => (
+    <svg {...base(p)}><path d="M3.5 3.5v9l6.3-4.5z" fill="currentColor" /><path d="M12.3 3.5v9" strokeWidth="1.8" /></svg>
+  ),
+  prev: (p: P) => (
+    <svg {...base(p)}><path d="M12.5 3.5v9L6.2 8z" fill="currentColor" /><path d="M3.7 3.5v9" strokeWidth="1.8" /></svg>
+  ),
+  shuffle: (p: P) => (
+    <svg {...base(p)}><path d="M2 4.5h2.4c1.5 0 2.4.8 3.2 2.1l.8 1.4c.8 1.3 1.7 2.1 3.2 2.1H14M2 11.5h2.4c1 0 1.7-.3 2.3-1M9.3 5.5c.6-.7 1.3-1 2.3-1H14" /><path d="M12.3 2.8L14 4.5l-1.7 1.7M12.3 8.8L14 10.5l-1.7 1.7" /></svg>
+  ),
+  repeat: (p: P) => (
+    <svg {...base(p)}><path d="M3 7.2V6a2 2 0 012-2h7.5M13 8.8V10a2 2 0 01-2 2H3.5" /><path d="M10.8 2.3l1.7 1.7-1.7 1.7M5.2 13.7L3.5 12l1.7-1.7" /></svg>
+  ),
+  volume: (p: P) => (
+    <svg {...base(p)}><path d="M2.5 6h2.3L8 3.4v9.2L4.8 10H2.5z" /><path d="M10.5 5.6a3.4 3.4 0 010 4.8M12.3 3.8a6 6 0 010 8.4" /></svg>
+  ),
+  queue: (p: P) => (
+    <svg {...base(p)}><path d="M2 4h9M2 8h9M2 12h5" /><path d="M11 10.5v3l2.6-1.5z" fill="currentColor" /></svg>
+  ),
+  heart: (p: P) => (
+    <svg {...base(p)}><path d="M8 13.2S2.3 9.9 2.3 6a3 3 0 015.7-1.3A3 3 0 0113.7 6c0 3.9-5.7 7.2-5.7 7.2z" /></svg>
+  ),
+  pin: (p: P) => (
+    <svg {...base(p)}><path d="M9.8 2.2l4 4-2.1.7-2.4 2.4.3 2.8-1 1-2.4-2.4-3.2 3.2M5.2 8.5L2.8 6.1l1-1 2.8.3L9 3" /></svg>
+  ),
+  grid: (p: P) => (
+    <svg {...base(p)}><path d="M2 2h5v5H2zM9 2h5v3H9zM9 7h5v7H9zM2 9h5v5H2z" /></svg>
+  ),
   lock: (p: P) => (
     <svg {...base(p)}><rect x="3" y="7" width="10" height="7" rx="1.5" /><path d="M5.2 7V5.2a2.8 2.8 0 015.6 0V7" /></svg>
   ),

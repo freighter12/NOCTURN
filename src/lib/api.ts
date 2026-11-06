@@ -1061,6 +1061,8 @@ function progressChannel(onProgress?: (p: Progress) => void): Channel<Progress> 
 export const api = {
   appInfo: () => invoke<AppInfo>("app_info"),
   getSettings: () => invoke<AppSettings>("get_settings"),
+  getPrefs: () => invoke<unknown>("get_prefs"),
+  savePrefs: (prefs: object) => invoke<void>("save_prefs", { prefs }),
   saveSettings: (value: AppSettings) => invoke<AppSettings>("save_settings", { value }),
   listAudit: (limit = 200) => invoke<AuditEntry[]>("list_audit", { limit }),
 
