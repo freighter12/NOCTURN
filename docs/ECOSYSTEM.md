@@ -1,5 +1,7 @@
 # NOCTURN — Ecosystem Expansion plan
 
+**Status (2026-11-06): all eight phases built and verified.** See CHECKLIST.md for what was verified in each.
+
 Written 2026-11-06 from the "Ecosystem Expansion Specification", after
 auditing the codebase. Status per phase is tracked in `CHECKLIST.md`.
 
@@ -17,14 +19,14 @@ zero console errors.
 
 | New section | Existing pages (unchanged IDs) |
 |---|---|
-| Home | *new* widget dashboard (the current Overview stays as System › Overview) |
-| Library | *new* |
-| Music | *new* |
-| Workspaces | *new* |
+| Home | widget dashboard (the old Overview stays as System › Overview) |
+| Library | `library` |
+| Music | `music` |
+| Workspaces | `workspaces` |
 | AI | `assistant` |
 | Gaming | `gaming`, `benchmarks` |
-| System | `overview`, `hardware`, `processes`, `tweak`, `customise` (renamed **Windows settings**), `profiles`, `diagnostics`, `network`, `storage`, `startup`, `services`, `maintenance`, `history` |
-| Customise | *new* **Experience Studio** |
+| System | `overview`, `hardware`, `processes`, `tweak`, `customise` (renamed **Windows settings**), `profiles` (App profiles), `diagnostics`, `network`, `storage`, `startup`, `services`, `maintenance`, `history` |
+| Customise | `studio` (Experience Studio) |
 | Settings | `settings` (+ privacy & integrations) |
 
 ## Architecture
@@ -104,3 +106,10 @@ unusable. Studio offers "reset this section" and "reset everything".
 | 6 | Music foundation: local catalogue, playback engine, queue, library, playlists, four player modes, persistent player | 5 h |
 | 7 | AI: tools for library, workspaces, music; approval for anything that launches or changes things | 2 h |
 | 8 | Polish and testing across everything | 2–3 h |
+
+## What's left (needs decisions or resources, not code)
+
+- **Licensed Nocturn catalogue.** The player, library and track `source` field are ready; a catalogue needs licensing agreements and hosting. Until then Nocturn Music plays the user's own files.
+- **Code signing** for the installers (needs a certificate).
+- **Real app icons** in the Library (Windows icon extraction) — tiles use monograms/emoji today.
+- **Store/Xbox game detection** for the Gaming page.
