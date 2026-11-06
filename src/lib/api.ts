@@ -391,6 +391,51 @@ export interface PowerScheme {
 }
 
 
+// ------------------------------------------------------------ driver centre
+
+export interface SupportLink {
+  key: string;
+  label: string;
+}
+export interface ProblemDevice {
+  id: string;
+  name: string;
+  identified: boolean;
+  maker: string | null;
+  code: number;
+  severity: "critical" | "warning" | "info";
+  meaning: string;
+  action: string;
+  link: SupportLink | null;
+}
+export interface KeyDriver {
+  group: string;
+  device: string;
+  provider: string | null;
+  version: string | null;
+  date: string | null;
+  age_days: number | null;
+  built_in: boolean;
+  signed: boolean | null;
+  note: string | null;
+  link: SupportLink | null;
+}
+export interface DriverInstall {
+  time: string;
+  device: string;
+  provider: string | null;
+  version: string | null;
+  inf: string;
+  updated: boolean;
+}
+export interface DriverReport {
+  problems: ProblemDevice[];
+  key: KeyDriver[];
+  installs: DriverInstall[];
+  unsigned: number;
+  board_link: SupportLink | null;
+}
+
 // ----------------------------------------------------------------- crashes
 
 export type CrashArea = "graphics" | "driver" | "memory" | "storage" | "hardware" | "power" | "overlay" | "app" | "windows" | "unknown";
@@ -948,6 +993,8 @@ export const api = {
   health: (force = false) => invoke<HealthReport>("get_health", { force }),
   events: () => invoke<EventEntry[]>("get_events"),
   crashReport: () => invoke<CrashReport>("get_crash_report"),
+  driverCentre: () => invoke<DriverReport>("get_driver_centre"),
+  openSupportLink: (key: string) => invoke<void>("open_support_link", { key }),
   drivers: () => invoke<DriverEntry[]>("get_drivers"),
   services: () => invoke<ServiceEntry[]>("get_services"),
   restoreStatus: () => invoke<RestoreStatus>("get_restore_status"),

@@ -5,6 +5,7 @@
 
 pub mod crash;
 pub mod diagnostics;
+pub mod driver_centre;
 pub mod dns;
 pub mod health;
 pub mod history;

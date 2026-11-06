@@ -66,6 +66,9 @@ pub enum PsScript {
     /// app crashes/hangs, WHEA hardware errors, clean start/stop markers and
     /// the reliability (stability) index. Read-only.
     CrashEvents,
+    /// Problem devices, drivers for the device classes people update, and
+    /// non-inbox driver installs from the last 90 days. Read-only.
+    DriverCentre,
 }
 
 impl PsScript {
@@ -129,6 +132,25 @@ foreach ($e in (Q @{ LogName='Application'; ProviderName='Application Hang'; Id=
 $stab = @()
 try { $stab = @(Get-CimInstance Win32_ReliabilityStabilityMetrics -ErrorAction Stop | Where-Object { $_.TimeGenerated -gt $since } | Select-Object -First 2200 | ForEach-Object { @{ time=$_.TimeGenerated.ToUniversalTime().ToString('o'); index=[double]$_.SystemStabilityIndex } }) } catch {}
 @{ events=@($out); stability=@($stab) } | ConvertTo-Json -Depth 4 -Compress"#,
+            PsScript::DriverCentre => r#"
+$pnp = @(Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue)
+$names = @{}; foreach ($d in $pnp) { if ($d.DeviceID -and $d.Name) { $names[$d.DeviceID.ToUpper()] = $d.Name } }
+$problems = @($pnp | Where-Object { $_.ConfigManagerErrorCode -ne 0 -and $_.ConfigManagerErrorCode -ne 45 } | ForEach-Object {
+  @{ id=$_.DeviceID; name=$_.Name; class=$_.PNPClass; manufacturer=$_.Manufacturer; code=[int]$_.ConfigManagerErrorCode; hw=@($_.HardwareID); compat=@($_.CompatibleID) } })
+$classes = 'Display','Net','MEDIA','Bluetooth','System','SCSIAdapter','HDC','USB','AudioEndpoint','Camera','Image','Monitor','HIDClass','Biometric'
+$drivers = @(Get-CimInstance Win32_PnPSignedDriver -ErrorAction SilentlyContinue | Where-Object { $_.DeviceName -and $classes -contains $_.DeviceClass } | ForEach-Object {
+  @{ device=$_.DeviceName; class=$_.DeviceClass; provider=$_.DriverProviderName; manufacturer=$_.Manufacturer; version=$_.DriverVersion; date=$(if ($_.DriverDate) { $_.DriverDate.ToString('yyyy-MM-dd') } else { $null }); signed=$_.IsSigned; inf=$_.InfName; id=$_.DeviceID } })
+$installs = @()
+try {
+  foreach ($e in @(Get-WinEvent -FilterHashtable @{ LogName='Microsoft-Windows-Kernel-PnP/Configuration'; Id=400; StartTime=(Get-Date).AddDays(-90) } -MaxEvents 4000 -ErrorAction Stop)) {
+    $d = @{}; foreach ($x in ([xml]$e.ToXml()).Event.EventData.Data) { $d[$x.Name] = [string]$x.'#text' }
+    if ($d['DriverInbox'] -eq 'false' -and $d['DriverName'] -and $d['DriverName'] -ne 'null') {
+      $dev = [string]$d['DeviceInstanceId']
+      $installs += @{ time=$e.TimeCreated.ToUniversalTime().ToString('o'); id=$dev; name=$names[$dev.ToUpper()]; inf=$d['DriverName']; version=$d['DriverVersion']; provider=$d['DriverProvider']; date=$d['DriverDate']; updated=($d['DeviceUpdated'] -eq 'true') }
+    }
+  }
+} catch {}
+@{ problems=$problems; drivers=$drivers; installs=@($installs) } | ConvertTo-Json -Depth 4 -Compress"#,
             PsScript::PendingReboot => r#"
 $r = @{
   cbs = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'

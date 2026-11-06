@@ -3,6 +3,7 @@
 
 import { useMemo, useState } from "react";
 import { Crashes } from "../components/Crashes";
+import { DriverCentre } from "../components/DriverCentre";
 import { I } from "../components/Icons";
 import { Empty, ErrorNote, Loading, Note, PageHead, Panel, Seg, Spinner } from "../components/ui";
 import { api, type EventEntry, type SystemInfo } from "../lib/api";
@@ -43,7 +44,12 @@ export function Diagnostics() {
         {tab === "crashes" && <Crashes />}
         {tab === "hardware" && <Hardware />}
         {tab === "events" && <Events />}
-        {tab === "drivers" && <Drivers />}
+        {tab === "drivers" && (
+          <div className="stack" style={{ gap: 14 }}>
+            <DriverCentre />
+            <Drivers />
+          </div>
+        )}
         {tab === "services" && <Services />}
         {tab === "restore" && <Restore />}
       </div>
@@ -332,7 +338,7 @@ function Drivers() {
     <section className="panel flush">
       <div className="panel-head" style={{ paddingBottom: 12 }}>
         <div>
-          <h2>Drivers</h2>
+          <h2>All maker drivers</h2>
           <div className="sub">
             {drivers.data?.length ?? 0} drivers{unsigned ? ` · ${unsigned} unsigned` : ""}. Update graphics, chipset and network drivers from the manufacturer's site, not third-party updaters.
           </div>

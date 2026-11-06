@@ -98,6 +98,8 @@ pub fn run() {
             commands::get_health,
             commands::get_events,
             commands::get_crash_report,
+            commands::get_driver_centre,
+            commands::open_support_link,
             commands::get_drivers,
             commands::get_services,
             commands::get_restore_status,

@@ -66,13 +66,13 @@ Last updated: 2026-11-06
 ## Advanced expansion — Priority 3
 
 - ✅ Crash analyser (Diagnostics › Crashes): 90 days of blue screens (WER 1001 + Kernel-Power 41), unexpected shutdowns (forced power-off and sleep detected), EventLog 6008, WHEA hardware errors, app crashes (Application Error 1000, filtered by provider) and hangs; one incident's several records merged; 28 stop codes and 13 exception codes explained; faulting-module attribution (graphics driver, overlay, app's own code, generic Windows library); rule-based findings with steps; per-day timeline (validated palette, hover, table view) and Reliability Monitor stability index; crash-dump inventory; Ask AI per finding/app. Verified live on this PC: 1 unexpected shutdown (2 records merged), 8 app crashes in 4 apps, stability 8.2
-- ⬜ Driver centre
+- ✅ Driver centre (Diagnostics › Drivers): problem devices with all Device Manager codes explained (code 45 phantoms excluded), unnamed devices identified from PCI/USB vendor IDs and class codes; drivers worth keeping current (graphics, network, audio, Bluetooth, chipset, storage) with age notes (chipset dates explained, not flagged), built-in vs maker drivers; non-inbox driver installs/updates from the Kernel-PnP log (90 days); official support pages only, opened from a fixed allow-list and audit-logged. Never downloads or installs drivers. Verified live: identified the unnamed code-28 device as an Intel Bluetooth adapter, RTX 2080 driver shown with NVIDIA link, 18 installs listed, link opened Settings, arbitrary URL refused
 - ⬜ Benchmarks
 - ⬜ Scheduled maintenance
 
 ## Phase 6 — Testing and release
 
-- ✅ Rust unit/integration tests: 122 passing (3 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin)
+- ✅ Rust unit/integration tests: 129 passing (3 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin)
 - ✅ Frontend unit tests (vitest): chat transcript folding, formatters
 - ✅ Typecheck + production frontend build
 - ✅ All pages loaded in the real app with zero console errors (CDP walkthrough)

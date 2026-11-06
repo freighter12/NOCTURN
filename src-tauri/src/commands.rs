@@ -267,6 +267,25 @@ pub async fn get_crash_report() -> AppResult<crate::system::crash::CrashReport> 
 }
 
 #[tauri::command]
+pub async fn get_driver_centre(state: State<'_, Shared>) -> AppResult<crate::system::driver_centre::DriverReport> {
+    let st = state.inner().clone();
+    blocking(move || {
+        let info = st.system_info(false);
+        crate::system::driver_centre::report(
+            info.board.board_manufacturer.as_deref().unwrap_or(""),
+            info.board.system_manufacturer.as_deref().unwrap_or(""),
+        )
+    })
+    .await
+}
+
+/// Opens one of the driver centre's fixed official support pages.
+#[tauri::command]
+pub fn open_support_link(state: State<'_, Shared>, key: String) -> AppResult<()> {
+    crate::system::driver_centre::open(&state.db, &key)
+}
+
+#[tauri::command]
 pub async fn get_drivers() -> AppResult<Vec<diagnostics::DriverEntry>> {
     blocking(diagnostics::drivers).await
 }
