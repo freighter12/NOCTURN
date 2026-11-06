@@ -35,6 +35,9 @@ export const I = {
   diagnostics: (p: P) => (
     <svg {...base(p)}><path d="M1.8 8.5h2.6l1.6-4 2.4 7 1.6-3h4.2" /></svg>
   ),
+  customise: (p: P) => (
+    <svg {...base(p)}><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M2 10.5h12" /><path d="M4.5 12h1.5M7.5 12h1" /><path d="M5 5.5h6M5 7.5h3.5" /></svg>
+  ),
   storage: (p: P) => (
     <svg {...base(p)}><rect x="2" y="3" width="12" height="10" rx="1.5" /><path d="M2 9.5h12" /><path d="M11 11.3h.01" strokeWidth="2" /></svg>
   ),

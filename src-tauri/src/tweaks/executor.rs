@@ -105,6 +105,7 @@ pub fn display_original(op: &ChangeOp, o: &Original) -> String {
 pub(crate) fn capture_original(op: &ChangeOp) -> AppResult<Original> {
     Ok(match op {
         ChangeOp::Registry(s) => Original::Registry { value: registry::read(s.hive, &s.path, &s.name)? },
+        ChangeOp::RegistryDelete { hive, path, name } => Original::Registry { value: registry::read(*hive, path, name)? },
         ChangeOp::StartupApproval { location, name, .. } => {
             let (h, p) = location.approved_key();
             Original::Registry { value: registry::read(h, &p, name)? }
@@ -118,6 +119,7 @@ pub(crate) fn capture_original(op: &ChangeOp) -> AppResult<Original> {
 fn already_satisfied(op: &ChangeOp, original: &Original) -> bool {
     match (op, original) {
         (ChangeOp::Registry(s), Original::Registry { value: Some(v) }) => v.matches(&s.data),
+        (ChangeOp::RegistryDelete { .. }, Original::Registry { value }) => value.is_none(),
         (ChangeOp::StartupApproval { enabled, .. }, Original::Registry { value }) => {
             crate::startup::is_enabled(value) == *enabled
         }
@@ -140,6 +142,13 @@ pub(crate) fn apply_local(op: &ChangeOp) -> AppResult<String> {
                     now.display()
                 ))),
                 None => Err(AppError::msg("verification failed: value is missing after writing")),
+            }
+        }
+        ChangeOp::RegistryDelete { hive, path, name } => {
+            registry::delete(*hive, path, name)?;
+            match registry::read(*hive, path, name)? {
+                None => Ok("(not set — Windows default)".into()),
+                Some(now) => Err(AppError::msg(format!("verification failed: value still reads {}", now.display()))),
             }
         }
         ChangeOp::StartupApproval { location, name, enabled } => {
@@ -181,6 +190,12 @@ pub(crate) fn restore_local(op: &ChangeOp, original: &Original) -> AppResult<Str
         (ChangeOp::Registry(s), Original::Registry { value }) => {
             registry::restore(s.hive, &s.path, &s.name, value)?;
             if &registry::read(s.hive, &s.path, &s.name)? != value {
+                return Err(AppError::msg("value did not read back as the original"));
+            }
+        }
+        (ChangeOp::RegistryDelete { hive, path, name }, Original::Registry { value }) => {
+            registry::restore(*hive, path, name, value)?;
+            if &registry::read(*hive, path, name)? != value {
                 return Err(AppError::msg("value did not read back as the original"));
             }
         }

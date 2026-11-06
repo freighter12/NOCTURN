@@ -10,6 +10,7 @@
 
 mod ai;
 mod commands;
+mod customise;
 mod db;
 mod games;
 mod error;
@@ -124,6 +125,10 @@ pub fn run() {
             commands::preview_tweaks,
             commands::apply_tweaks,
             commands::rollback_transaction,
+            commands::list_customise,
+            commands::preview_customise,
+            commands::apply_customise,
+            commands::restart_explorer,
             commands::list_history,
             commands::get_transaction,
             commands::list_startup,

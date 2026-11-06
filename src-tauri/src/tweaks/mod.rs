@@ -204,6 +204,9 @@ impl StartupLocation {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChangeOp {
     Registry(RegSetting),
+    /// Remove a registry value so Windows falls back to its built-in default
+    /// (Customise page "reset to Windows default"). Rollback writes it back.
+    RegistryDelete { hive: Hive, path: String, name: String },
     PowerPlan { scheme: String },
     FlushDns,
     CleanTempFiles,
@@ -218,6 +221,7 @@ impl ChangeOp {
     pub fn target(&self) -> String {
         match self {
             ChangeOp::Registry(s) => s.target(),
+            ChangeOp::RegistryDelete { hive, path, name } => format!("{}\\{path}\\{name}", hive.label()),
             ChangeOp::PowerPlan { .. } => "Active power plan".into(),
             ChangeOp::FlushDns => "DNS resolver cache".into(),
             ChangeOp::CleanTempFiles => "%TEMP% (files older than 24 hours)".into(),
@@ -233,6 +237,7 @@ impl ChangeOp {
     pub fn needs_elevation(&self) -> bool {
         match self {
             ChangeOp::Registry(s) => s.hive == Hive::Hklm,
+            ChangeOp::RegistryDelete { hive, .. } => *hive == Hive::Hklm,
             ChangeOp::StartupApproval { location, .. } => location.is_machine(),
             ChangeOp::DnsServers { .. } => true,
             _ => false,

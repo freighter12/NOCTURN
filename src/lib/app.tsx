@@ -9,6 +9,7 @@ export type PageId =
   | "hardware"
   | "processes"
   | "tweak"
+  | "customise"
   | "gaming"
   | "diagnostics"
   | "network"

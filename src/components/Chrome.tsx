@@ -45,6 +45,7 @@ const NAV: { id: PageId; label: string; icon: keyof typeof I; group?: string }[]
   { id: "hardware", label: "Hardware", icon: "chip", group: "Monitor" },
   { id: "processes", label: "Processes", icon: "processes" },
   { id: "tweak", label: "NOCTURN Tweak", icon: "tweak", group: "Optimise" },
+  { id: "customise", label: "Customise", icon: "customise" },
   { id: "gaming", label: "Gaming", icon: "gaming" },
   { id: "diagnostics", label: "System Diagnostics", icon: "diagnostics" },
   { id: "network", label: "Network", icon: "network" },

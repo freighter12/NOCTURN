@@ -390,6 +390,47 @@ export interface PowerScheme {
   active: boolean;
 }
 
+
+// --------------------------------------------------------------- customise
+
+export type CustomSection = "taskbar" | "explorer" | "notifications";
+export interface CustomChoice {
+  id: string;
+  label: string;
+}
+export interface CustomSetting {
+  id: string;
+  section: CustomSection;
+  title: string;
+  description: string;
+  choices: CustomChoice[];
+  /** Choice Windows behaves like when the value isn"t set; null = varies by build. */
+  windows_default: string | null;
+  takes: Takes;
+  min_build: number | null;
+  target: string;
+  /** Choice ID, "default" when not set, or null for a value NOCTURN doesn"t offer. */
+  current: string | null;
+  current_label: string;
+  available: boolean;
+  error: string | null;
+}
+export interface CustomSelection {
+  id: string;
+  choice: string;
+}
+export interface CustomPreviewItem {
+  id: string;
+  title: string;
+  target: string;
+  current: string;
+  proposed: string;
+  will_change: boolean;
+  takes: Takes;
+}
+/** Either explicit selections, a section to reset, or everything. */
+export type CustomRequest = { selections: CustomSelection[] } | { reset: CustomSection } | { resetAll: true };
+
 // ------------------------------------------------------------------ tweaks
 
 export type Category = "gaming" | "performance" | "network" | "privacy";
@@ -835,6 +876,12 @@ export const api = {
     invoke<RollbackReport>("rollback_transaction", { txId, onProgress: progressChannel(onProgress) }),
   history: (limit = 100) => invoke<TxSummary[]>("list_history", { limit }),
   transaction: (txId: string) => invoke<{ summary: TxSummary; changes: ChangeRow[] }>("get_transaction", { txId }),
+
+  customise: () => invoke<CustomSetting[]>("list_customise"),
+  previewCustomise: (req: CustomRequest) => invoke<CustomPreviewItem[]>("preview_customise", req),
+  applyCustomise: (req: CustomRequest, label: string, onProgress?: (p: Progress) => void) =>
+    invoke<ApplyReport>("apply_customise", { ...req, label, onProgress: progressChannel(onProgress) }),
+  restartExplorer: () => invoke<void>("restart_explorer"),
 
   startup: () => invoke<StartupItem[]>("list_startup"),
   startupChanges: () => invoke<StartupChange[]>("list_startup_changes"),

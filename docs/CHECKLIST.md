@@ -58,15 +58,16 @@ Last updated: 2026-11-06
 - 🟡 Network — DNS provider switching (Automatic / Cloudflare / Google / Quad9) per adapter, IPv4 + IPv6, via native `SetInterfaceDnsSettings`; new journaled `DnsServers` op with rollback; elevated worker accepts only the fixed provider lists (rollback: plain IPs of the right family). Preview verified live; **apply/rollback not yet exercised** — needs a UAC approval on a real adapter
 - ✅ Storage page: scan a drive or folder (junctions/symlinks never followed, OneDrive online-only files skipped so nothing downloads), folder usage map with drill-down, 200 largest files, duplicates (size → first 64 KiB → SHA-256), Recycle Bin size and empty (two-step confirm). Verified live: 680k files / 138 GB scanned in 38 s
 - ✅ Review-then-recycle: only files from the last scan, unchanged since, outside Windows/Program Files/ProgramData/system files; Windows warns before any permanent delete; at least one copy of every duplicate set is always kept; audit-logged. Verified live end to end on throwaway files
-- ⬜ Customisation categories (taskbar, Explorer, notifications) with "reset to Windows default"
+- ✅ Customise page: 19 per-user settings in Taskbar (alignment, search, Task View, combine buttons, clock seconds, End task), File Explorer (extensions, hidden files, open-to, compact view, full path, recent/frequent in Home, sync-provider banners) and Notifications (banners, lock screen, sounds, welcome experience, "finish setting up"); choices are compiled in, HKCU only (elevated worker refuses them), preview → apply → Undo/History. "Windows default" removes the value via a new journaled `RegistryDelete` op instead of guessing a default; per-section and all-settings reset. Settings change broadcast after apply/rollback. Verified live: apply → registry 1 → Undo → 0; section-reset preview against the real values (not applied); real-registry round-trip test (apply, reset, roll back both → byte-identical original)
+- 🟡 "Restart File Explorer" button (for compact view, Home lists, sync banners): implemented with a two-step confirm, not exercised live because it closes open Explorer windows
 - ⬜ Service management: tiering, journaled start-type changes with rollback
 
 ## Phase 6 — Testing and release
 
-- ✅ Rust unit/integration tests: 100 passing (2 ignored tests with real side effects, run manually: registry round-trip, Recycle Bin)
+- ✅ Rust unit/integration tests: 106 passing (3 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin)
 - ✅ Frontend unit tests (vitest): chat transcript folding, formatters
 - ✅ Typecheck + production frontend build
-- ✅ All nine pages loaded in the real app with zero console errors (CDP walkthrough)
+- ✅ All pages loaded in the real app with zero console errors (CDP walkthrough)
 - ⬜ Signed installer (`npm run tauri build` → NSIS/MSI); needs a code-signing certificate
 - ⬜ Windows 10 verification (only Windows 11 tested so far)
 - ⬜ End-to-end AI test with a real key: plan proposal → approval → verification

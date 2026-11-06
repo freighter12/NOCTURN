@@ -12,6 +12,7 @@ import { Overview } from "./pages/Overview";
 import { Settings } from "./pages/Settings";
 import { Startup } from "./pages/Startup";
 import { Storage } from "./pages/Storage";
+import { Customise } from "./pages/Customise";
 import { Tweak } from "./pages/Tweak";
 
 function Pages() {
@@ -25,6 +26,8 @@ function Pages() {
       return <Processes />;
     case "tweak":
       return <Tweak />;
+    case "customise":
+      return <Customise />;
     case "gaming":
       return <Gaming />;
     case "diagnostics":

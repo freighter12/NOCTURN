@@ -419,10 +419,68 @@ pub async fn rollback_transaction(
         let r = engine::rollback(&st.db, &tx_id, &|p| {
             let _ = on_progress.send(p);
         });
+        // Customise changes take effect without signing out once the shell is told.
+        crate::customise::notify_shell();
         st.invalidate_health();
         r
     })
     .await
+}
+
+// ------------------------------------------------------------ customise
+
+#[tauri::command]
+pub async fn list_customise() -> AppResult<Vec<crate::customise::SettingView>> {
+    blocking(|| Ok(crate::customise::list())).await
+}
+
+/// `selections` picks choices; `reset` (one section) or `reset_all` instead
+/// returns every setting in that scope to the Windows default.
+fn customise_selection(
+    selections: Option<Vec<crate::customise::Selection>>,
+    reset: Option<crate::customise::Section>,
+    reset_all: bool,
+) -> AppResult<Vec<crate::customise::Selection>> {
+    match (selections, reset, reset_all) {
+        (Some(s), None, false) => Ok(s),
+        (None, Some(sec), false) => Ok(crate::customise::reset_selection(Some(sec))),
+        (None, None, true) => Ok(crate::customise::reset_selection(None)),
+        _ => Err(AppError::Invalid("give either selections or a reset target".into())),
+    }
+}
+
+#[tauri::command]
+pub async fn preview_customise(
+    selections: Option<Vec<crate::customise::Selection>>,
+    reset: Option<crate::customise::Section>,
+    reset_all: Option<bool>,
+) -> AppResult<Vec<crate::customise::PreviewItem>> {
+    blocking(move || crate::customise::preview(&customise_selection(selections, reset, reset_all.unwrap_or(false))?)).await
+}
+
+#[tauri::command]
+pub async fn apply_customise(
+    state: State<'_, Shared>,
+    selections: Option<Vec<crate::customise::Selection>>,
+    reset: Option<crate::customise::Section>,
+    reset_all: Option<bool>,
+    label: String,
+    on_progress: Channel<engine::Progress>,
+) -> AppResult<engine::ApplyReport> {
+    let st = state.inner().clone();
+    blocking(move || {
+        let sel = customise_selection(selections, reset, reset_all.unwrap_or(false))?;
+        crate::customise::apply(&st.db, &st.data_dir, &sel, &label, &|p| {
+            let _ = on_progress.send(p);
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn restart_explorer(state: State<'_, Shared>) -> AppResult<()> {
+    let st = state.inner().clone();
+    blocking(move || crate::customise::restart_explorer(&st.db)).await
 }
 
 #[tauri::command]

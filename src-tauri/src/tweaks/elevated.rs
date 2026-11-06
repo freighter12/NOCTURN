@@ -84,11 +84,16 @@ fn validate(tweak_id: &str, op: &ChangeOp, applying: bool) -> AppResult<()> {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn validate_for_test(tweak_id: &str, op: &ChangeOp) -> AppResult<()> {
+    validate(tweak_id, op, true)
+}
+
 /// The original state must match the op's kind before it's restored.
 fn original_fits(op: &ChangeOp, o: &Original) -> bool {
     matches!(
         (op, o),
-        (ChangeOp::Registry(_) | ChangeOp::StartupApproval { .. }, Original::Registry { .. }) | (ChangeOp::DnsServers { .. }, Original::Dns { .. })
+        (ChangeOp::Registry(_) | ChangeOp::RegistryDelete { .. } | ChangeOp::StartupApproval { .. }, Original::Registry { .. }) | (ChangeOp::DnsServers { .. }, Original::Dns { .. })
     )
 }
 
