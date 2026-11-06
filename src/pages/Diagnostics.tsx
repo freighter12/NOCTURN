@@ -367,7 +367,7 @@ function Drivers() {
                   <td className="small muted">{d.class ?? "—"}</td>
                   <td className="small">{d.provider ?? "—"}</td>
                   <td className="mono small">{d.version ?? "—"}</td>
-                  <td className="small" style={{ color: old ? "#f6cc6e" : undefined }} title={old ? "Older than three years" : undefined}>
+                  <td className="small" style={{ color: old ? "var(--ink-warning)" : undefined }} title={old ? "Older than three years" : undefined}>
                     {date(d.date)}
                   </td>
                 </tr>

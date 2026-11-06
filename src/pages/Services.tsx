@@ -197,7 +197,7 @@ export function Services() {
                           </div>
                         </td>
                         <td className="small">
-                          <span style={{ color: s.state === "running" ? "#7fd07f" : "var(--ink-2)" }}>{s.state}</span>
+                          <span style={{ color: s.state === "running" ? "var(--ink-good)" : "var(--ink-2)" }}>{s.state}</span>
                         </td>
                         <td className="r">
                           {s.allowed.length > 0 ? (
@@ -214,9 +214,9 @@ export function Services() {
                       </tr>
                       {isOpen && (
                         <tr>
-                          <td colSpan={3} style={{ background: "rgba(255,255,255,0.015)" }}>
+                          <td colSpan={3} style={{ background: "rgba(var(--overlay-rgb), 0.015)" }}>
                             <div className="stack" style={{ gap: 8, padding: "4px 0 4px 30px" }}>
-                              {s.note && <div className="small" style={{ color: "#f6cc6e" }}>{s.note}</div>}
+                              {s.note && <div className="small" style={{ color: "var(--ink-warning)" }}>{s.note}</div>}
                               {s.description && <div className="small muted">{s.description}</div>}
                               <dl className="kv">
                                 <dt>Service name</dt>
@@ -280,9 +280,9 @@ export function Services() {
                       <td className="muted">{i.current}</td>
                       <td>{i.refused ? <span className="dim">not changed</span> : i.proposed}</td>
                       <td className="small">
-                        {i.refused && <div style={{ color: "#ee8a8a" }}>{i.refused}</div>}
+                        {i.refused && <div style={{ color: "var(--ink-critical)" }}>{i.refused}</div>}
                         {i.warnings.map((w) => (
-                          <div key={w} style={{ color: "#f6cc6e" }}>{w}</div>
+                          <div key={w} style={{ color: "var(--ink-warning)" }}>{w}</div>
                         ))}
                         {!i.refused && !i.warnings.length && <span className="dim">—</span>}
                       </td>

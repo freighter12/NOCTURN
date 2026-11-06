@@ -128,7 +128,7 @@ export function Network() {
                       <td className="r num">{p.avg_ms != null ? `${p.avg_ms.toFixed(0)} ms` : "—"}</td>
                       <td className="r num muted">{p.min_ms != null ? `${p.min_ms} / ${p.max_ms} ms` : "—"}</td>
                       <td className="r num">{p.jitter_ms != null ? `${p.jitter_ms.toFixed(1)} ms` : "—"}</td>
-                      <td className="r num" style={{ color: p.loss_percent >= 5 ? "#ee8a8a" : p.loss_percent > 0 ? "#f6cc6e" : undefined }}>
+                      <td className="r num" style={{ color: p.loss_percent >= 5 ? "var(--ink-critical)" : p.loss_percent > 0 ? "var(--ink-warning)" : undefined }}>
                         {p.loss_percent.toFixed(0)}%
                       </td>
                     </tr>
@@ -140,7 +140,7 @@ export function Network() {
                 {test.dns.map((d) => (
                   <div key={d.host} className="row between small">
                     <span className="mono">{d.host}</span>
-                    <span className="num">{d.ms != null ? `${d.ms} ms` : <span style={{ color: "#ee8a8a" }}>{d.error ?? "failed"}</span>}</span>
+                    <span className="num">{d.ms != null ? `${d.ms} ms` : <span style={{ color: "var(--ink-critical)" }}>{d.error ?? "failed"}</span>}</span>
                   </div>
                 ))}
                 <Verdict report={test} />

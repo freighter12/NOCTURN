@@ -59,7 +59,7 @@ function Transactions() {
             onClick={() => setSel(t.id)}
             style={{
               width: "100%", textAlign: "left", border: 0, borderTop: "1px solid var(--line)", padding: "12px 16px", cursor: "default", color: "inherit",
-              background: current === t.id ? "rgba(255,255,255,.045)" : "transparent",
+              background: current === t.id ? "rgba(var(--overlay-rgb), .045)" : "transparent",
             }}
           >
             <div className="body">
@@ -208,7 +208,7 @@ function ChangeLine({ c }: { c: ChangeRow }) {
           {c.applied_at ? ` · applied ${relative(c.applied_at)}` : ""}
           {c.rolled_back_at ? ` · reverted ${relative(c.rolled_back_at)}` : ""}
         </div>
-        {c.error && <div className="small" style={{ color: "#ee8a8a" }}>{c.error}</div>}
+        {c.error && <div className="small" style={{ color: "var(--ink-critical)" }}>{c.error}</div>}
       </div>
       <div className="val selectable" title={JSON.stringify(c.original)}>{describe(c.original)}</div>
       <div />

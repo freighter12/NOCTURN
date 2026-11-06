@@ -7,6 +7,25 @@
 // default, so one bad value can never make the interface unusable.
 
 import type { PageId } from "../lib/app";
+import { OFFICIAL_THEMES, readabilityProblem, type Theme, type ThemeTokens } from "./theme";
+
+export type BackgroundStyle = "plain" | "glow" | "horizon" | "stars";
+export const BACKGROUNDS: BackgroundStyle[] = ["plain", "glow", "horizon", "stars"];
+const TOKEN_KEYS: (keyof ThemeTokens)[] = ["bg0", "bg1", "bg2", "bg3", "bg4", "ink0", "ink1", "ink2", "ink3", "accent", "accent2"];
+
+/** A stored custom theme, or null if it's malformed or unreadable. */
+export function sanitizeTheme(raw: unknown): Theme | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const tok = (typeof r.tokens === "object" && r.tokens !== null ? r.tokens : {}) as Record<string, unknown>;
+  if (typeof r.id !== "string" || !/^custom-[a-z0-9-]{1,40}$/.test(r.id)) return null;
+  if (OFFICIAL_THEMES.some((t) => t.id === r.id)) return null;
+  if (!TOKEN_KEYS.every((k) => isHexColour(tok[k]))) return null;
+  const tokens = Object.fromEntries(TOKEN_KEYS.map((k) => [k, (tok[k] as string).toLowerCase()])) as unknown as ThemeTokens;
+  if (readabilityProblem(tokens)) return null;
+  const name = typeof r.name === "string" && r.name.trim() ? r.name.trim().slice(0, 40) : "My theme";
+  return { id: r.id, name, description: typeof r.description === "string" ? r.description.slice(0, 120) : "", kind: r.kind === "light" ? "light" : "dark", tokens };
+}
 
 export const PREFS_VERSION = 1;
 
@@ -40,6 +59,10 @@ export interface Prefs {
     /** Panel borders. */
     borders: boolean;
     highContrast: boolean;
+    /** Treatment behind the pages. */
+    background: BackgroundStyle;
+    /** The user's own themes (Experience Studio). */
+    customThemes: Theme[];
   };
   navigation: {
     /** Section order (section IDs). Unknown IDs are dropped, missing ones appended. */
@@ -88,7 +111,7 @@ export const DEFAULT_WIDGETS: WidgetSlot[] = [
 
 export const DEFAULT_PREFS: Prefs = {
   version: PREFS_VERSION,
-  appearance: { theme: "nocturn", accent: null, radius: 1, transparency: 0, blur: 0, shadows: true, borders: true, highContrast: false },
+  appearance: { theme: "nocturn", accent: null, radius: 1, transparency: 0, blur: 0, shadows: true, borders: true, highContrast: false, background: "plain", customThemes: [] },
   navigation: {
     order: ["home", "library", "music", "workspaces", "ai", "gaming", "system", "studio", "settings"],
     hidden: [],
@@ -140,6 +163,13 @@ export function sanitize(raw: unknown, pages: readonly string[], sections: reado
   const order = [...stored, ...d.navigation.order.filter((s) => sections.includes(s) && !stored.includes(s)), ...sections.filter((s) => !stored.includes(s) && !d.navigation.order.includes(s))];
   const hidden = (strList(n.hidden, sections) ?? []).filter((s) => !LOCKED_SECTIONS.includes(s));
 
+  const customThemes: Theme[] = [];
+  if (Array.isArray(a.customThemes)) {
+    for (const t of a.customThemes.slice(0, 30)) {
+      const ok = sanitizeTheme(t);
+      if (ok && !customThemes.some((x) => x.id === ok.id)) customThemes.push(ok);
+    }
+  }
   let widgets: WidgetSlot[] = d.home.widgets;
   if (Array.isArray(h.widgets)) {
     const seen = new Set<string>();
@@ -162,6 +192,8 @@ export function sanitize(raw: unknown, pages: readonly string[], sections: reado
       shadows: bool(a.shadows, d.appearance.shadows),
       borders: bool(a.borders, d.appearance.borders),
       highContrast: bool(a.highContrast, d.appearance.highContrast),
+      background: oneOf<BackgroundStyle>(a.background, BACKGROUNDS, "plain"),
+      customThemes,
     },
     navigation: {
       order,

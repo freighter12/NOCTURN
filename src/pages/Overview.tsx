@@ -268,7 +268,7 @@ function ConditionRing({ report, loading }: { report: HealthReport | null; loadi
           strokeLinecap="round"
           strokeDasharray={c}
           strokeDashoffset={c * (1 - score / 100)}
-          style={{ transition: "stroke-dashoffset 900ms var(--ease)", filter: report?.condition === "Good" ? "drop-shadow(0 0 6px rgba(223,226,232,.35))" : undefined }}
+          style={{ transition: "stroke-dashoffset 900ms var(--ease)", filter: report?.condition === "Good" ? "drop-shadow(0 0 6px rgba(var(--accent-rgb), .35))" : undefined }}
         />
       </svg>
       <div className="center">

@@ -83,7 +83,7 @@ Last updated: 2026-11-06
 ## Ecosystem expansion (see ECOSYSTEM.md)
 
 - ✅ Phase 1 — audit, plan (docs/ECOSYSTEM.md), baseline green
-- ✅ Phase 2 — shell: data-driven navigation (Home, Library, Music, Workspaces, AI, Gaming, System, Customise, Settings; every existing page keeps its ID, all 22 reachable with zero console errors), expandable groups, pinned pages, compact and right-hand sidebar support; central preference document (, versioned, sanitised field by field with 6 tests; System/Settings can't be hidden); data-driven themes applied live via CSS variables; text sizes follow a font-scale token; Home dashboard with 9 widget types laid out from preferences. Old Customise page renamed Windows settings (System)
+- ✅ Phase 2 — shell: data-driven navigation (Home, Library, Music, Workspaces, AI, Gaming, System, Customise, Settings; every existing page keeps its ID, all 22 reachable with zero console errors), expandable groups, pinned pages, compact and right-hand sidebar support; central preference document (`ui.prefs`, versioned, sanitised field by field with 6 tests; System/Settings can't be hidden); data-driven themes applied live via CSS variables; text sizes follow a font-scale token; Home dashboard with 9 widget types laid out from preferences. Old Customise page renamed Windows settings (System)
 - ⬜ Phase 3 — Experience Studio
 - ⬜ Phase 4 — App Library
 - ⬜ Phase 5 — Workspaces

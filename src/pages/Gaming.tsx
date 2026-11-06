@@ -535,7 +535,7 @@ function PowerPlans() {
         <div className="list">
           {plans.data?.map((p) => (
             <div className="list-item" key={p.guid} style={{ alignItems: "center" }}>
-              <span className="status-dot" style={{ background: p.active ? "var(--moon)" : "var(--bg-4)", boxShadow: p.active ? "0 0 8px rgba(223,226,232,.6)" : undefined }} />
+              <span className="status-dot" style={{ background: p.active ? "var(--moon)" : "var(--bg-4)", boxShadow: p.active ? "0 0 8px rgba(var(--accent-rgb), .6)" : undefined }} />
               <div className="body">
                 <div className="title">{p.name}</div>
                 <div className="desc mono">{p.guid}</div>

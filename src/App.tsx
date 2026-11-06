@@ -20,7 +20,18 @@ import { AppProfiles } from "./pages/AppProfiles";
 import { Tweak } from "./pages/Tweak";
 import { Home } from "./pages/Home";
 import { Coming } from "./pages/Coming";
+import { Studio } from "./pages/Studio";
+import { ErrorBoundary } from "./shell/ErrorBoundary";
 import { PrefsProvider, usePrefs } from "./shell/PrefsProvider";
+
+function GuardedPages() {
+  const { page, navigate } = useApp();
+  return (
+    <ErrorBoundary resetKey={page} onHome={() => navigate("home")}>
+      <Pages />
+    </ErrorBoundary>
+  );
+}
 
 function Pages() {
   const { page } = useApp();
@@ -34,7 +45,7 @@ function Pages() {
     case "workspaces":
       return <Coming eyebrow="Workspaces" title="Workspaces" desc="Environments for gaming, study, creative work and more." phase="Phase 5" />;
     case "studio":
-      return <Coming eyebrow="Experience Studio" title="Customise Nocturn" desc="Themes, colours, layout, navigation and your dashboard." phase="Phase 3" />;
+      return <Studio />;
     case "overview":
       return <Overview />;
     case "hardware":
@@ -81,8 +92,8 @@ function Shell() {
         <TitleBar />
         <div className={["body", nav.sidebar === "right" ? "right" : "", nav.compact ? "compact" : ""].filter(Boolean).join(" ")}>
           <Sidebar />
-          <main className="main" id="main">
-            <Pages />
+          <main className="main" id="main" data-bg={prefs.appearance.background}>
+            <GuardedPages />
           </main>
         </div>
       </div>

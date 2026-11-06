@@ -516,7 +516,7 @@ function RecycleBin({ version }: { version: number }) {
           {info.data.items > 0 &&
             (confirm ? (
               <span className="row" style={{ gap: 6 }}>
-                <span className="small" style={{ color: "#ee8a8a" }}>Permanently delete everything in it?</span>
+                <span className="small" style={{ color: "var(--ink-critical)" }}>Permanently delete everything in it?</span>
                 <button className="btn ghost sm" disabled={busy} onClick={() => setConfirm(false)}>Keep</button>
                 <button className="btn sm" style={{ borderColor: "rgba(208,59,59,.5)" }} disabled={busy} onClick={empty}>{busy ? <Spinner /> : null} Empty it</button>
               </span>

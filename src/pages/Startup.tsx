@@ -164,7 +164,7 @@ export function Startup() {
                     )}
                     <div className="mono dim truncate selectable" title={s.command}>{s.command}</div>
                     {s.insight?.review.map((r) => (
-                      <div key={r} className="small" style={{ color: "#f6cc6e", marginTop: 2 }}>
+                      <div key={r} className="small" style={{ color: "var(--ink-warning)", marginTop: 2 }}>
                         {r}
                       </div>
                     ))}

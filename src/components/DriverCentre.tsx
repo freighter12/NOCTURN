@@ -84,7 +84,7 @@ export function DriverCentre() {
                       <span>{k.device}</span>
                       {k.signed === false && <span className="tag warning">Unsigned</span>}
                     </div>
-                    {k.note && <div className="small" style={{ color: k.built_in ? "var(--ink-2)" : "#f6cc6e" }}>{k.note}</div>}
+                    {k.note && <div className="small" style={{ color: k.built_in ? "var(--ink-2)" : "var(--ink-warning)" }}>{k.note}</div>}
                   </td>
                   <td className="small">{k.provider ?? "—"}</td>
                   <td className="mono small">{k.version ?? "—"}</td>

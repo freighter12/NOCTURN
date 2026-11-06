@@ -55,3 +55,32 @@ describe("sanitize", () => {
     expect(isHexColour("url(javascript:x)")).toBe(false);
   });
 });
+
+import { OFFICIAL_THEMES, accentProblem, contrast, readabilityProblem } from "./theme";
+import { sanitizeTheme } from "./prefs";
+
+describe("themes", () => {
+  it("every official theme is readable", () => {
+    for (const t of OFFICIAL_THEMES) expect(readabilityProblem(t.tokens), t.id).toBeNull();
+  });
+
+  it("contrast maths matches WCAG", () => {
+    expect(contrast("#000000", "#ffffff")).toBeCloseTo(21, 0);
+    expect(contrast("#777777", "#777777")).toBeCloseTo(1, 5);
+  });
+
+  it("rejects unreadable or malformed custom themes", () => {
+    const base = OFFICIAL_THEMES[0];
+    const ok = sanitizeTheme({ ...base, id: "custom-mine", name: "Mine" });
+    expect(ok?.name).toBe("Mine");
+    expect(sanitizeTheme({ ...base, id: "custom-grey", tokens: { ...base.tokens, ink0: base.tokens.bg2 } })).toBeNull();
+    expect(sanitizeTheme({ ...base, id: "nocturn" })).toBeNull();
+    expect(sanitizeTheme({ ...base, id: "custom-x", tokens: { ...base.tokens, bg0: "red" } })).toBeNull();
+    expect(sanitizeTheme({ ...base, id: "../../etc" })).toBeNull();
+  });
+
+  it("flags accents that disappear on the panel", () => {
+    expect(accentProblem("#13141a", OFFICIAL_THEMES[0].tokens)).not.toBeNull();
+    expect(accentProblem("#9fc3ff", OFFICIAL_THEMES[0].tokens)).toBeNull();
+  });
+});

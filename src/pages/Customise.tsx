@@ -173,7 +173,7 @@ export function Customise() {
                         {s.current === null && !s.error && <span className="tag warning" title="Set to a value NOCTURN doesn't offer, possibly by another tool">Custom value</span>}
                       </div>
                       <div className="small muted">{s.description}</div>
-                      {s.error && <div className="small" style={{ color: "#ee8a8a" }}>{s.error}</div>}
+                      {s.error && <div className="small" style={{ color: "var(--ink-critical)" }}>{s.error}</div>}
                     </td>
                     <td className="small dim">{s.takes === "app_restart" ? "Reopen File Explorer" : takesLabel[s.takes]}</td>
                     <td className="r" style={{ width: 230 }}>

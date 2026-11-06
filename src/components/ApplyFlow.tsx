@@ -279,7 +279,7 @@ export function ApplyFlow() {
                             </span>
                             <span className="tag"><I.lock /> Admin</span>
                           </div>
-                          {v.refused && <div className="small" style={{ color: "#ee8a8a" }}>{v.refused}</div>}
+                          {v.refused && <div className="small" style={{ color: "var(--ink-critical)" }}>{v.refused}</div>}
                           {v.warnings.map((w) => <div key={w} className="small dim">{w}</div>)}
                         </div>
                         <div className="val">{v.current}</div>
@@ -351,7 +351,7 @@ export function ApplyFlow() {
                       <div key={c.name} className="change-row">
                         <div>
                           <div>{c.name}</div>
-                          {c.error && !ok && <div className="small" style={{ color: "#ee8a8a" }}>{c.error}</div>}
+                          {c.error && !ok && <div className="small" style={{ color: "var(--ink-critical)" }}>{c.error}</div>}
                         </div>
                         <div className="val">{c.ended + c.failed} process(es)</div>
                         <div className="arrow">→</div>
@@ -380,7 +380,7 @@ export function ApplyFlow() {
                       <div key={c.change_id} className="change-row">
                         <div>
                           <div className="target selectable">{c.target}</div>
-                          {c.error && <div className="small" style={{ color: "#ee8a8a" }}>{c.error}</div>}
+                          {c.error && <div className="small" style={{ color: "var(--ink-critical)" }}>{c.error}</div>}
                         </div>
                         <div className="val">{c.before}</div>
                         <div className="arrow">→</div>

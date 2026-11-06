@@ -106,7 +106,7 @@ export function Processes() {
                 </thead>
                 <tbody>
                   {rows.map((p) => (
-                    <tr key={p.name} onClick={() => setSelected(p.name === selected ? null : p.name)} style={{ cursor: "default", background: p.name === selected ? "rgba(255,255,255,.045)" : undefined }}>
+                    <tr key={p.name} onClick={() => setSelected(p.name === selected ? null : p.name)} style={{ cursor: "default", background: p.name === selected ? "rgba(var(--overlay-rgb), .045)" : undefined }}>
                       <td style={{ maxWidth: 0, width: "44%" }}>
                         <div className="row" style={{ gap: 7, flexWrap: "wrap" }}>
                           <span className="status-dot" title={p.has_window ? "App with a window" : "Background process"} style={{ background: p.has_window ? "var(--moon-2)" : "var(--bg-4)" }} />
@@ -362,7 +362,7 @@ function RulesPanel({ rules, error, reload }: { rules: ProcessRule[] | null; err
               <tr key={r.name}>
                 <td>
                   <div style={{ fontWeight: 500 }}>{r.name}</div>
-                  {r.last_error && <div className="small" style={{ color: "#f6cc6e" }}>{r.last_error}</div>}
+                  {r.last_error && <div className="small" style={{ color: "var(--ink-warning)" }}>{r.last_error}</div>}
                 </td>
                 <td className="small">{PRIORITIES.find((p) => p.value === r.priority)?.label ?? "unchanged"}</td>
                 <td className="small mono">{r.affinity ? `${maskBits(r.affinity).size} CPU(s) · ${r.affinity}` : "unchanged"}</td>
