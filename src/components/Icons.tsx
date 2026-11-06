@@ -35,6 +35,9 @@ export const I = {
   diagnostics: (p: P) => (
     <svg {...base(p)}><path d="M1.8 8.5h2.6l1.6-4 2.4 7 1.6-3h4.2" /></svg>
   ),
+  storage: (p: P) => (
+    <svg {...base(p)}><rect x="2" y="3" width="12" height="10" rx="1.5" /><path d="M2 9.5h12" /><path d="M11 11.3h.01" strokeWidth="2" /></svg>
+  ),
   network: (p: P) => (
     <svg {...base(p)}><path d="M1.8 6.2a9 9 0 0112.4 0M3.9 8.6a6 6 0 018.2 0M6 11a3 3 0 014 0" /><circle cx="8" cy="13" r=".6" fill="currentColor" /></svg>
   ),

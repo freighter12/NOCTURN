@@ -32,6 +32,8 @@ pub struct AppState {
     pub rules: crate::system::rules::RuleCache,
     /// Detected games and the live game session.
     pub games: crate::games::GameState,
+    /// Last storage scan and duplicate search.
+    pub storage: crate::storage::StorageState,
     sysinfo: RwLock<Option<SystemInfo>>,
     caches: Mutex<Caches>,
     pub ai: crate::ai::AiRuntime,
@@ -50,6 +52,7 @@ impl AppState {
             telemetry: Arc::new(RwLock::new(TelemetryStore::default())),
             rules,
             games: crate::games::GameState::default(),
+            storage: crate::storage::StorageState::default(),
             sysinfo: RwLock::new(None),
             caches: Mutex::new(Caches::default()),
             ai: crate::ai::AiRuntime::default(),

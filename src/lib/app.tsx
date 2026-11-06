@@ -12,6 +12,7 @@ export type PageId =
   | "gaming"
   | "diagnostics"
   | "network"
+  | "storage"
   | "startup"
   | "assistant"
   | "history"

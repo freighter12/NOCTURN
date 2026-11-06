@@ -17,6 +17,7 @@ mod logging;
 mod security;
 mod settings;
 mod startup;
+mod storage;
 mod startup_insight;
 mod state;
 mod system;
@@ -105,6 +106,17 @@ pub fn run() {
             commands::dns_providers,
             commands::preview_dns,
             commands::set_dns,
+            commands::storage_roots,
+            commands::storage_scan,
+            commands::storage_cancel,
+            commands::storage_status,
+            commands::storage_folder,
+            commands::storage_large_files,
+            commands::storage_find_duplicates,
+            commands::storage_duplicates,
+            commands::storage_recycle,
+            commands::recycle_bin_info,
+            commands::empty_recycle_bin,
             commands::power_plans,
             commands::set_power_plan,
             commands::list_tweaks,

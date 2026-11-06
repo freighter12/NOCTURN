@@ -11,6 +11,7 @@ import { Network } from "./pages/Network";
 import { Overview } from "./pages/Overview";
 import { Settings } from "./pages/Settings";
 import { Startup } from "./pages/Startup";
+import { Storage } from "./pages/Storage";
 import { Tweak } from "./pages/Tweak";
 
 function Pages() {
@@ -30,6 +31,8 @@ function Pages() {
       return <Diagnostics />;
     case "network":
       return <Network />;
+    case "storage":
+      return <Storage />;
     case "startup":
       return <Startup />;
     case "assistant":

@@ -657,3 +657,110 @@ pub async fn apply_game_profile(
     })
     .await
 }
+
+// -------------------------------------------------------------- storage
+
+#[derive(Serialize)]
+pub struct StorageRoot {
+    pub path: String,
+    pub label: String,
+    pub total: Option<u64>,
+    pub free: Option<u64>,
+}
+
+#[tauri::command]
+pub fn storage_roots() -> Vec<StorageRoot> {
+    let disks = sysinfo::Disks::new_with_refreshed_list().ok();
+    let mut out: Vec<StorageRoot> = disks
+        .iter()
+        .flat_map(|d| d.iter())
+        .map(|d| {
+            let path = d.mount_point().display().to_string();
+            let name = d.name().to_string_lossy().to_string();
+            StorageRoot {
+                label: if name.is_empty() { format!("Drive {path}") } else { format!("{name} ({})", path.trim_end_matches('\\')) },
+                path,
+                total: Some(d.total_space()),
+                free: Some(d.available_space()),
+            }
+        })
+        .collect();
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    if let Ok(home) = std::env::var("USERPROFILE") {
+        out.insert(0, StorageRoot { label: "Your user folder".into(), path: home, total: None, free: None });
+    }
+    out
+}
+
+#[tauri::command]
+pub async fn storage_scan(
+    state: State<'_, Shared>,
+    root: String,
+    on_progress: Channel<crate::storage::scan::ScanProgress>,
+) -> AppResult<crate::storage::ScanSummary> {
+    let st = state.inner().clone();
+    blocking(move || crate::storage::run_scan(&st.storage, &root, &|p| {
+        let _ = on_progress.send(p);
+    }))
+    .await
+}
+
+#[tauri::command]
+pub fn storage_cancel(state: State<'_, Shared>) {
+    state.storage.cancel();
+}
+
+#[tauri::command]
+pub fn storage_status(state: State<'_, Shared>) -> Option<crate::storage::ScanSummary> {
+    crate::storage::last_summary(&state.storage)
+}
+
+#[tauri::command]
+pub fn storage_folder(state: State<'_, Shared>, id: Option<u32>) -> AppResult<crate::storage::FolderView> {
+    crate::storage::folder(&state.storage, id)
+}
+
+#[tauri::command]
+pub fn storage_large_files(state: State<'_, Shared>) -> AppResult<Vec<crate::storage::FileView>> {
+    crate::storage::large_files(&state.storage)
+}
+
+#[tauri::command]
+pub async fn storage_find_duplicates(
+    state: State<'_, Shared>,
+    on_progress: Channel<crate::storage::dupes::DupProgress>,
+) -> AppResult<Vec<crate::storage::DupGroupView>> {
+    let st = state.inner().clone();
+    blocking(move || crate::storage::find_duplicates(&st.storage, &|p| {
+        let _ = on_progress.send(p);
+    }))
+    .await
+}
+
+#[tauri::command]
+pub fn storage_duplicates(state: State<'_, Shared>) -> Option<Vec<crate::storage::DupGroupView>> {
+    crate::storage::last_duplicates(&state.storage)
+}
+
+#[tauri::command]
+pub async fn storage_recycle(state: State<'_, Shared>, paths: Vec<String>) -> AppResult<crate::storage::RecycleReport> {
+    let st = state.inner().clone();
+    blocking(move || crate::storage::recycle_files(&st.storage, &st.db, &paths)).await
+}
+
+#[tauri::command]
+pub async fn recycle_bin_info() -> AppResult<crate::storage::recycle::RecycleInfo> {
+    blocking(crate::storage::recycle::query).await
+}
+
+#[tauri::command]
+pub async fn empty_recycle_bin(state: State<'_, Shared>) -> AppResult<()> {
+    let st = state.inner().clone();
+    blocking(move || {
+        let before = crate::storage::recycle::query().ok();
+        crate::storage::recycle::empty()?;
+        st.db.audit("info", "user", "storage.recycle_bin_emptied", Some(serde_json::json!({ "bytes": before.map(|b| b.size) })));
+        Ok(())
+    })
+    .await
+}

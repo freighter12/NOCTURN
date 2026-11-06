@@ -597,6 +597,74 @@ export interface GamingNow {
   overlays: Overlay[];
 }
 
+// ----------------------------------------------------------------- storage
+
+export interface StorageRoot {
+  path: string;
+  label: string;
+  total: number | null;
+  free: number | null;
+}
+export interface ScanProgress {
+  files: number;
+  dirs: number;
+  bytes: number;
+  current: string;
+}
+export interface ScanSummary {
+  root: string;
+  started_at: string;
+  duration_ms: number;
+  total_size: number;
+  total_files: number;
+  folders: number;
+  cloud_only: number;
+  unreadable: number;
+  skipped_links: number;
+  cancelled: boolean;
+  dup_candidates: number;
+}
+export interface FolderChild {
+  id: number;
+  name: string;
+  size: number;
+  files: number;
+  has_children: boolean;
+}
+export interface FolderView {
+  id: number;
+  path: string;
+  size: number;
+  files: number;
+  own_size: number;
+  own_files: number;
+  crumbs: [number, string][];
+  children: FolderChild[];
+  more_children: number;
+}
+export interface FileView {
+  path: string;
+  size: number;
+  /** Unix ms. */
+  modified: number | null;
+  protected: string | null;
+  app_data: boolean;
+}
+export interface DupGroupView {
+  size: number;
+  wasted: number;
+  files: FileView[];
+}
+export interface DupProgress {
+  hashed_bytes: number;
+  total_bytes: number;
+  groups: number;
+}
+export interface RecycleReport {
+  results: { path: string; ok: boolean; error: string | null }[];
+  freed: number;
+}
+
 // ---------------------------------------------------------------- settings
 
 export interface AiSettings {
@@ -781,6 +849,26 @@ export const api = {
   previewGameProfile: (profile: GameProfile) => invoke<ProfilePreviewItem[]>("preview_game_profile", { profile }),
   applyGameProfile: (profile: GameProfile, gameName: string, onProgress?: (p: Progress) => void) =>
     invoke<ProfileOutcome>("apply_game_profile", { profile, gameName, onProgress: progressChannel(onProgress) }),
+
+  storageRoots: () => invoke<StorageRoot[]>("storage_roots"),
+  storageScan: (root: string, onProgress: (p: ScanProgress) => void) => {
+    const ch = new Channel<ScanProgress>();
+    ch.onmessage = onProgress;
+    return invoke<ScanSummary>("storage_scan", { root, onProgress: ch });
+  },
+  storageCancel: () => invoke<void>("storage_cancel"),
+  storageStatus: () => invoke<ScanSummary | null>("storage_status"),
+  storageFolder: (id?: number) => invoke<FolderView>("storage_folder", { id: id ?? null }),
+  storageLargeFiles: () => invoke<FileView[]>("storage_large_files"),
+  storageFindDuplicates: (onProgress: (p: DupProgress) => void) => {
+    const ch = new Channel<DupProgress>();
+    ch.onmessage = onProgress;
+    return invoke<DupGroupView[]>("storage_find_duplicates", { onProgress: ch });
+  },
+  storageDuplicates: () => invoke<DupGroupView[] | null>("storage_duplicates"),
+  storageRecycle: (paths: string[]) => invoke<RecycleReport>("storage_recycle", { paths }),
+  recycleBinInfo: () => invoke<{ size: number; items: number }>("recycle_bin_info"),
+  emptyRecycleBin: () => invoke<void>("empty_recycle_bin"),
 
   aiKeyStatus: () => invoke<{ anthropic: boolean; openai_compatible: boolean }>("ai_key_status"),
   aiSetKey: (provider: string, key: string | null) => invoke<void>("ai_set_key", { provider, key }),

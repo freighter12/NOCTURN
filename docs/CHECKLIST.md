@@ -56,13 +56,14 @@ Last updated: 2026-11-06
 - ✅ Network — traceroute: native ICMP with per-hop TTL (no `tracert` process), streamed hop by hop, private-address tagging, stops after 5 silent hops (verified live: 9 hops to 1.1.1.1)
 - ✅ Network — stability test history: every test stored (1-year retention), Router vs Internet latency chart (verified live)
 - 🟡 Network — DNS provider switching (Automatic / Cloudflare / Google / Quad9) per adapter, IPv4 + IPv6, via native `SetInterfaceDnsSettings`; new journaled `DnsServers` op with rollback; elevated worker accepts only the fixed provider lists (rollback: plain IPs of the right family). Preview verified live; **apply/rollback not yet exercised** — needs a UAC approval on a real adapter
-- ⬜ Storage: folder usage map, large files, duplicates, review-then-delete to Recycle Bin
+- ✅ Storage page: scan a drive or folder (junctions/symlinks never followed, OneDrive online-only files skipped so nothing downloads), folder usage map with drill-down, 200 largest files, duplicates (size → first 64 KiB → SHA-256), Recycle Bin size and empty (two-step confirm). Verified live: 680k files / 138 GB scanned in 38 s
+- ✅ Review-then-recycle: only files from the last scan, unchanged since, outside Windows/Program Files/ProgramData/system files; Windows warns before any permanent delete; at least one copy of every duplicate set is always kept; audit-logged. Verified live end to end on throwaway files
 - ⬜ Customisation categories (taskbar, Explorer, notifications) with "reset to Windows default"
 - ⬜ Service management: tiering, journaled start-type changes with rollback
 
 ## Phase 6 — Testing and release
 
-- ✅ Rust unit/integration tests: 91 passing (1 ignored destructive round-trip test, run manually)
+- ✅ Rust unit/integration tests: 100 passing (2 ignored tests with real side effects, run manually: registry round-trip, Recycle Bin)
 - ✅ Frontend unit tests (vitest): chat transcript folding, formatters
 - ✅ Typecheck + production frontend build
 - ✅ All nine pages loaded in the real app with zero console errors (CDP walkthrough)
