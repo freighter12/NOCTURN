@@ -21,6 +21,7 @@ import { Tweak } from "./pages/Tweak";
 import { Home } from "./pages/Home";
 import { Coming } from "./pages/Coming";
 import { Studio } from "./pages/Studio";
+import { Library } from "./pages/Library";
 import { ErrorBoundary } from "./shell/ErrorBoundary";
 import { PrefsProvider, usePrefs } from "./shell/PrefsProvider";
 
@@ -39,7 +40,7 @@ function Pages() {
     case "home":
       return <Home />;
     case "library":
-      return <Coming eyebrow="Library" title="Your apps and services" desc="Installed apps, Nocturn apps and connected services, organised your way." phase="Phase 4" />;
+      return <Library />;
     case "music":
       return <Coming eyebrow="Nocturn Music" title="Music" desc="Your music library, playlists and queue — no ads, ever." phase="Phase 6" />;
     case "workspaces":

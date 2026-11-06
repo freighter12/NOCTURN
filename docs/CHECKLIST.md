@@ -84,7 +84,7 @@ Last updated: 2026-11-06
 
 - ✅ Phase 1 — audit, plan (docs/ECOSYSTEM.md), baseline green
 - ✅ Phase 2 — shell: data-driven navigation (Home, Library, Music, Workspaces, AI, Gaming, System, Customise, Settings; every existing page keeps its ID, all 22 reachable with zero console errors), expandable groups, pinned pages, compact and right-hand sidebar support; central preference document (`ui.prefs`, versioned, sanitised field by field with 6 tests; System/Settings can't be hidden); data-driven themes applied live via CSS variables; text sizes follow a font-scale token; Home dashboard with 9 widget types laid out from preferences. Old Customise page renamed Windows settings (System)
-- ⬜ Phase 3 — Experience Studio
+- ✅ Phase 3 — Experience Studio: 7 official themes (5 dark, 2 light) and custom themes with editor, preview, WCAG readability check (7:1 main text, 4.5:1 secondary, 3:1 muted/accent) and text export/import; accent presets per light/dark + checked custom colour; roundness, transparency, blur, shadows, borders, high contrast, page backgrounds; sidebar side, compact, drag/arrow section order, visibility (System/Settings locked), pinned pages, start page; dashboard widget add/remove/reorder/resize; reduce motion, text size, interface size; per-section and full reset. Hard-coded colours tokenised (54 replacements) so light themes work; chart palette validated on light. Error boundary per page. Verified live: Daylight on Home and Services, every control persisted, unreadable accent refused, full reset restores defaults. 19 frontend tests
 - ⬜ Phase 4 — App Library
 - ⬜ Phase 5 — Workspaces
 - ⬜ Phase 6 — Nocturn Music foundation

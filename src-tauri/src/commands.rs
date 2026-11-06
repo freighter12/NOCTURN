@@ -66,6 +66,69 @@ pub fn save_settings(state: State<'_, Shared>, value: AppSettings) -> AppResult<
     Ok(v)
 }
 
+// -------------------------------------------------------------- library
+
+#[tauri::command]
+pub fn library_list(state: State<'_, Shared>) -> AppResult<Vec<crate::library::Item>> {
+    crate::library::list(&state.db)
+}
+
+#[tauri::command]
+pub async fn library_start_apps(refresh: Option<bool>) -> AppResult<Vec<crate::library::StartApp>> {
+    blocking(move || crate::library::start_apps(refresh.unwrap_or(false))).await
+}
+
+#[derive(Serialize)]
+pub struct ServiceView {
+    id: &'static str,
+    name: &'static str,
+    category: &'static str,
+    description: &'static str,
+    web: &'static str,
+    app_installed: bool,
+    has_app: bool,
+    deep_links: Vec<&'static str>,
+}
+
+#[tauri::command]
+pub fn library_services() -> Vec<ServiceView> {
+    crate::library::SERVICES
+        .iter()
+        .map(|s| ServiceView {
+            id: s.id,
+            name: s.name,
+            category: s.category,
+            description: s.description,
+            web: s.web,
+            app_installed: s.scheme.is_some_and(crate::library::scheme_installed),
+            has_app: s.scheme.is_some(),
+            deep_links: s.deep_links.iter().map(|(l, _)| *l).collect(),
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub async fn library_add(state: State<'_, Shared>, items: Vec<crate::library::NewItem>) -> AppResult<Vec<crate::library::Item>> {
+    let st = state.inner().clone();
+    blocking(move || crate::library::add(&st.db, &items)).await
+}
+
+#[tauri::command]
+pub fn library_edit(state: State<'_, Shared>, edit: crate::library::Edit) -> AppResult<crate::library::Item> {
+    crate::library::edit(&state.db, &edit)
+}
+
+#[tauri::command]
+pub fn library_remove(state: State<'_, Shared>, id: String) -> AppResult<()> {
+    crate::library::remove(&state.db, &id)
+}
+
+#[tauri::command]
+pub async fn library_launch(state: State<'_, Shared>, id: String, deep_link: Option<String>) -> AppResult<crate::library::Launched> {
+    let st = state.inner().clone();
+    blocking(move || crate::library::launch(&st.db, &id, deep_link.as_deref())).await
+}
+
 /// The UI preference document (themes, layout, navigation, widgets, player
 /// mode…). The frontend validates every field and falls back to defaults, so
 /// the backend only enforces shape and size.

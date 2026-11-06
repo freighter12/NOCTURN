@@ -6,7 +6,8 @@ import { useState, type ReactNode } from "react";
 import { I } from "../components/Icons";
 import { LineChart } from "../components/LineChart";
 import { Meter } from "../components/ui";
-import { api } from "../lib/api";
+import { api, library } from "../lib/api";
+import { AppIcon, launchItem, whereItOpens } from "../library/tiles";
 import { useApp, useLoad } from "../lib/app";
 import { bytes, pct, rate } from "../lib/format";
 import { primaryGpu, useTelemetry } from "../lib/telemetry";
@@ -176,9 +177,26 @@ function Music() {
 }
 
 function Apps() {
+  const { toast } = useApp();
+  const items = useLoad(() => library.list(), []);
+  const all = items.data ?? [];
+  // Pinned first, then most recently opened.
+  const recent = all.filter((i) => !i.pinned && i.last_opened_at).sort((a, b) => (b.last_opened_at ?? "").localeCompare(a.last_opened_at ?? ""));
+  const shown = [...all.filter((i) => i.pinned), ...recent].slice(0, 8);
   return (
-    <Card title="Recent apps" action={<Go to="library" label="Library" />}>
-      <div className="small muted">Apps you open from your Library will appear here.</div>
+    <Card title="Your apps" action={<Go to="library" label="Library" />}>
+      {shown.length === 0 ? (
+        <div className="small muted">Pin apps in your Library, or open some, and they'll appear here.</div>
+      ) : (
+        <div className="mini-apps">
+          {shown.map((i) => (
+            <button key={i.id} className="mini-app" title={`${i.name} — ${whereItOpens(i)}`} onClick={() => launchItem(i, toast, items.reload)}>
+              <AppIcon item={i} size={36} />
+              <span>{i.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
@@ -216,7 +234,7 @@ export const WIDGETS: WidgetDef[] = [
   { type: "quick", name: "Quick actions", description: "Power plan, active profile and shortcuts", render: () => <Quick /> },
   { type: "health", name: "Health", description: "Issues NOCTURN's health check found", render: () => <Health /> },
   { type: "music", name: "Now playing", description: "Nocturn Music", render: () => <Music /> },
-  { type: "apps", name: "Recent apps", description: "Apps opened from your Library", render: () => <Apps /> },
+  { type: "apps", name: "Your apps", description: "Pinned and recently opened apps from your Library", render: () => <Apps /> },
   { type: "storage", name: "Storage", description: "Free space per drive", render: () => <Storage /> },
   { type: "network", name: "Network", description: "Live download and upload", render: () => <Network /> },
   { type: "ask", name: "Ask AI", description: "A quick question for Nocturn AI", render: () => <Ask /> },

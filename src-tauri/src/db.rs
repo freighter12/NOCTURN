@@ -176,6 +176,22 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX idx_maintenance_task ON maintenance_runs(task, started_at);
     "#,
+    // 8: App Library (installed apps, connected services, websites).
+    r#"
+    CREATE TABLE library_items (
+        id             TEXT PRIMARY KEY,
+        kind           TEXT NOT NULL,
+        name           TEXT NOT NULL,
+        target         TEXT NOT NULL,
+        category       TEXT NOT NULL DEFAULT '',
+        favourite      INTEGER NOT NULL DEFAULT 0,
+        pinned         INTEGER NOT NULL DEFAULT 0,
+        icon_json      TEXT NOT NULL DEFAULT '{}',
+        added_at       TEXT NOT NULL,
+        last_opened_at TEXT,
+        open_count     INTEGER NOT NULL DEFAULT 0
+    );
+    "#,
 ];
 
 #[derive(Clone)]

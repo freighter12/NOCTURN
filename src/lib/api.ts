@@ -1195,3 +1195,65 @@ export const api = {
   aiRename: (id: string, title: string) => invoke<void>("ai_rename_conversation", { id, title }),
   aiDelete: (id: string) => invoke<void>("ai_delete_conversation", { id }),
 };
+
+// ---------------------------------------------------------------- library
+
+export type LibraryKind = "installed" | "connected" | "website";
+export interface LibraryIcon {
+  glyph?: string | null;
+  colour?: string | null;
+}
+export interface LibraryItem {
+  id: string;
+  kind: LibraryKind;
+  name: string;
+  target: string;
+  category: string;
+  favourite: boolean;
+  pinned: boolean;
+  icon: LibraryIcon;
+  added_at: string;
+  last_opened_at: string | null;
+  open_count: number;
+  app_installed: boolean | null;
+}
+export interface StartApp {
+  name: string;
+  app_id: string;
+  category: string;
+}
+export interface LibraryService {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  web: string;
+  app_installed: boolean;
+  has_app: boolean;
+  deep_links: string[];
+}
+export interface NewLibraryItem {
+  kind: LibraryKind;
+  name: string;
+  target: string;
+  category?: string | null;
+  icon?: LibraryIcon;
+}
+export interface LibraryEdit {
+  id: string;
+  name?: string;
+  category?: string;
+  favourite?: boolean;
+  pinned?: boolean;
+  icon?: LibraryIcon;
+}
+
+export const library = {
+  list: () => invoke<LibraryItem[]>("library_list"),
+  startApps: (refresh = false) => invoke<StartApp[]>("library_start_apps", { refresh }),
+  services: () => invoke<LibraryService[]>("library_services"),
+  add: (items: NewLibraryItem[]) => invoke<LibraryItem[]>("library_add", { items }),
+  edit: (edit: LibraryEdit) => invoke<LibraryItem>("library_edit", { edit }),
+  remove: (id: string) => invoke<void>("library_remove", { id }),
+  launch: (id: string, deepLink?: string) => invoke<{ via: "app" | "browser"; detail: string }>("library_launch", { id, deepLink: deepLink ?? null }),
+};

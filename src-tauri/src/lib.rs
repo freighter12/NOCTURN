@@ -13,6 +13,7 @@ mod commands;
 mod customise;
 mod db;
 mod games;
+mod library;
 mod error;
 mod logging;
 mod security;
@@ -84,6 +85,13 @@ pub fn run() {
             commands::save_settings,
             commands::list_audit,
             commands::get_prefs,
+            commands::library_list,
+            commands::library_start_apps,
+            commands::library_services,
+            commands::library_add,
+            commands::library_edit,
+            commands::library_remove,
+            commands::library_launch,
             commands::save_prefs,
             commands::get_system_info,
             commands::get_telemetry_history,

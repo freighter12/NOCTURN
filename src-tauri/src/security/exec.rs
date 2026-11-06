@@ -71,6 +71,8 @@ pub enum PsScript {
     DriverCentre,
     /// Kernel start, sign-in and boot type for each boot in the last 60 days. Read-only.
     BootTimes,
+    /// Every app in the Start menu (desktop and Store) with its AppUserModelID. Read-only.
+    StartApps,
 }
 
 impl PsScript {
@@ -166,6 +168,8 @@ $out = foreach ($s in $starts) {
   @{ start=$s.TimeCreated.ToUniversalTime().ToString('o'); logon=$(if ($l) { $l.TimeCreated.ToUniversalTime().ToString('o') } else { $null }); boot_type=$bt }
 }
 @($out) | ConvertTo-Json -Depth 3 -Compress"#,
+            PsScript::StartApps => r#"
+Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Depth 2 -Compress"#,
             PsScript::PendingReboot => r#"
 $r = @{
   cbs = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
