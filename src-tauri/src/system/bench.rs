@@ -546,7 +546,12 @@ mod tests {
         assert!(r.metrics.iter().any(|m| m.key == "latency" && m.value > 0.0));
         let h = history(&db, 10).unwrap();
         assert_eq!(h.len(), 1);
-        assert_eq!(h[0].metrics, r.metrics);
+        // JSON round-trips f64 to within an ulp, not always bit-exactly.
+        assert_eq!(h[0].metrics.len(), r.metrics.len());
+        for (a, b) in h[0].metrics.iter().zip(&r.metrics) {
+            assert_eq!(a.key, b.key);
+            assert!((a.value - b.value).abs() <= b.value.abs() * 1e-12, "{} {} vs {}", a.key, a.value, b.value);
+        }
         rename(&db, r.id, "after").unwrap();
         assert_eq!(history(&db, 10).unwrap()[0].label, "after");
         delete(&db, r.id).unwrap();
