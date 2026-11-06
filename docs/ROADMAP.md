@@ -14,12 +14,12 @@ codebase on 2026-11-05. Status per module: **Exists** (working today),
 | 4 | Startup intelligence | Partial | Run keys + Startup folders, enable/disable (journaled), file-missing flag | Publisher/description, signature check, suspicious-entry rules, per-entry AI explanation, NOCTURN change list |
 | 5 | Service intelligence | Partial | Read-only list with notes for common services | Descriptions, dependencies, tiering, approved start-type changes with rollback |
 | 6 | Network | Partial | Adapters, DNS, Wi-Fi, ping/jitter/loss, DNS timing, flush DNS | Traceroute, DNS provider switching, speed test, history graph |
-| 7 | Driver centre | Partial | Driver list, age and signature flags | Problem devices, official support links, update history |
+| 7 | Driver centre | Exists (2026-11-06) | Problem devices explained, key drivers with age notes, install history, official links | — |
 | 8 | Storage intelligence | Partial | Drive usage, temp-file cleanup (one-time action) | Folder usage map, large files, duplicates, Recycle Bin, review-before-delete |
 | 9 | Customisation | Partial | ~24 catalogue settings with preview/rollback | Taskbar/Explorer/notification categories, "reset to Windows default" |
-| 10 | Automatic maintenance | Missing | — | Scheduler, game-aware deferral, maintenance history |
-| 11 | Crash analyser | Partial | Grouped event-log errors | Crash/BSOD/unexpected-shutdown classification, reliability history, dump summary |
-| 12 | Benchmarking | Missing | — | CPU/memory/storage micro-benchmarks, boot time, FPS via PresentMon, before/after comparison |
+| 10 | Automatic maintenance | Exists (2026-11-06) | In-app scheduler, game/benchmark/CPU-aware deferral, history | Runs only while NOCTURN is open |
+| 11 | Crash analyser | Exists (2026-11-06) | BSOD/shutdown/WHEA/app-crash classification, stability index, dump inventory | Dump contents aren't parsed (stop codes come from the event log) |
+| 12 | Benchmarking | Exists (2026-11-06) | CPU/memory/storage, boot time, before/after comparison | FPS via PresentMon |
 | 13 | AI expansion | Partial | 12 read-only tools, approval-gated plans (tweaks, startup, close apps), per-item approval | Tools for every new module; plans that include new action types |
 | 14 | Restore centre | Partial | Journal, per-transaction rollback, audit log | Batch rollback, approver column, recovery guide |
 | 15 | Application profiles | Partial | Balanced / Gaming / Maximum / Custom tweak profiles | Cross-module profiles, automatic switching |
