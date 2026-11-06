@@ -47,5 +47,5 @@ Network (traceroute, DNS providers, history), storage (folder map, large files, 
 ### Priority 3 (done 2026-11-06 — crash analyser, driver centre, benchmarks, scheduled maintenance; PresentMon FPS capture deferred)
 Benchmarking (CPU/memory/storage, boot time, PresentMon FPS), crash analyser, driver centre, scheduled maintenance.
 
-### Priority 4
+### Priority 4 (done 2026-11-06 — AI tools for every module, app profiles with automatic switching, release hardening)
 AI tools for every module, cross-module application profiles with automatic switching, release hardening.

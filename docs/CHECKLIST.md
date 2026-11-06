@@ -68,15 +68,17 @@ Last updated: 2026-11-06
 - ✅ Crash analyser (Diagnostics › Crashes): 90 days of blue screens (WER 1001 + Kernel-Power 41), unexpected shutdowns (forced power-off and sleep detected), EventLog 6008, WHEA hardware errors, app crashes (Application Error 1000, filtered by provider) and hangs; one incident's several records merged; 28 stop codes and 13 exception codes explained; faulting-module attribution (graphics driver, overlay, app's own code, generic Windows library); rule-based findings with steps; per-day timeline (validated palette, hover, table view) and Reliability Monitor stability index; crash-dump inventory; Ask AI per finding/app. Verified live on this PC: 1 unexpected shutdown (2 records merged), 8 app crashes in 4 apps, stability 8.2
 - ✅ Driver centre (Diagnostics › Drivers): problem devices with all Device Manager codes explained (code 45 phantoms excluded), unnamed devices identified from PCI/USB vendor IDs and class codes; drivers worth keeping current (graphics, network, audio, Bluetooth, chipset, storage) with age notes (chipset dates explained, not flagged), built-in vs maker drivers; non-inbox driver installs/updates from the Kernel-PnP log (90 days); official support pages only, opened from a fixed allow-list and audit-logged. Never downloads or installs drivers. Verified live: identified the unnamed code-28 device as an Intel Bluetooth adapter, RTX 2080 driver shown with NVIDIA link, 18 installs listed, link opened Settings, arbitrary URL refused
 - ✅ Benchmarks page: CPU (SHA-256 integer + f64 matmul GFLOPS, one core and all cores, scaling), memory (read/write/copy bandwidth, random-access latency), storage (sequential + 4K random QD1 read/write with the Windows cache bypassed, 1 GB temp file always deleted), boot time (firmware POST time, kernel start → sign-in per boot, fast-startup state); kernels in a separate always-optimised crate so dev builds report real numbers; runs stored with power plan/CPU context, renamable, compared against any earlier run of the same kind with a ±5% noise band and a power-plan-mismatch warning; refused while a game runs. Verified live: CPU 2.0/26.6 GB/s SHA-256, 10.2/79.5 GFLOPS; memory 29.8 GB/s read, 91 ns; SATA SSD 532/443 MB/s, 7.4k 4K IOPS; boot 20 s firmware + 15 s; second CPU run reported "no real change" (all within 3%)
-- ⬜ FPS / frame-time capture (needs Intel PresentMon — not bundled yet)
+- ⬜ FPS / frame-time capture (needs Intel PresentMon — not bundled yet; waiting on the user)
+- ⬜ Microsoft Store / Xbox games aren't detected (e.g. Minecraft for Windows), so they don't start sessions or block benchmarks
 - ✅ Scheduled maintenance page: 5 fixed tasks — new-crash check (daily), device-problem check (weekly), free-space check (daily), temp-file cleanup (opt-in, only task that changes anything, two-step Run now), network stability recording (opt-in); interval 1/7/14/30 days; runs in-app (starts 2 min after launch, checks every minute), deferred while a game or benchmark runs or CPU > 70% (deferral logged at most hourly); only new problems raise alerts (first check is a baseline), alerts open the right page; one-year run history. Verified live: all four read-only/network tasks run from the UI, driver alert routed to Diagnostics; scheduler tick unit-tested on a real AppState
 
 ## Advanced expansion — Priority 4
 
 - ✅ AI tools for every module: get_crash_analysis, get_driver_centre, list_services (tier/name filters), get_benchmarks (+ boot times), get_maintenance, get_customise_settings, get_games — all read-only, size-capped, tested on real data
 - ✅ AI plans can include Customise choices and service start types, validated by the same code as the pages (protected services refused even when the AI asks); the approval dialog previews them with per-item ticks and journals them with source `ai`. Verified live: AI-style plan applied a Customise change (source ai) and rolled back from History
-- ⬜ Cross-module app profiles with automatic switching
-- ⬜ Release hardening
+- ✅ App profiles (new page): per program — power plan, priority (launch rule owned by the profile; never replaces a user or game-profile rule) and holding scheduled maintenance; switches on start, back 10 s after exit via journal rollback (source auto, labelled in History); a manual plan change meanwhile is left alone; active switch persisted across restarts. Verified live with Notepad: High performance → Balanced in ~6 s, restored in ~15 s; manual Power saver change kept; History and audit entries correct
+- ✅ Release hardening: clippy pass (machine-applicable fixes applied; 16 cosmetic lints left), test child processes reaped, no runtime unwrap/expect outside invariants, CSP and capabilities reviewed (strict CSP, window-only permissions), dev-only UI test hook verified absent from the production bundle
+- ✅ Driver centre detects the board maker from onboard PCI subsystem IDs when the firmware name is garbled (verified: MSI on this PC)
 
 ## Phase 6 — Testing and release
 
@@ -84,7 +86,9 @@ Last updated: 2026-11-06
 - ✅ Frontend unit tests (vitest, 9): chat transcript folding, formatters
 - ✅ Typecheck + production frontend build
 - ✅ All 16 pages and 6 Diagnostics tabs loaded in the real app with zero console errors (CDP walkthrough, 2026-11-06)
-- ⬜ Signed installer (`npm run tauri build` → NSIS/MSI); needs a code-signing certificate
+- ✅ Release build + installers: `npm run tauri build` produces NOCTURN_0.1.0_x64-setup.exe (NSIS, 3.8 MB) and the MSI (5.3 MB); release exe walked through all 17 pages and 6 Diagnostics tabs with zero console errors
+- ✅ Release profile now opt-level 3: with LTO, opt-level "s" overrode the benchmark crate and cost up to 60% on the kernels; verified release ≥ dev under identical load with bench/examples/probe.rs
+- ⬜ Code signing (needs a certificate; installers are unsigned, so SmartScreen will warn)
 - ⬜ Windows 10 verification (only Windows 11 tested so far)
 - ⬜ End-to-end AI test with a real key: plan proposal → approval → verification
 
