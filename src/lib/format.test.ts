@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bytes, bytesParts, duration, pct, rate } from "./format";
+import { bytes, bytesParts, duration, pct, rate, until } from "./format";
 
 describe("format", () => {
   it("formats byte sizes with binary units", () => {
@@ -23,5 +23,16 @@ describe("format", () => {
     expect(duration(59)).toBe("0m");
     expect(duration(3 * 3600 + 120)).toBe("3h 2m");
     expect(duration(2 * 86400 + 5 * 3600)).toBe("2d 5h");
+  });
+});
+
+describe("until", () => {
+  it("describes future times and treats the past as now", () => {
+    const at = (s: number) => new Date(Date.now() + s * 1000).toISOString();
+    expect(until(at(-100))).toBe("now");
+    expect(until(at(30 * 60))).toBe("in 30 min");
+    expect(until(at(5 * 3600))).toBe("in 5 h");
+    expect(until(at(6 * 86400))).toBe("in 6 d");
+    expect(until(null)).toBe("—");
   });
 });

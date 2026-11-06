@@ -15,6 +15,7 @@ import { Storage } from "./pages/Storage";
 import { Customise } from "./pages/Customise";
 import { Services } from "./pages/Services";
 import { Benchmarks } from "./pages/Benchmarks";
+import { Maintenance } from "./pages/Maintenance";
 import { Tweak } from "./pages/Tweak";
 
 function Pages() {
@@ -42,6 +43,8 @@ function Pages() {
       return <Storage />;
     case "services":
       return <Services />;
+    case "maintenance":
+      return <Maintenance />;
     case "startup":
       return <Startup />;
     case "assistant":

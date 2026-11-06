@@ -163,6 +163,19 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX idx_bench_runs_suite ON bench_runs(suite, started_at);
     "#,
+    // 7: scheduled maintenance history.
+    r#"
+    CREATE TABLE maintenance_runs (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        task        TEXT NOT NULL,
+        started_at  TEXT NOT NULL,
+        finished_at TEXT NOT NULL,
+        status      TEXT NOT NULL,
+        trigger     TEXT NOT NULL,
+        summary     TEXT NOT NULL
+    );
+    CREATE INDEX idx_maintenance_task ON maintenance_runs(task, started_at);
+    "#,
 ];
 
 #[derive(Clone)]

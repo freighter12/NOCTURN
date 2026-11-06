@@ -53,6 +53,7 @@ const NAV: { id: PageId; label: string; icon: keyof typeof I; group?: string }[]
   { id: "storage", label: "Storage", icon: "storage" },
   { id: "startup", label: "Startup Manager", icon: "startup" },
   { id: "services", label: "Services", icon: "services" },
+  { id: "maintenance", label: "Maintenance", icon: "maintenance" },
   { id: "assistant", label: "AI Assistant", icon: "assistant", group: "Assist" },
   { id: "history", label: "History", icon: "history" },
   { id: "settings", label: "Settings", icon: "settings" },

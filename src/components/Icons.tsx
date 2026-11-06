@@ -44,6 +44,9 @@ export const I = {
   bench: (p: P) => (
     <svg {...base(p)}><path d="M2.5 11.5a5.5 5.5 0 1111 0" /><path d="M8 11.5l2.6-3.4" /><circle cx="8" cy="11.5" r=".8" fill="currentColor" /></svg>
   ),
+  maintenance: (p: P) => (
+    <svg {...base(p)}><rect x="2.5" y="3" width="11" height="10.5" rx="1.5" /><path d="M2.5 6h11M5.5 1.8v2.4M10.5 1.8v2.4" /><path d="M5.8 9.6l1.5 1.4 3-3" /></svg>
+  ),
   storage: (p: P) => (
     <svg {...base(p)}><rect x="2" y="3" width="12" height="10" rx="1.5" /><path d="M2 9.5h12" /><path d="M11 11.3h.01" strokeWidth="2" /></svg>
   ),

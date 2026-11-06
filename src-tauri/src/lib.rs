@@ -64,6 +64,7 @@ pub fn run() {
 
             let state = Arc::new(state::AppState::new(db, data_dir, log_dir));
             system::monitor::start(app.handle().clone(), state.clone());
+            system::scheduler::start(app.handle().clone(), state.clone());
 
             // Warm the hardware inventory in the background.
             let warm = state.clone();
@@ -128,6 +129,9 @@ pub fn run() {
             commands::preview_tweaks,
             commands::apply_tweaks,
             commands::rollback_transaction,
+            commands::maintenance_overview,
+            commands::set_maintenance_task,
+            commands::run_maintenance_task,
             commands::run_benchmark,
             commands::cancel_benchmark,
             commands::list_benchmarks,

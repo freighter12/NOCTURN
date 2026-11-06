@@ -69,14 +69,14 @@ Last updated: 2026-11-06
 - ✅ Driver centre (Diagnostics › Drivers): problem devices with all Device Manager codes explained (code 45 phantoms excluded), unnamed devices identified from PCI/USB vendor IDs and class codes; drivers worth keeping current (graphics, network, audio, Bluetooth, chipset, storage) with age notes (chipset dates explained, not flagged), built-in vs maker drivers; non-inbox driver installs/updates from the Kernel-PnP log (90 days); official support pages only, opened from a fixed allow-list and audit-logged. Never downloads or installs drivers. Verified live: identified the unnamed code-28 device as an Intel Bluetooth adapter, RTX 2080 driver shown with NVIDIA link, 18 installs listed, link opened Settings, arbitrary URL refused
 - ✅ Benchmarks page: CPU (SHA-256 integer + f64 matmul GFLOPS, one core and all cores, scaling), memory (read/write/copy bandwidth, random-access latency), storage (sequential + 4K random QD1 read/write with the Windows cache bypassed, 1 GB temp file always deleted), boot time (firmware POST time, kernel start → sign-in per boot, fast-startup state); kernels in a separate always-optimised crate so dev builds report real numbers; runs stored with power plan/CPU context, renamable, compared against any earlier run of the same kind with a ±5% noise band and a power-plan-mismatch warning; refused while a game runs. Verified live: CPU 2.0/26.6 GB/s SHA-256, 10.2/79.5 GFLOPS; memory 29.8 GB/s read, 91 ns; SATA SSD 532/443 MB/s, 7.4k 4K IOPS; boot 20 s firmware + 15 s; second CPU run reported "no real change" (all within 3%)
 - ⬜ FPS / frame-time capture (needs Intel PresentMon — not bundled yet)
-- ⬜ Scheduled maintenance
+- ✅ Scheduled maintenance page: 5 fixed tasks — new-crash check (daily), device-problem check (weekly), free-space check (daily), temp-file cleanup (opt-in, only task that changes anything, two-step Run now), network stability recording (opt-in); interval 1/7/14/30 days; runs in-app (starts 2 min after launch, checks every minute), deferred while a game or benchmark runs or CPU > 70% (deferral logged at most hourly); only new problems raise alerts (first check is a baseline), alerts open the right page; one-year run history. Verified live: all four read-only/network tasks run from the UI, driver alert routed to Diagnostics; scheduler tick unit-tested on a real AppState
 
 ## Phase 6 — Testing and release
 
-- ✅ Rust unit/integration tests: 136 passing (4 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin, storage benchmark)
-- ✅ Frontend unit tests (vitest): chat transcript folding, formatters
+- ✅ Rust unit/integration tests: 138 passing + 2 benchmark-kernel tests (4 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin, storage benchmark)
+- ✅ Frontend unit tests (vitest, 9): chat transcript folding, formatters
 - ✅ Typecheck + production frontend build
-- ✅ All pages loaded in the real app with zero console errors (CDP walkthrough)
+- ✅ All 16 pages and 6 Diagnostics tabs loaded in the real app with zero console errors (CDP walkthrough, 2026-11-06)
 - ⬜ Signed installer (`npm run tauri build` → NSIS/MSI); needs a code-signing certificate
 - ⬜ Windows 10 verification (only Windows 11 tested so far)
 - ⬜ End-to-end AI test with a real key: plan proposal → approval → verification

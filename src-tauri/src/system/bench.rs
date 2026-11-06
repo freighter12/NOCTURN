@@ -28,7 +28,6 @@ pub fn cancel() {
     CANCEL.store(true, Ordering::Relaxed);
 }
 
-#[cfg(test)]
 pub fn running() -> bool {
     RUNNING.load(Ordering::Relaxed)
 }

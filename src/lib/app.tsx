@@ -15,6 +15,7 @@ export type PageId =
   | "diagnostics"
   | "network"
   | "storage"
+  | "maintenance"
   | "startup"
   | "services"
   | "assistant"
@@ -27,6 +28,13 @@ export interface Toast {
   title: string;
   detail?: string;
   action?: { label: string; run: () => void };
+}
+
+/** Where an alert's "Open" button goes. */
+function alertAction(kind: string, setPage: (p: PageId) => void) {
+  if (kind === "maintenance.disk") return { label: "Open Storage", run: () => setPage("storage") };
+  if (kind.startsWith("maintenance.")) return { label: "Open Diagnostics", run: () => setPage("diagnostics") };
+  return { label: "Open Hardware", run: () => setPage("hardware") };
 }
 
 export interface ApplyIntent {
@@ -89,7 +97,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Hardware threshold alerts from the telemetry thread.
   useEffect(() => {
     const un = listen<Alert>("alert", (e) =>
-      toast({ tone: "warning", title: e.payload.title, detail: e.payload.detail, action: { label: "Open Hardware", run: () => setPage("hardware") } }),
+      toast({ tone: "warning", title: e.payload.title, detail: e.payload.detail, action: alertAction(e.payload.kind, setPage) }),
     );
     return () => {
       un.then((f) => f());

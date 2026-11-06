@@ -451,6 +451,35 @@ pub async fn rollback_transaction(
     .await
 }
 
+// ----------------------------------------------------------- maintenance
+
+#[derive(Serialize)]
+pub struct MaintenanceOverview {
+    tasks: Vec<crate::system::scheduler::TaskView>,
+    history: Vec<crate::system::scheduler::RunRecord>,
+}
+
+#[tauri::command]
+pub fn maintenance_overview(state: State<'_, Shared>) -> AppResult<MaintenanceOverview> {
+    Ok(MaintenanceOverview {
+        tasks: crate::system::scheduler::overview(&state.db),
+        history: crate::system::scheduler::history(&state.db, 100)?,
+    })
+}
+
+#[tauri::command]
+pub fn set_maintenance_task(state: State<'_, Shared>, task: String, enabled: bool, interval_days: u32) -> AppResult<()> {
+    let id = crate::system::scheduler::parse_task(&task)?;
+    crate::system::scheduler::set_config(&state.db, id, crate::system::scheduler::TaskConfig { enabled, interval_days })
+}
+
+#[tauri::command]
+pub async fn run_maintenance_task(app: tauri::AppHandle, state: State<'_, Shared>, task: String) -> AppResult<crate::system::scheduler::RunRecord> {
+    let id = crate::system::scheduler::parse_task(&task)?;
+    let st = state.inner().clone();
+    blocking(move || crate::system::scheduler::run_now(Some(&app), &st, id, "manual")).await
+}
+
 // ------------------------------------------------------------ benchmarks
 
 #[tauri::command]

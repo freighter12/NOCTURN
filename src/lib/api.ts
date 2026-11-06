@@ -391,6 +391,31 @@ export interface PowerScheme {
 }
 
 
+// ------------------------------------------------------------- maintenance
+
+export type MaintenanceTaskId = "crash_check" | "driver_check" | "disk_space" | "temp_cleanup" | "network_check";
+export interface MaintenanceTask {
+  id: MaintenanceTaskId;
+  title: string;
+  description: string;
+  changes_system: boolean;
+  default_on: boolean;
+  default_days: number;
+  enabled: boolean;
+  interval_days: number;
+  last_run: string | null;
+  next_due: string | null;
+}
+export interface MaintenanceRun {
+  id: number;
+  task: MaintenanceTaskId;
+  started_at: string;
+  finished_at: string;
+  status: "ok" | "attention" | "failed" | "deferred";
+  trigger: "scheduled" | "manual";
+  summary: string;
+}
+
 // -------------------------------------------------------------- benchmarks
 
 export type BenchSuite = "cpu" | "memory" | "storage" | "boot";
@@ -1033,6 +1058,9 @@ export const api = {
   events: () => invoke<EventEntry[]>("get_events"),
   crashReport: () => invoke<CrashReport>("get_crash_report"),
   driverCentre: () => invoke<DriverReport>("get_driver_centre"),
+  maintenance: () => invoke<{ tasks: MaintenanceTask[]; history: MaintenanceRun[] }>("maintenance_overview"),
+  setMaintenanceTask: (task: MaintenanceTaskId, enabled: boolean, intervalDays: number) => invoke<void>("set_maintenance_task", { task, enabled, intervalDays }),
+  runMaintenanceTask: (task: MaintenanceTaskId) => invoke<MaintenanceRun>("run_maintenance_task", { task }),
   runBenchmark: (suite: BenchSuite, target: string | null, label: string, onProgress?: (p: BenchProgress) => void) => {
     const ch = new Channel<BenchProgress>();
     if (onProgress) ch.onmessage = onProgress;
