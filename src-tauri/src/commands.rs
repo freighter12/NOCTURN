@@ -451,6 +451,43 @@ pub async fn rollback_transaction(
     .await
 }
 
+// ---------------------------------------------------------- app profiles
+
+#[derive(Serialize)]
+pub struct AppProfilesView {
+    profiles: Vec<crate::system::app_profiles::AppProfile>,
+    active: Option<crate::system::app_profiles::Active>,
+    /// Programs with a window right now, as suggestions.
+    running_apps: Vec<String>,
+}
+
+#[tauri::command]
+pub fn list_app_profiles(state: State<'_, Shared>) -> AppProfilesView {
+    let mut running: Vec<String> = state
+        .telemetry
+        .read()
+        .map(|t| t.processes.iter().filter(|p| p.has_window && !crate::system::processes::is_protected(&p.name)).map(|p| p.name.clone()).collect())
+        .unwrap_or_default();
+    running.sort_by_key(|n| n.to_lowercase());
+    running.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+    AppProfilesView {
+        profiles: crate::system::app_profiles::list(&state.db),
+        active: crate::system::app_profiles::active(&state.db),
+        running_apps: running,
+    }
+}
+
+#[tauri::command]
+pub async fn save_app_profile(state: State<'_, Shared>, profile: crate::system::app_profiles::AppProfile) -> AppResult<crate::system::app_profiles::AppProfile> {
+    let st = state.inner().clone();
+    blocking(move || crate::system::app_profiles::save(&st.db, &st.rules, profile)).await
+}
+
+#[tauri::command]
+pub fn delete_app_profile(state: State<'_, Shared>, exe: String) -> AppResult<()> {
+    crate::system::app_profiles::delete(&state.db, &state.rules, &exe)
+}
+
 // ----------------------------------------------------------- maintenance
 
 #[derive(Serialize)]

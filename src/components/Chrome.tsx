@@ -47,6 +47,7 @@ const NAV: { id: PageId; label: string; icon: keyof typeof I; group?: string }[]
   { id: "benchmarks", label: "Benchmarks", icon: "bench" },
   { id: "tweak", label: "NOCTURN Tweak", icon: "tweak", group: "Optimise" },
   { id: "customise", label: "Customise", icon: "customise" },
+  { id: "profiles", label: "App profiles", icon: "profiles" },
   { id: "gaming", label: "Gaming", icon: "gaming" },
   { id: "diagnostics", label: "System Diagnostics", icon: "diagnostics" },
   { id: "network", label: "Network", icon: "network" },

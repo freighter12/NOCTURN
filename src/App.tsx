@@ -16,6 +16,7 @@ import { Customise } from "./pages/Customise";
 import { Services } from "./pages/Services";
 import { Benchmarks } from "./pages/Benchmarks";
 import { Maintenance } from "./pages/Maintenance";
+import { AppProfiles } from "./pages/AppProfiles";
 import { Tweak } from "./pages/Tweak";
 
 function Pages() {
@@ -33,6 +34,8 @@ function Pages() {
       return <Tweak />;
     case "customise":
       return <Customise />;
+    case "profiles":
+      return <AppProfiles />;
     case "gaming":
       return <Gaming />;
     case "diagnostics":

@@ -47,6 +47,9 @@ export const I = {
   maintenance: (p: P) => (
     <svg {...base(p)}><rect x="2.5" y="3" width="11" height="10.5" rx="1.5" /><path d="M2.5 6h11M5.5 1.8v2.4M10.5 1.8v2.4" /><path d="M5.8 9.6l1.5 1.4 3-3" /></svg>
   ),
+  profiles: (p: P) => (
+    <svg {...base(p)}><rect x="2" y="2.5" width="5" height="5" rx="1" /><rect x="9" y="8.5" width="5" height="5" rx="1" /><path d="M7 5h3.5a1 1 0 011 1v2.5M9 11H5.5a1 1 0 01-1-1V7.5" /></svg>
+  ),
   storage: (p: P) => (
     <svg {...base(p)}><rect x="2" y="3" width="12" height="10" rx="1.5" /><path d="M2 9.5h12" /><path d="M11 11.3h.01" strokeWidth="2" /></svg>
   ),

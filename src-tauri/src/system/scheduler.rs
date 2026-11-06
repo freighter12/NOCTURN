@@ -374,7 +374,13 @@ fn tick(app: Option<&AppHandle>, st: &Shared) {
         if !is_due(last_run(&st.db, task), c.interval_days, nowt) {
             continue;
         }
-        let game = st.games.live.lock().ok().and_then(|l| l.as_ref().map(|l| l.summary().game_name));
+        let game = st
+            .games
+            .live
+            .lock()
+            .ok()
+            .and_then(|l| l.as_ref().map(|l| l.summary().game_name))
+            .or_else(|| crate::system::app_profiles::pausing_maintenance(&st.db));
         let cpu = st.telemetry.read().ok().and_then(|t| {
             let recent: Vec<f32> = t.history.iter().rev().take(30).map(|s| s.cpu_usage).collect();
             (!recent.is_empty()).then(|| recent.iter().sum::<f32>() / recent.len() as f32)

@@ -37,6 +37,8 @@ pub struct AppState {
     sysinfo: RwLock<Option<SystemInfo>>,
     caches: Mutex<Caches>,
     pub ai: crate::ai::AiRuntime,
+    /// App-profile watcher bookkeeping.
+    pub app_profiles: crate::system::app_profiles::ProfileState,
 }
 
 pub type Shared = Arc<AppState>;
@@ -56,6 +58,7 @@ impl AppState {
             sysinfo: RwLock::new(None),
             caches: Mutex::new(Caches::default()),
             ai: crate::ai::AiRuntime::default(),
+            app_profiles: Default::default(),
         }
     }
 

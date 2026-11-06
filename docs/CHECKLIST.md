@@ -74,7 +74,7 @@ Last updated: 2026-11-06
 ## Advanced expansion — Priority 4
 
 - ✅ AI tools for every module: get_crash_analysis, get_driver_centre, list_services (tier/name filters), get_benchmarks (+ boot times), get_maintenance, get_customise_settings, get_games — all read-only, size-capped, tested on real data
-- ✅ AI plans can include Customise choices and service start types, validated by the same code as the pages (protected services refused even when the AI asks); the approval dialog previews them with per-item ticks and journals them with source . Verified live: AI-style plan applied a Customise change (source ai) and rolled back from History
+- ✅ AI plans can include Customise choices and service start types, validated by the same code as the pages (protected services refused even when the AI asks); the approval dialog previews them with per-item ticks and journals them with source `ai`. Verified live: AI-style plan applied a Customise change (source ai) and rolled back from History
 - ⬜ Cross-module app profiles with automatic switching
 - ⬜ Release hardening
 

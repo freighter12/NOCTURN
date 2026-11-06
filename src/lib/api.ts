@@ -391,6 +391,26 @@ export interface PowerScheme {
 }
 
 
+// ------------------------------------------------------------ app profiles
+
+export interface AppProfile {
+  exe: string;
+  label: string;
+  power_plan: string | null;
+  priority: Priority | null;
+  pause_maintenance: boolean;
+  enabled: boolean;
+  updated_at?: string;
+}
+export interface ActiveProfile {
+  exe: string;
+  label: string;
+  tx_id: string | null;
+  our_plan: string | null;
+  since: string;
+  pause_maintenance: boolean;
+}
+
 // ------------------------------------------------------------- maintenance
 
 export type MaintenanceTaskId = "crash_check" | "driver_check" | "disk_space" | "temp_cleanup" | "network_check";
@@ -1062,6 +1082,9 @@ export const api = {
   events: () => invoke<EventEntry[]>("get_events"),
   crashReport: () => invoke<CrashReport>("get_crash_report"),
   driverCentre: () => invoke<DriverReport>("get_driver_centre"),
+  appProfiles: () => invoke<{ profiles: AppProfile[]; active: ActiveProfile | null; running_apps: string[] }>("list_app_profiles"),
+  saveAppProfile: (profile: AppProfile) => invoke<AppProfile>("save_app_profile", { profile }),
+  deleteAppProfile: (exe: string) => invoke<void>("delete_app_profile", { exe }),
   maintenance: () => invoke<{ tasks: MaintenanceTask[]; history: MaintenanceRun[] }>("maintenance_overview"),
   setMaintenanceTask: (task: MaintenanceTaskId, enabled: boolean, intervalDays: number) => invoke<void>("set_maintenance_task", { task, enabled, intervalDays }),
   runMaintenanceTask: (task: MaintenanceTaskId) => invoke<MaintenanceRun>("run_maintenance_task", { task }),

@@ -11,6 +11,7 @@ export type PageId =
   | "processes"
   | "tweak"
   | "customise"
+  | "profiles"
   | "gaming"
   | "diagnostics"
   | "network"
@@ -32,6 +33,7 @@ export interface Toast {
 
 /** Where an alert's "Open" button goes. */
 function alertAction(kind: string, setPage: (p: PageId) => void) {
+  if (kind.startsWith("profile.")) return { label: "App profiles", run: () => setPage("profiles") };
   if (kind === "maintenance.disk") return { label: "Open Storage", run: () => setPage("storage") };
   if (kind.startsWith("maintenance.")) return { label: "Open Diagnostics", run: () => setPage("diagnostics") };
   return { label: "Open Hardware", run: () => setPage("hardware") };
@@ -101,7 +103,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Hardware threshold alerts from the telemetry thread.
   useEffect(() => {
     const un = listen<Alert>("alert", (e) =>
-      toast({ tone: "warning", title: e.payload.title, detail: e.payload.detail, action: alertAction(e.payload.kind, setPage) }),
+      toast({ tone: e.payload.kind.startsWith("profile.") ? "info" : "warning", title: e.payload.title, detail: e.payload.detail, action: alertAction(e.payload.kind, setPage) }),
     );
     return () => {
       un.then((f) => f());

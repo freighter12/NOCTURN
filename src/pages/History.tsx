@@ -30,6 +30,7 @@ const ROLLBACKABLE = new Set(["completed", "partial", "interrupted", "partially_
 function sourceLabel(s: string) {
   if (s === "ai") return "Approved from AI plan";
   if (s.startsWith("profile:")) return "Profile";
+  if (s === "auto") return "Automatic (app profile)";
   return "Manual";
 }
 
