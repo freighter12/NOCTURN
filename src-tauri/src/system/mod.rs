@@ -4,6 +4,7 @@
 //! through journaled / audited command handlers.
 
 pub mod diagnostics;
+pub mod dns;
 pub mod health;
 pub mod history;
 pub mod info;

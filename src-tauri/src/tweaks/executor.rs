@@ -97,11 +97,12 @@ pub fn display_original(op: &ChangeOp, o: &Original) -> String {
             .ok()
             .and_then(|l| l.into_iter().find(|s| &s.guid == scheme).map(|s| s.name))
             .unwrap_or_else(|| scheme.clone()),
+        (_, Original::Dns { servers }) => crate::system::dns::display(servers),
         (_, Original::Nothing) => "—".into(),
     }
 }
 
-fn capture_original(op: &ChangeOp) -> AppResult<Original> {
+pub(crate) fn capture_original(op: &ChangeOp) -> AppResult<Original> {
     Ok(match op {
         ChangeOp::Registry(s) => Original::Registry { value: registry::read(s.hive, &s.path, &s.name)? },
         ChangeOp::StartupApproval { location, name, .. } => {
@@ -109,6 +110,7 @@ fn capture_original(op: &ChangeOp) -> AppResult<Original> {
             Original::Registry { value: registry::read(h, &p, name)? }
         }
         ChangeOp::PowerPlan { .. } => Original::PowerPlan { scheme: power::active_guid()? },
+        ChangeOp::DnsServers { interface, ipv6, .. } => Original::Dns { servers: crate::system::dns::read(interface, *ipv6)? },
         ChangeOp::FlushDns | ChangeOp::CleanTempFiles => Original::Nothing,
     })
 }
@@ -120,6 +122,7 @@ fn already_satisfied(op: &ChangeOp, original: &Original) -> bool {
             crate::startup::is_enabled(value) == *enabled
         }
         (ChangeOp::PowerPlan { scheme }, Original::PowerPlan { scheme: cur }) => scheme == cur,
+        (ChangeOp::DnsServers { servers, .. }, Original::Dns { servers: cur }) => servers == cur,
         _ => false,
     }
 }
@@ -153,6 +156,12 @@ pub(crate) fn apply_local(op: &ChangeOp) -> AppResult<String> {
             power::set_active(scheme)?;
             Ok(display_original(op, &Original::PowerPlan { scheme: scheme.clone() }))
         }
+        ChangeOp::DnsServers { interface, ipv6, servers, .. } => {
+            crate::system::dns::write(interface, *ipv6, servers)?;
+            // Drop answers cached from the old servers; failure here is harmless.
+            let _ = maintenance::flush_dns();
+            Ok(crate::system::dns::display(servers))
+        }
         ChangeOp::FlushDns => maintenance::flush_dns(),
         ChangeOp::CleanTempFiles => {
             let r = maintenance::clean_temp()?;
@@ -183,6 +192,10 @@ pub(crate) fn restore_local(op: &ChangeOp, original: &Original) -> AppResult<Str
             }
         }
         (ChangeOp::PowerPlan { .. }, Original::PowerPlan { scheme }) => power::set_active(scheme)?,
+        (ChangeOp::DnsServers { interface, ipv6, .. }, Original::Dns { servers }) => {
+            crate::system::dns::write(interface, *ipv6, servers)?;
+            let _ = maintenance::flush_dns();
+        }
         _ => return Err(AppError::Invalid("one-time action; nothing to restore".into())),
     }
     Ok(display_original(op, original))
@@ -586,8 +599,7 @@ pub fn rollback(db: &Db, tx_id: &str, progress: &dyn Fn(Progress)) -> AppResult<
         let request = serde_json::json!({
             "kind": "rollback",
             "items": admin_items.iter().map(|(c, o)| {
-                let value = match o { Original::Registry { value } => value.clone(), _ => None };
-                serde_json::json!({ "change_id": c.id, "tweak_id": c.tweak_id, "op": c.op, "original": value })
+                serde_json::json!({ "change_id": c.id, "tweak_id": c.tweak_id, "op": c.op, "original": o })
             }).collect::<Vec<_>>(),
         });
         match elevation::run_elevated(&request) {

@@ -226,6 +226,8 @@ pub fn preview(ids: &[String]) -> AppResult<Preview> {
                     None,
                 ),
                 ChangeOp::FlushDns => ("—".into(), "Cache cleared".into(), true, None),
+                // Not produced by catalogue tweaks (Network page only).
+                ChangeOp::DnsServers { servers, .. } => ("—".into(), crate::system::dns::display(servers), true, None),
                 ChangeOp::CleanTempFiles => match maintenance::scan_temp() {
                     Ok(s) => (
                         format!("{} in {} old files", crate::util::fmt_bytes(s.eligible_bytes), s.eligible_files),

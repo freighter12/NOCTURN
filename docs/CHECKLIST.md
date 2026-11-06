@@ -51,9 +51,18 @@ Last updated: 2026-11-06
 - ⬜ Way to mark a detected entry as "not a game" (e.g. Steam utilities like Borderless Gaming currently start sessions)
 - ⬜ Executable ranking picks the launcher for some games (Assetto Corsa: `AssettoCorsa.exe` ranked above `acs.exe`); the user can choose in the profile editor
 
+## Advanced expansion — Priority 2
+
+- ✅ Network — traceroute: native ICMP with per-hop TTL (no `tracert` process), streamed hop by hop, private-address tagging, stops after 5 silent hops (verified live: 9 hops to 1.1.1.1)
+- ✅ Network — stability test history: every test stored (1-year retention), Router vs Internet latency chart (verified live)
+- 🟡 Network — DNS provider switching (Automatic / Cloudflare / Google / Quad9) per adapter, IPv4 + IPv6, via native `SetInterfaceDnsSettings`; new journaled `DnsServers` op with rollback; elevated worker accepts only the fixed provider lists (rollback: plain IPs of the right family). Preview verified live; **apply/rollback not yet exercised** — needs a UAC approval on a real adapter
+- ⬜ Storage: folder usage map, large files, duplicates, review-then-delete to Recycle Bin
+- ⬜ Customisation categories (taskbar, Explorer, notifications) with "reset to Windows default"
+- ⬜ Service management: tiering, journaled start-type changes with rollback
+
 ## Phase 6 — Testing and release
 
-- ✅ Rust unit/integration tests: 83 passing (1 ignored destructive round-trip test, run manually)
+- ✅ Rust unit/integration tests: 91 passing (1 ignored destructive round-trip test, run manually)
 - ✅ Frontend unit tests (vitest): chat transcript folding, formatters
 - ✅ Typecheck + production frontend build
 - ✅ All nine pages loaded in the real app with zero console errors (CDP walkthrough)

@@ -11,7 +11,7 @@ use crate::error::{AppError, AppResult};
 use crate::security::{elevation, secrets};
 use crate::settings::{self, AppSettings};
 use crate::state::Shared;
-use crate::system::{diagnostics, health::HealthReport, info::SystemInfo, monitor, network, power, process_control, process_view, processes};
+use crate::system::{diagnostics, dns, health::HealthReport, info::SystemInfo, monitor, network, power, process_control, process_view, processes};
 use crate::tweaks::{catalog, engine, journal, ChangeOp, Takes};
 
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> AppResult<T> + Send + 'static) -> AppResult<T> {
@@ -284,8 +284,58 @@ pub async fn network_overview() -> AppResult<network::NetworkOverview> {
 }
 
 #[tauri::command]
-pub async fn network_test(count: Option<u32>) -> AppResult<network::StabilityReport> {
-    blocking(move || Ok(network::stability_test(count.unwrap_or(10)))).await
+pub async fn network_test(state: State<'_, Shared>, count: Option<u32>) -> AppResult<network::StabilityReport> {
+    let st = state.inner().clone();
+    blocking(move || {
+        let r = network::stability_test(count.unwrap_or(10));
+        if let Err(e) = network::save_report(&st.db, &r) {
+            tracing::warn!("could not store network test: {e}");
+        }
+        Ok(r)
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn network_history(state: State<'_, Shared>, limit: Option<i64>) -> AppResult<Vec<network::StoredPing>> {
+    network::history(&state.db, limit.unwrap_or(300).clamp(1, 3000))
+}
+
+#[tauri::command]
+pub async fn traceroute(host: String, on_hop: Channel<network::Hop>) -> AppResult<network::TraceReport> {
+    blocking(move || {
+        network::traceroute(&host, &|h| {
+            let _ = on_hop.send(h.clone());
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn dns_providers() -> &'static [dns::DnsProvider] {
+    dns::PROVIDERS
+}
+
+#[tauri::command]
+pub async fn preview_dns(index: u32, alias: String, provider: String) -> AppResult<Vec<dns::DnsPreviewItem>> {
+    blocking(move || dns::preview(index, &alias, &provider)).await
+}
+
+#[tauri::command]
+pub async fn set_dns(
+    state: State<'_, Shared>,
+    index: u32,
+    alias: String,
+    provider: String,
+    on_progress: Channel<engine::Progress>,
+) -> AppResult<engine::ApplyReport> {
+    let st = state.inner().clone();
+    blocking(move || {
+        dns::apply(&st.db, &st.data_dir, index, &alias, &provider, &|p| {
+            let _ = on_progress.send(p);
+        })
+    })
+    .await
 }
 
 // ---------------------------------------------------------------- power

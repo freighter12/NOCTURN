@@ -5,6 +5,9 @@
 //!   *exactly* one of that tweak's HKLM operations.
 //! * A startup item must use the pseudo-ID `startup`, a machine-wide location,
 //!   and name an entry that actually exists there.
+//! * A DNS item must use the pseudo-ID `dns`, name an existing interface, and
+//!   (when applying) set exactly one of the fixed provider lists. Rollback may
+//!   restore any list of plain IP addresses of the right family.
 //! * Rollback items may only restore a value at a validated target.
 //! Anything else is rejected without touching the system.
 
@@ -12,19 +15,20 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::engine::{apply_local, RestorePointResult};
-use super::executor::restore_local;
-use super::registry::{self, RawValue};
+use super::executor::{capture_original, restore_local};
 use super::{catalog, ops_for, ChangeOp, Hive, Original};
 use crate::error::{AppError, AppResult};
 use crate::security::exec::{self, PsScript};
+use crate::system::dns;
 
 #[derive(Debug, Deserialize)]
 struct Item {
     change_id: i64,
     tweak_id: String,
     op: ChangeOp,
+    /// Rollback only: the state to restore.
     #[serde(default)]
-    original: Option<RawValue>,
+    original: Option<Original>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,7 +41,7 @@ struct Request {
 }
 
 /// Validate that `op` may run elevated on behalf of `tweak_id`.
-fn validate(tweak_id: &str, op: &ChangeOp) -> AppResult<()> {
+fn validate(tweak_id: &str, op: &ChangeOp, applying: bool) -> AppResult<()> {
     match op {
         ChangeOp::Registry(s) => {
             let tweak = catalog::get(tweak_id)
@@ -65,20 +69,27 @@ fn validate(tweak_id: &str, op: &ChangeOp) -> AppResult<()> {
             }
             Ok(())
         }
+        ChangeOp::DnsServers { interface, ipv6, servers, .. } => {
+            if tweak_id != "dns" {
+                return Err(AppError::Forbidden("DNS changes must use the dns ID".into()));
+            }
+            // Fails for anything that isn't a real interface GUID.
+            dns::read(interface, *ipv6)?;
+            if applying && dns::identify(servers, *ipv6).is_none() {
+                return Err(AppError::Forbidden("only the listed DNS providers can be set".into()));
+            }
+            dns::validate_servers(servers, *ipv6)
+        }
         _ => Err(AppError::Forbidden("this operation never runs elevated".into())),
     }
 }
 
-/// The registry location an op writes to (for capturing originals).
-fn read_target(op: &ChangeOp) -> AppResult<Option<RawValue>> {
-    match op {
-        ChangeOp::Registry(s) => registry::read(s.hive, &s.path, &s.name),
-        ChangeOp::StartupApproval { location, name, .. } => {
-            let (h, p) = location.approved_key();
-            registry::read(h, &p, name)
-        }
-        _ => Err(AppError::Forbidden("unsupported".into())),
-    }
+/// The original state must match the op's kind before it's restored.
+fn original_fits(op: &ChangeOp, o: &Original) -> bool {
+    matches!(
+        (op, o),
+        (ChangeOp::Registry(_) | ChangeOp::StartupApproval { .. }, Original::Registry { .. }) | (ChangeOp::DnsServers { .. }, Original::Dns { .. })
+    )
 }
 
 pub fn create_restore_point() -> RestorePointResult {
@@ -114,13 +125,17 @@ pub fn handle(raw: Value) -> Value {
     let mut results = Vec::new();
     for item in &req.items {
         let outcome: AppResult<(Option<Original>, String)> =
-            validate(&item.tweak_id, &item.op).and_then(|_| {
+            validate(&item.tweak_id, &item.op, req.kind == "apply").and_then(|_| {
                 if req.kind == "apply" {
-                    let original = Original::Registry { value: read_target(&item.op)? };
+                    let original = capture_original(&item.op)?;
                     let after = apply_local(&item.op)?;
                     Ok((Some(original), after))
                 } else {
-                    let original = Original::Registry { value: item.original.clone() };
+                    let original = item
+                        .original
+                        .clone()
+                        .filter(|o| original_fits(&item.op, o))
+                        .ok_or_else(|| AppError::Forbidden("missing or mismatched original".into()))?;
                     let shown = restore_local(&item.op, &original)?;
                     Ok((None, shown))
                 }
@@ -149,24 +164,24 @@ mod tests {
             name: "DisableAntiSpyware".into(),
             data: RegData::Dword(1),
         });
-        assert!(validate("gaming.hardware_gpu_scheduling", &evil).is_err());
-        assert!(validate("not.a.tweak", &evil).is_err());
+        assert!(validate("gaming.hardware_gpu_scheduling", &evil, true).is_err());
+        assert!(validate("not.a.tweak", &evil, true).is_err());
     }
 
     #[test]
     fn rejects_hkcu_and_non_registry_ops() {
         let t = catalog::get("privacy.advertising_id_off").unwrap();
         let op = ops_for(t).remove(0);
-        assert!(validate(t.id, &op).is_err());
-        assert!(validate("network.flush_dns", &ChangeOp::FlushDns).is_err());
-        assert!(validate("performance.clean_temp", &ChangeOp::CleanTempFiles).is_err());
+        assert!(validate(t.id, &op, true).is_err());
+        assert!(validate("network.flush_dns", &ChangeOp::FlushDns, true).is_err());
+        assert!(validate("performance.clean_temp", &ChangeOp::CleanTempFiles, true).is_err());
     }
 
     #[test]
     fn accepts_declared_hklm_op() {
         let t = catalog::get("gaming.hardware_gpu_scheduling").unwrap();
         let op = ops_for(t).remove(0);
-        assert!(validate(t.id, &op).is_ok());
+        assert!(validate(t.id, &op, true).is_ok());
     }
 
     #[test]
@@ -176,7 +191,7 @@ mod tests {
         if let ChangeOp::Registry(s) = &mut op {
             s.data = RegData::Dword(1);
         }
-        assert!(validate(t.id, &op).is_err());
+        assert!(validate(t.id, &op, true).is_err());
     }
 
     #[test]
@@ -186,14 +201,42 @@ mod tests {
             name: "x".into(),
             enabled: false,
         };
-        assert!(validate("startup", &user).is_err());
+        assert!(validate("startup", &user, true).is_err());
         let missing = ChangeOp::StartupApproval {
             location: StartupLocation::RunMachine,
             name: "NOCTURN-definitely-not-a-real-entry".into(),
             enabled: false,
         };
-        assert!(validate("startup", &missing).is_err());
-        assert!(validate("gaming.game_mode", &missing).is_err());
+        assert!(validate("startup", &missing, true).is_err());
+        assert!(validate("gaming.game_mode", &missing, true).is_err());
+    }
+
+    #[test]
+    fn dns_validation() {
+        let lo = dns::interface_guid(1).unwrap();
+        let op = |servers: &[&str], ipv6: bool| ChangeOp::DnsServers {
+            interface: lo.clone(),
+            alias: "x".into(),
+            ipv6,
+            servers: servers.iter().map(|s| s.to_string()).collect(),
+        };
+        assert!(validate("dns", &op(&["1.1.1.1", "1.0.0.1"], false), true).is_ok());
+        assert!(validate("dns", &op(&[], false), true).is_ok(), "automatic");
+        assert!(validate("dns", &op(&["2620:fe::fe", "2620:fe::9"], true), true).is_ok());
+        // A hijacking resolver can't be applied, only restored as a recorded original.
+        assert!(validate("dns", &op(&["203.0.113.9"], false), true).is_err());
+        assert!(validate("dns", &op(&["203.0.113.9"], false), false).is_ok());
+        assert!(validate("dns", &op(&["not an ip"], false), false).is_err());
+        assert!(validate("dns", &op(&["1.1.1.1", "1.0.0.1"], true), true).is_err(), "family mismatch");
+        assert!(validate("startup", &op(&["1.1.1.1", "1.0.0.1"], false), true).is_err());
+        let bad_if = ChangeOp::DnsServers { interface: "00000000-0000-0000-0000-000000000000".into(), alias: "x".into(), ipv6: false, servers: vec![] };
+        assert!(validate("dns", &bad_if, true).is_err());
+        // Rollback needs an original of the matching kind.
+        let resp = handle(json!({
+            "kind": "rollback",
+            "items": [{ "change_id": 1, "tweak_id": "dns", "op": op(&[], false), "original": { "type": "power_plan", "scheme": "x" } }]
+        }));
+        assert_eq!(resp["results"][0]["ok"], json!(false));
     }
 
     #[test]

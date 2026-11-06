@@ -349,6 +349,41 @@ export interface StabilityReport {
   dns: { host: string; ms: number | null; error: string | null }[];
   tested_at: string;
 }
+export interface StoredPing {
+  tested_at: string;
+  label: string;
+  target: string;
+  avg_ms: number | null;
+  jitter_ms: number | null;
+  loss_percent: number;
+}
+export interface Hop {
+  ttl: number;
+  address: string | null;
+  rtts: (number | null)[];
+  private: boolean;
+  reached: boolean;
+}
+export interface TraceReport {
+  target: string;
+  address: string;
+  hops: Hop[];
+  reached: boolean;
+  note: string | null;
+}
+export interface DnsProvider {
+  id: string;
+  name: string;
+  v4: string[];
+  v6: string[];
+  note: string;
+}
+export interface DnsPreviewItem {
+  target: string;
+  current: string;
+  proposed: string;
+  will_change: boolean;
+}
 export interface PowerScheme {
   guid: string;
   name: string;
@@ -706,6 +741,16 @@ export const api = {
 
   networkOverview: () => invoke<NetworkOverview>("network_overview"),
   networkTest: (count = 10) => invoke<StabilityReport>("network_test", { count }),
+  networkHistory: (limit = 300) => invoke<StoredPing[]>("network_history", { limit }),
+  traceroute: (host: string, onHop: (h: Hop) => void) => {
+    const ch = new Channel<Hop>();
+    ch.onmessage = onHop;
+    return invoke<TraceReport>("traceroute", { host, onHop: ch });
+  },
+  dnsProviders: () => invoke<DnsProvider[]>("dns_providers"),
+  previewDns: (index: number, alias: string, provider: string) => invoke<DnsPreviewItem[]>("preview_dns", { index, alias, provider }),
+  setDns: (index: number, alias: string, provider: string, onProgress?: (p: Progress) => void) =>
+    invoke<ApplyReport>("set_dns", { index, alias, provider, onProgress: progressChannel(onProgress) }),
 
   powerPlans: () => invoke<PowerScheme[]>("power_plans"),
   setPowerPlan: (guid: string, onProgress?: (p: Progress) => void) =>

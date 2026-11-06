@@ -209,6 +209,9 @@ pub enum ChangeOp {
     CleanTempFiles,
     /// Enable/disable a startup entry via its StartupApproved flag.
     StartupApproval { location: StartupLocation, name: String, enabled: bool },
+    /// Static DNS servers for one adapter and address family; empty = automatic.
+    /// `interface` is the adapter GUID, `alias` only labels it for people.
+    DnsServers { interface: String, alias: String, ipv6: bool, servers: Vec<String> },
 }
 
 impl ChangeOp {
@@ -221,6 +224,9 @@ impl ChangeOp {
             ChangeOp::StartupApproval { location, name, .. } => {
                 format!("Startup entry \"{name}\" — {}", location.label())
             }
+            ChangeOp::DnsServers { alias, ipv6, .. } => {
+                format!("DNS servers (IPv{}) — {alias}", if *ipv6 { 6 } else { 4 })
+            }
         }
     }
 
@@ -228,6 +234,7 @@ impl ChangeOp {
         match self {
             ChangeOp::Registry(s) => s.hive == Hive::Hklm,
             ChangeOp::StartupApproval { location, .. } => location.is_machine(),
+            ChangeOp::DnsServers { .. } => true,
             _ => false,
         }
     }
@@ -241,6 +248,8 @@ pub enum Original {
     /// `None` = the value did not exist (rollback deletes it).
     Registry { value: Option<registry::RawValue> },
     PowerPlan { scheme: String },
+    /// Static DNS servers before the change; empty = automatic.
+    Dns { servers: Vec<String> },
     /// One-shot actions have nothing to restore.
     Nothing,
 }

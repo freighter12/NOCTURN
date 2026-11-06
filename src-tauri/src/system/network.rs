@@ -6,9 +6,12 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use serde_json::Value;
 use windows::Win32::NetworkManagement::IpHelper::{
-    IcmpCloseHandle, IcmpCreateFile, IcmpSendEcho, ICMP_ECHO_REPLY,
+    IcmpCloseHandle, IcmpCreateFile, IcmpSendEcho, ICMP_ECHO_REPLY, IP_OPTION_INFORMATION, IP_SUCCESS, IP_TTL_EXPIRED_TRANSIT,
 };
 
+use rusqlite::params;
+
+use crate::db::Db;
 use crate::error::{AppError, AppResult};
 use crate::security::exec::{self, as_array, PsScript, SafeCommand};
 
@@ -297,6 +300,170 @@ pub fn stability_test(count: u32) -> StabilityReport {
     StabilityReport { pings, dns, tested_at: crate::db::now() }
 }
 
+// ------------------------------------------------------------- traceroute
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Hop {
+    pub ttl: u8,
+    /// Router that answered; `None` if every probe timed out.
+    pub address: Option<String>,
+    /// Round-trip time of each probe (`None` = no reply).
+    pub rtts: Vec<Option<u32>>,
+    pub private: bool,
+    pub reached: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TraceReport {
+    pub target: String,
+    pub address: String,
+    pub hops: Vec<Hop>,
+    pub reached: bool,
+    pub note: Option<String>,
+}
+
+const MAX_HOPS: u8 = 30;
+const PROBES: usize = 3;
+/// Give up after this many silent hops in a row (firewalled path).
+const SILENT_LIMIT: usize = 5;
+
+/// Accept a hostname or IPv4 address and resolve it to IPv4.
+pub fn resolve_target(host: &str) -> AppResult<Ipv4Addr> {
+    let host = host.trim();
+    if host.is_empty() || host.len() > 253 || !host.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-') {
+        return Err(AppError::Invalid("enter a host name like example.com or an IPv4 address".into()));
+    }
+    if let Ok(ip) = host.parse::<Ipv4Addr>() {
+        return Ok(ip);
+    }
+    (host, 0)
+        .to_socket_addrs()
+        .map_err(|e| AppError::NotFound(format!("couldn't resolve {host}: {e}")))?
+        .find_map(|a| match a.ip() {
+            std::net::IpAddr::V4(v4) => Some(v4),
+            _ => None,
+        })
+        .ok_or_else(|| AppError::NotFound(format!("{host} has no IPv4 address")))
+}
+
+fn is_private(ip: Ipv4Addr) -> bool {
+    ip.is_private() || ip.is_loopback() || ip.is_link_local() || (ip.octets()[0] == 100 && (64..128).contains(&ip.octets()[1]))
+}
+
+/// One probe with the given TTL: (answering router, rtt, reached destination).
+fn probe(handle: windows::Win32::Foundation::HANDLE, dest: Ipv4Addr, ttl: u8, timeout_ms: u32) -> (Option<Ipv4Addr>, Option<u32>, bool) {
+    let payload = [0x4eu8; 32];
+    let mut buf = vec![0u8; std::mem::size_of::<ICMP_ECHO_REPLY>() + payload.len() + 8 + 64];
+    let opts = IP_OPTION_INFORMATION { Ttl: ttl, ..Default::default() };
+    let start = Instant::now();
+    unsafe {
+        IcmpSendEcho(
+            handle,
+            u32::from_ne_bytes(dest.octets()),
+            payload.as_ptr() as *const _,
+            payload.len() as u16,
+            Some(&opts),
+            buf.as_mut_ptr() as *mut _,
+            buf.len() as u32,
+            timeout_ms,
+        );
+    }
+    // The reply buffer is filled for "TTL expired" too, even when the call
+    // reports failure, so inspect it rather than the return value.
+    let reply = unsafe { &*(buf.as_ptr() as *const ICMP_ECHO_REPLY) };
+    if reply.Address == 0 {
+        return (None, None, false);
+    }
+    let from = Ipv4Addr::from(reply.Address.to_ne_bytes());
+    match reply.Status {
+        IP_SUCCESS => (Some(from), Some(reply.RoundTripTime), true),
+        // RoundTripTime isn't set for TTL-expired replies; time it ourselves.
+        IP_TTL_EXPIRED_TRANSIT => (Some(from), Some(start.elapsed().as_millis() as u32), false),
+        _ => (Some(from), None, false),
+    }
+}
+
+pub fn traceroute(host: &str, on_hop: &dyn Fn(&Hop)) -> AppResult<TraceReport> {
+    let dest = resolve_target(host)?;
+    let handle = unsafe { IcmpCreateFile() }.map_err(|e| AppError::msg(format!("ICMP unavailable: {e}")))?;
+    let mut hops = Vec::new();
+    let mut reached = false;
+    let mut silent = 0;
+    let mut note = None;
+    for ttl in 1..=MAX_HOPS {
+        let mut address = None;
+        let mut rtts = Vec::with_capacity(PROBES);
+        let mut hit = false;
+        for _ in 0..PROBES {
+            let (from, rtt, done) = probe(handle, dest, ttl, 1000);
+            address = address.or(from);
+            rtts.push(rtt);
+            hit |= done;
+        }
+        let hop = Hop { ttl, private: address.is_some_and(is_private), address: address.map(|a| a.to_string()), rtts, reached: hit };
+        on_hop(&hop);
+        silent = if hop.address.is_none() { silent + 1 } else { 0 };
+        hops.push(hop);
+        if hit {
+            reached = true;
+            break;
+        }
+        if silent >= SILENT_LIMIT {
+            note = Some(format!("Stopped after {SILENT_LIMIT} hops in a row didn't answer — routers on this path probably don't reply to traceroute. That alone isn't a fault."));
+            break;
+        }
+    }
+    unsafe {
+        let _ = IcmpCloseHandle(handle);
+    }
+    if !reached && note.is_none() {
+        note = Some(format!("Didn't reach {dest} within {MAX_HOPS} hops."));
+    }
+    // Trailing silent hops add nothing once we've stopped.
+    while hops.last().is_some_and(|h| h.address.is_none()) && hops.len() > 1 && !reached {
+        hops.pop();
+    }
+    Ok(TraceReport { target: host.trim().to_string(), address: dest.to_string(), hops, reached, note })
+}
+
+// ---------------------------------------------------------- test history
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StoredPing {
+    pub tested_at: String,
+    pub label: String,
+    pub target: String,
+    pub avg_ms: Option<f32>,
+    pub jitter_ms: Option<f32>,
+    pub loss_percent: f32,
+}
+
+pub fn save_report(db: &Db, r: &StabilityReport) -> AppResult<()> {
+    let conn = db.conn();
+    for p in &r.pings {
+        conn.execute(
+            "INSERT INTO network_tests(tested_at, label, target, avg_ms, jitter_ms, loss_pct) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![r.tested_at, p.label, p.target, p.avg_ms, p.jitter_ms, p.loss_percent],
+        )?;
+    }
+    // Keep a year of results at most.
+    conn.execute("DELETE FROM network_tests WHERE tested_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-365 days')", [])?;
+    Ok(())
+}
+
+pub fn history(db: &Db, limit: i64) -> AppResult<Vec<StoredPing>> {
+    let conn = db.conn();
+    let mut st = conn.prepare(
+        "SELECT tested_at, label, target, avg_ms, jitter_ms, loss_pct FROM network_tests ORDER BY tested_at DESC, id LIMIT ?1",
+    )?;
+    let rows = st
+        .query_map([limit], |r| {
+            Ok(StoredPing { tested_at: r.get(0)?, label: r.get(1)?, target: r.get(2)?, avg_ms: r.get(3)?, jitter_ms: r.get(4)?, loss_percent: r.get(5)? })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -316,5 +483,44 @@ mod tests {
         let r = ping(Ipv4Addr::LOCALHOST, "loopback", 2, Duration::from_millis(500)).unwrap();
         assert_eq!(r.sent, 2);
         assert_eq!(r.received, 2);
+    }
+}
+
+#[cfg(test)]
+mod trace_tests {
+    use super::*;
+
+    #[test]
+    fn target_validation() {
+        assert!(resolve_target("").is_err());
+        assert!(resolve_target("example.com; calc").is_err());
+        assert!(resolve_target("a b").is_err());
+        assert_eq!(resolve_target(" 1.1.1.1 ").unwrap(), Ipv4Addr::new(1, 1, 1, 1));
+        assert_eq!(resolve_target("localhost").unwrap(), Ipv4Addr::LOCALHOST);
+    }
+
+    #[test]
+    fn trace_to_loopback_reaches_in_one_hop() {
+        let seen = std::sync::Mutex::new(0);
+        let r = traceroute("127.0.0.1", &|_| *seen.lock().unwrap() += 1).unwrap();
+        assert!(r.reached, "{r:?}");
+        assert_eq!(r.hops.len(), 1);
+        assert_eq!(r.hops[0].address.as_deref(), Some("127.0.0.1"));
+        assert_eq!(*seen.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn history_roundtrip() {
+        let db = Db::open_in_memory().unwrap();
+        let r = StabilityReport {
+            pings: vec![PingResult { target: "1.1.1.1".into(), label: "Cloudflare".into(), sent: 4, received: 3, loss_percent: 25.0, min_ms: Some(9), avg_ms: Some(10.5), max_ms: Some(12), jitter_ms: Some(1.0) }],
+            dns: vec![],
+            tested_at: crate::db::now(),
+        };
+        save_report(&db, &r).unwrap();
+        let h = history(&db, 10).unwrap();
+        assert_eq!(h.len(), 1, "fresh rows survive the retention purge");
+        assert_eq!(h[0].avg_ms, Some(10.5));
+        assert_eq!(h[0].loss_percent, 25.0);
     }
 }

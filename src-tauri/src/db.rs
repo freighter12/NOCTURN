@@ -136,6 +136,19 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX idx_sessions_game ON game_sessions(game_id, started_at);
     "#,
+    // 5: network stability test results (one row per ping target per test).
+    r#"
+    CREATE TABLE network_tests (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        tested_at TEXT NOT NULL,
+        label     TEXT NOT NULL,
+        target    TEXT NOT NULL,
+        avg_ms    REAL,
+        jitter_ms REAL,
+        loss_pct  REAL NOT NULL
+    );
+    CREATE INDEX idx_network_tests_at ON network_tests(tested_at);
+    "#,
 ];
 
 #[derive(Clone)]

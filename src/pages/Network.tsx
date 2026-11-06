@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { LineChart } from "../components/LineChart";
+import { DnsPanel, TestHistory, TraceroutePanel } from "../components/NetworkTools";
 import { I } from "../components/Icons";
 import { TweakList } from "../components/TweakList";
 import { Empty, ErrorNote, Loading, Meter, Note, PageHead, Panel, Spinner } from "../components/ui";
@@ -20,12 +21,14 @@ export function Network() {
   const [testing, setTesting] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
   const [showVirtual, setShowVirtual] = useState(false);
+  const [historyVersion, setHistoryVersion] = useState(0);
 
   async function runTest() {
     setTesting(true);
     setTestError(null);
     try {
       setTest(await api.networkTest(20));
+      setHistoryVersion((v) => v + 1);
     } catch (e) {
       setTestError(errorMessage(e));
     } finally {
@@ -42,7 +45,7 @@ export function Network() {
       <PageHead
         eyebrow="Network"
         title="Network diagnostics"
-        desc="Adapter, DNS and Wi-Fi details read from Windows, plus a stability test that measures latency, jitter and packet loss to your router and the internet."
+        desc="Adapter, DNS and Wi-Fi details read from Windows, a stability test with history, traceroute, and DNS provider switching you can undo."
         actions={
           <>
             <button className="btn" onClick={() => navigate("assistant", { prompt: "My PC randomly disconnects or has unstable internet. Please run network diagnostics and tell me what's wrong." })}>
@@ -146,6 +149,13 @@ export function Network() {
           )}
         </Panel>
       )}
+
+      <div className="mt-2"><TestHistory version={historyVersion} /></div>
+
+      <div className="grid mt-2" style={{ gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", alignItems: "start" }}>
+        <DnsPanel adapters={net.data?.adapters ?? []} onChanged={net.reload} />
+        <TraceroutePanel />
+      </div>
 
       <section className="panel flush mt-2">
         <div className="panel-head">
