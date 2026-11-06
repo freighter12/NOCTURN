@@ -577,3 +577,25 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--line-2)
 .mini-app:hover { background: rgba(var(--overlay-rgb), 0.04); }
 .mini-app:focus-visible { outline: 2px solid var(--moon); }
 .mini-app span:last-child { font-size: calc(11.5px * var(--fs, 1)); color: var(--ink-1); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ------------------------------------------------------ workspace switcher */
+
+.titlebar .center { display: flex; justify-content: center; align-items: center; }
+.ws-switch { position: relative; }
+.ws-current { display: inline-flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--bg-2); color: var(--ink-1); font-size: calc(12px * var(--fs, 1)); cursor: default; }
+.ws-current:hover { color: var(--ink-0); border-color: var(--line-3); }
+.ws-current .chev { color: var(--ink-3); font-size: calc(9px * var(--fs, 1)); }
+.ws-glyph { display: inline-grid; place-items: center; min-width: 16px; }
+.ws-backdrop { position: fixed; inset: 0; z-index: 40; }
+.ws-menu { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); z-index: 41; min-width: 220px; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35); padding: 6px; display: grid; gap: 2px; }
+.ws-menu button { all: unset; display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--radius-s); color: var(--ink-1); cursor: default; font-size: calc(12.5px * var(--fs, 1)); }
+.ws-menu button:hover, .ws-menu button:focus-visible { background: var(--bg-3); color: var(--ink-0); }
+.ws-menu button.on { color: var(--ink-0); background: rgba(var(--accent-rgb), 0.08); }
+.ws-sep { height: 1px; background: var(--line); margin: 4px 2px; }
+
+/* ------------------------------------------------------------- workspaces */
+
+.ws-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.ws-card { --ws-accent: var(--moon); display: flex; flex-direction: column; gap: 4px; min-height: 190px; padding: 14px; border-radius: var(--radius-l); border: 1px solid var(--line-2); background: linear-gradient(160deg, color-mix(in srgb, var(--ws-accent) 9%, transparent), transparent 55%), var(--panel-bg, var(--bg-2)); }
+.ws-card.on { border-color: var(--ws-accent); box-shadow: 0 0 0 1px var(--ws-accent) inset; }
+.ws-big-glyph { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: color-mix(in srgb, var(--ws-accent) 16%, var(--bg-3)); font-size: calc(19px * var(--fs, 1)); }

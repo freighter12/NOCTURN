@@ -7,9 +7,9 @@ import { Note, PageHead, Panel, Seg, Toggle } from "../components/ui";
 import { useApp, type PageId } from "../lib/app";
 import { ALL_PAGES, SECTIONS } from "../shell/nav";
 import { usePrefs } from "../shell/PrefsProvider";
-import { BACKGROUNDS, LOCKED_SECTIONS, sanitizeTheme, type BackgroundStyle, type Prefs, type WidgetSize } from "../shell/prefs";
+import { BACKGROUNDS, LOCKED_SECTIONS, sanitizeTheme, type BackgroundStyle, type Prefs, } from "../shell/prefs";
 import { OFFICIAL_THEMES, accentProblem, findTheme, readabilityProblem, type Theme, type ThemeTokens } from "../shell/theme";
-import { WIDGETS, widgetDef } from "../shell/widgets";
+import { DashboardEditor, move } from "../shell/DashboardEditor";
 
 type Tab = "appearance" | "themes" | "layout" | "dashboard" | "accessibility";
 
@@ -22,14 +22,6 @@ const TOKEN_LABELS: [keyof ThemeTokens, string][] = [
   ["ink0", "Main text"], ["ink1", "Secondary text"], ["ink2", "Muted text"], ["ink3", "Faint text"],
   ["accent", "Accent"], ["accent2", "Accent (dim)"],
 ];
-
-function move<T>(list: T[], from: number, to: number): T[] {
-  if (to < 0 || to >= list.length || from === to) return list;
-  const copy = [...list];
-  const [x] = copy.splice(from, 1);
-  copy.splice(to, 0, x);
-  return copy;
-}
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
@@ -357,51 +349,12 @@ function Layout({ prefs, set }: { prefs: Prefs; set: (fn: (n: Prefs["navigation"
 
 function Dashboard({ prefs, update }: { prefs: Prefs; update: (fn: (p: Prefs) => Prefs) => void }) {
   const { navigate } = useApp();
-  const ws = prefs.home.widgets;
-  const drag = useRef<number | null>(null);
-  const setW = (fn: (w: Prefs["home"]["widgets"]) => Prefs["home"]["widgets"]) => update((p) => ({ ...p, home: { widgets: fn(p.home.widgets) } }));
   return (
-    <div className="stack" style={{ gap: 14 }}>
-      <Panel title="On your dashboard" sub="Drag to reorder. Small is a quarter of the row, medium a half, large the full width." actions={<button className="btn ghost sm" onClick={() => navigate("home")}>View Home <I.arrow /></button>}>
-        {ws.length === 0 && <div className="small dim">No widgets. Add some below.</div>}
-        <div className="list">
-          {ws.map((w, i) => (
-            <div
-              key={w.id}
-              className="list-item draggable"
-              draggable
-              onDragStart={() => (drag.current = i)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => {
-                if (drag.current != null) setW((x) => move(x, drag.current!, i));
-                drag.current = null;
-              }}
-              style={{ alignItems: "center" }}
-            >
-              <span className="drag-handle" aria-hidden>⋮⋮</span>
-              <div className="body">
-                <div className="title">{widgetDef(w.type).name}</div>
-                <div className="desc">{widgetDef(w.type).description}</div>
-              </div>
-              <Seg<WidgetSize> value={w.size} onChange={(v) => setW((x) => x.map((y) => (y.id === w.id ? { ...y, size: v } : y)))} options={[{ value: "s", label: "S" }, { value: "m", label: "M" }, { value: "l", label: "L" }]} />
-              <button className="btn ghost sm icon" aria-label="Move up" disabled={i === 0} onClick={() => setW((x) => move(x, i, i - 1))}>↑</button>
-              <button className="btn ghost sm icon" aria-label="Move down" disabled={i === ws.length - 1} onClick={() => setW((x) => move(x, i, i + 1))}>↓</button>
-              <button className="btn ghost sm icon" aria-label={`Remove ${widgetDef(w.type).name}`} onClick={() => setW((x) => x.filter((y) => y.id !== w.id))}><I.close /></button>
-            </div>
-          ))}
-        </div>
-      </Panel>
-      <Panel title="Add a widget">
-        <div className="grid cols-3" style={{ gap: 10 }}>
-          {WIDGETS.map((d) => (
-            <button key={d.type} className="add-widget" disabled={ws.length >= 24} onClick={() => setW((x) => [...x, { id: `w-${d.type}-${Date.now().toString(36)}`, type: d.type, size: d.type === "vitals" ? "l" : "m" }])}>
-              <b>{d.name}</b>
-              <span className="small muted">{d.description}</span>
-            </button>
-          ))}
-        </div>
-      </Panel>
-    </div>
+    <DashboardEditor
+      widgets={prefs.home.widgets}
+      onChange={(w) => update((p) => ({ ...p, home: { widgets: w } }))}
+      actions={<button className="btn ghost sm" onClick={() => navigate("home")}>View Home <I.arrow /></button>}
+    />
   );
 }
 

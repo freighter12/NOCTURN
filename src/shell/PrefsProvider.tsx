@@ -33,7 +33,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Apply appearance and accessibility whenever they change.
-  useEffect(() => applyAppearance(prefs), [prefs.appearance, prefs.accessibility]);
+  useEffect(() => applyAppearance(prefs), [prefs.appearance, prefs.accessibility, prefs.workspaces.active, prefs.workspaces.list]);
 
   const persist = useCallback((p: Prefs) => {
     window.clearTimeout(timer.current);

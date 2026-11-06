@@ -22,7 +22,9 @@ import { Home } from "./pages/Home";
 import { Coming } from "./pages/Coming";
 import { Studio } from "./pages/Studio";
 import { Library } from "./pages/Library";
+import { Workspaces } from "./pages/Workspaces";
 import { ErrorBoundary } from "./shell/ErrorBoundary";
+import { WorkspaceProvider } from "./shell/WorkspaceProvider";
 import { PrefsProvider, usePrefs } from "./shell/PrefsProvider";
 
 function GuardedPages() {
@@ -44,7 +46,7 @@ function Pages() {
     case "music":
       return <Coming eyebrow="Nocturn Music" title="Music" desc="Your music library, playlists and queue — no ads, ever." phase="Phase 6" />;
     case "workspaces":
-      return <Coming eyebrow="Workspaces" title="Workspaces" desc="Environments for gaming, study, creative work and more." phase="Phase 5" />;
+      return <Workspaces />;
     case "studio":
       return <Studio />;
     case "overview":
@@ -89,16 +91,18 @@ function Shell() {
   const nav = prefs.navigation;
   return (
     <AppProvider>
+      <WorkspaceProvider>
       <div className="shell">
         <TitleBar />
         <div className={["body", nav.sidebar === "right" ? "right" : "", nav.compact ? "compact" : ""].filter(Boolean).join(" ")}>
           <Sidebar />
-          <main className="main" id="main" data-bg={prefs.appearance.background}>
+          <main className="main" id="main" data-bg={prefs.workspaces.list.find((w) => w.id === prefs.workspaces.active)?.background ?? prefs.appearance.background}>
             <GuardedPages />
           </main>
         </div>
       </div>
       <ApplyFlow />
+      </WorkspaceProvider>
     </AppProvider>
   );
 }

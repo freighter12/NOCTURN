@@ -15,11 +15,13 @@ function greeting(d = new Date()) {
 export function Home() {
   const { prefs } = usePrefs();
   const { navigate } = useApp();
-  const widgets = prefs.home.widgets;
+  const ws = prefs.workspaces.list.find((w) => w.id === prefs.workspaces.active);
+  // A workspace with its own dashboard replaces the main one while active.
+  const widgets = ws?.widgets ?? prefs.home.widgets;
   return (
     <div className="page">
       <PageHead
-        eyebrow="Nocturn"
+        eyebrow={ws ? `Workspace · ${ws.name}` : "Nocturn"}
         title={greeting()}
         desc="Your PC at a glance. Choose what appears here in Customise."
         actions={

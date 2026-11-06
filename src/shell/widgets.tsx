@@ -11,6 +11,7 @@ import { AppIcon, launchItem, whereItOpens } from "../library/tiles";
 import { useApp, useLoad } from "../lib/app";
 import { bytes, pct, rate } from "../lib/format";
 import { primaryGpu, useTelemetry } from "../lib/telemetry";
+import { usePrefs } from "./PrefsProvider";
 import type { WidgetType } from "./prefs";
 
 export interface WidgetDef {
@@ -179,12 +180,14 @@ function Music() {
 function Apps() {
   const { toast } = useApp();
   const items = useLoad(() => library.list(), []);
+  const { prefs } = usePrefs();
   const all = items.data ?? [];
-  // Pinned first, then most recently opened.
+  const ws = prefs.workspaces.list.find((w) => w.id === prefs.workspaces.active);
+  // In a workspace: its own apps. Otherwise pinned first, then most recently opened.
   const recent = all.filter((i) => !i.pinned && i.last_opened_at).sort((a, b) => (b.last_opened_at ?? "").localeCompare(a.last_opened_at ?? ""));
-  const shown = [...all.filter((i) => i.pinned), ...recent].slice(0, 8);
+  const shown = (ws ? ws.apps.map((id) => all.find((i) => i.id === id)).filter((i): i is NonNullable<typeof i> => !!i) : [...all.filter((i) => i.pinned), ...recent]).slice(0, 8);
   return (
-    <Card title="Your apps" action={<Go to="library" label="Library" />}>
+    <Card title={ws ? `${ws.name} apps` : "Your apps"} action={<Go to={ws ? "workspaces" : "library"} label={ws ? "Workspace" : "Library"} />}>
       {shown.length === 0 ? (
         <div className="small muted">Pin apps in your Library, or open some, and they'll appear here.</div>
       ) : (

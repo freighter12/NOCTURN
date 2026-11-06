@@ -7,9 +7,51 @@ import { api, type AppInfo } from "../lib/api";
 import { useApp, type PageId } from "../lib/app";
 import { ALL_PAGES, SECTIONS, sectionOf, type NavSection } from "../shell/nav";
 import { usePrefs } from "../shell/PrefsProvider";
+import { useWorkspaces } from "../shell/WorkspaceProvider";
 import { pct } from "../lib/format";
 import { useTelemetry } from "../lib/telemetry";
 import { I } from "./Icons";
+
+/** Title-bar menu for switching workspaces quickly. */
+function WorkspaceSwitcher() {
+  const { prefs } = usePrefs();
+  const { active, switchTo } = useWorkspaces();
+  const { navigate } = useApp();
+  const [open, setOpen] = useState(false);
+  const list = prefs.workspaces.list;
+  if (list.length === 0) return null;
+  const pick = (id: string | null) => {
+    setOpen(false);
+    if (id !== (active?.id ?? null)) switchTo(id);
+  };
+  return (
+    <div className="ws-switch">
+      <button className="ws-current" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span className="ws-glyph">{active?.glyph || "◐"}</span>
+        {active ? active.name : "No workspace"}
+        <span className="chev">▾</span>
+      </button>
+      {open && (
+        <>
+          <div className="ws-backdrop" onClick={() => setOpen(false)} />
+          <div className="ws-menu" role="menu">
+            {list.map((w) => (
+              <button key={w.id} role="menuitemradio" aria-checked={active?.id === w.id} className={active?.id === w.id ? "on" : ""} onClick={() => pick(w.id)}>
+                <span className="ws-glyph">{w.glyph || w.name.slice(0, 1)}</span>
+                {w.name}
+              </button>
+            ))}
+            <button role="menuitemradio" aria-checked={!active} className={!active ? "on" : ""} onClick={() => pick(null)}>
+              <span className="ws-glyph">◐</span>No workspace
+            </button>
+            <div className="ws-sep" />
+            <button role="menuitem" onClick={() => { setOpen(false); navigate("workspaces"); }}>Manage workspaces…</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function TitleBar() {
   const win = getCurrentWindow();
@@ -20,7 +62,9 @@ export function TitleBar() {
         <img src={logo} alt="" />
         NOCTURN
       </div>
-      <div className="center" data-tauri-drag-region onDoubleClick={() => win.toggleMaximize()} />
+      <div className="center" data-tauri-drag-region onDoubleClick={() => win.toggleMaximize()}>
+        <WorkspaceSwitcher />
+      </div>
       {latest && (
         <div className="meta" data-tauri-drag-region>
           <span>CPU {pct(latest.cpu_usage)}</span>

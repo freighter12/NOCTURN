@@ -84,3 +84,40 @@ describe("themes", () => {
     expect(accentProblem("#9fc3ff", OFFICIAL_THEMES[0].tokens)).toBeNull();
   });
 });
+
+import { sanitizeWorkspace } from "./prefs";
+
+describe("workspaces", () => {
+  it("keeps valid workspaces and drops broken ones", () => {
+    const p = clean({
+      workspaces: {
+        active: "ws-game",
+        startWith: "ws-missing",
+        list: [
+          { id: "ws-game", name: "Gaming", glyph: "🎮x", accent: "#9fc3ff", background: "glow", apps: ["a", "b"], launch: ["b", "z"], widgets: [{ id: "w1", type: "vitals", size: "l" }] },
+          { id: "../../evil", name: "x" },
+          { id: "ws-game", name: "Duplicate" },
+        ],
+      },
+    });
+    expect(p.workspaces.list).toHaveLength(1);
+    const ws = p.workspaces.list[0];
+    // Two characters max, counting an emoji as one.
+    expect(ws.glyph).toBe("🎮x");
+    expect(ws.launch).toEqual(["b"]);
+    expect(ws.widgets).toEqual([{ id: "w1", type: "vitals", size: "l" }]);
+    expect(p.workspaces.active).toBe("ws-game");
+    expect(p.workspaces.startWith).toBeNull();
+  });
+
+  it("an active workspace that no longer exists falls back to none", () => {
+    expect(clean({ workspaces: { active: "ws-gone", list: [] } }).workspaces.active).toBeNull();
+  });
+
+  it("rejects bad colours and backgrounds", () => {
+    const ws = sanitizeWorkspace({ id: "ws-a", accent: "javascript:x", background: "lava" });
+    expect(ws?.accent).toBeNull();
+    expect(ws?.background).toBeNull();
+    expect(ws?.widgets).toBeNull();
+  });
+});

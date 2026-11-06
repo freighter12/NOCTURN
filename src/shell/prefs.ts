@@ -87,7 +87,13 @@ export interface Prefs {
     showLyrics: boolean;
   };
   workspaces: {
+    /** ID of the active workspace; null = none (plain Nocturn). */
     active: string | null;
+    list: Workspace[];
+    /** Workspace to switch to when Nocturn opens; null = keep the last one. */
+    startWith: string | null;
+    /** Ask before opening a workspace's apps when switching. */
+    confirmLaunch: boolean;
   };
   accessibility: {
     reduceMotion: boolean;
@@ -123,7 +129,7 @@ export const DEFAULT_PREFS: Prefs = {
   },
   home: { widgets: DEFAULT_WIDGETS },
   music: { playerMode: "standard", volume: 0.8, visualiser: true, showLyrics: true },
-  workspaces: { active: null },
+  workspaces: { active: null, list: [], startWith: null, confirmLaunch: true },
   accessibility: { reduceMotion: false, fontScale: 1, uiScale: 1 },
 };
 
@@ -140,6 +146,58 @@ const str = (v: unknown, d: string, max = 80) => (typeof v === "string" && v.len
 const oneOf = <T extends string>(v: unknown, allowed: readonly T[], d: T): T => (allowed.includes(v as T) ? (v as T) : d);
 const strList = (v: unknown, allowed?: readonly string[], max = 50) =>
   Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === "string" && (!allowed || allowed.includes(x))))].slice(0, max) : null;
+
+/** A widget list, or null if it isn't a list at all. Unknown or duplicate widgets are dropped. */
+export function sanitizeWidgets(raw: unknown): WidgetSlot[] | null {
+  if (!Array.isArray(raw)) return null;
+  const seen = new Set<string>();
+  return raw
+    .filter(isObj)
+    .map((s) => ({ id: str(s.id, "", 40), type: oneOf(s.type, WIDGET_TYPES, "vitals"), size: oneOf<WidgetSize>(s.size, ["s", "m", "l"], "m"), ok: WIDGET_TYPES.includes(s.type as WidgetType) }))
+    .filter((s) => s.ok && s.id && !seen.has(s.id) && seen.add(s.id))
+    .map(({ id, type, size }) => ({ id, type, size }))
+    .slice(0, 24);
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  /** One or two characters (emoji or letters). */
+  glyph: string;
+  /** Accent while this workspace is active; null = the theme's. */
+  accent: string | null;
+  /** Page background while active; null = the global setting. */
+  background: BackgroundStyle | null;
+  /** Library item IDs in this workspace. */
+  apps: string[];
+  /** Library item IDs opened when switching to this workspace. */
+  launch: string[];
+  /** Its own Home dashboard; null = use the main one. */
+  widgets: WidgetSlot[] | null;
+  /** Nocturn Music playlist to offer when switching; null = none. */
+  playlist: string | null;
+  description: string;
+}
+
+/** A stored workspace, or null if it's malformed. */
+export function sanitizeWorkspace(raw: unknown): Workspace | null {
+  if (!isObj(raw)) return null;
+  if (typeof raw.id !== "string" || !/^ws-[a-z0-9-]{1,40}$/.test(raw.id)) return null;
+  const ids = (v: unknown) => (strList(v, undefined, 60) ?? []).filter((x) => x.length <= 64);
+  const apps = ids(raw.apps);
+  return {
+    id: raw.id,
+    name: str(typeof raw.name === "string" ? raw.name.trim() : "", "Workspace", 40),
+    glyph: typeof raw.glyph === "string" ? [...raw.glyph.trim()].slice(0, 2).join("") : "",
+    accent: isHexColour(raw.accent) ? raw.accent : null,
+    background: BACKGROUNDS.includes(raw.background as BackgroundStyle) ? (raw.background as BackgroundStyle) : null,
+    apps,
+    launch: ids(raw.launch).filter((x) => apps.includes(x)),
+    widgets: sanitizeWidgets(raw.widgets),
+    playlist: typeof raw.playlist === "string" && raw.playlist.length <= 64 ? raw.playlist : null,
+    description: typeof raw.description === "string" ? raw.description.slice(0, 120) : "",
+  };
+}
 
 /** #rgb or #rrggbb only. */
 export const isHexColour = (v: unknown): v is string => typeof v === "string" && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v);
@@ -170,16 +228,14 @@ export function sanitize(raw: unknown, pages: readonly string[], sections: reado
       if (ok && !customThemes.some((x) => x.id === ok.id)) customThemes.push(ok);
     }
   }
-  let widgets: WidgetSlot[] = d.home.widgets;
-  if (Array.isArray(h.widgets)) {
-    const seen = new Set<string>();
-    widgets = h.widgets
-      .filter(isObj)
-      .map((s) => ({ id: str(s.id, "", 40), type: oneOf(s.type, WIDGET_TYPES, "vitals"), size: oneOf<WidgetSize>(s.size, ["s", "m", "l"], "m"), ok: WIDGET_TYPES.includes(s.type as WidgetType) }))
-      .filter((s) => s.ok && s.id && !seen.has(s.id) && seen.add(s.id))
-      .map(({ id, type, size }) => ({ id, type, size }))
-      .slice(0, 24);
+  const workspaces: Workspace[] = [];
+  if (Array.isArray(w.list)) {
+    for (const raw of w.list.slice(0, 20)) {
+      const ws = sanitizeWorkspace(raw);
+      if (ws && !workspaces.some((x) => x.id === ws.id)) workspaces.push(ws);
+    }
   }
+  const widgets = sanitizeWidgets(h.widgets) ?? d.home.widgets;
 
   return {
     version: PREFS_VERSION,
@@ -211,7 +267,12 @@ export function sanitize(raw: unknown, pages: readonly string[], sections: reado
       visualiser: bool(m.visualiser, d.music.visualiser),
       showLyrics: bool(m.showLyrics, d.music.showLyrics),
     },
-    workspaces: { active: typeof w.active === "string" && w.active.length <= 64 ? w.active : null },
+    workspaces: {
+      active: typeof w.active === "string" && workspaces.some((x) => x.id === w.active) ? w.active : null,
+      list: workspaces,
+      startWith: typeof w.startWith === "string" && workspaces.some((x) => x.id === w.startWith) ? w.startWith : null,
+      confirmLaunch: bool(w.confirmLaunch, true),
+    },
     accessibility: {
       reduceMotion: bool(x.reduceMotion, d.accessibility.reduceMotion),
       fontScale: num(x.fontScale, 0.85, 1.4, 1),

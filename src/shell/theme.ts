@@ -105,7 +105,10 @@ export function applyAppearance(prefs: Prefs, el: HTMLElement = document.documen
   const t = theme.tokens;
   const a = prefs.appearance;
   const light = theme.kind === "light";
-  const accent = a.accent && !accentProblem(a.accent, t) ? a.accent : t.accent;
+  // The active workspace can bring its own accent.
+  const ws = prefs.workspaces.list.find((w) => w.id === prefs.workspaces.active);
+  const wanted = ws?.accent ?? a.accent;
+  const accent = wanted && !accentProblem(wanted, t) ? wanted : t.accent;
   const accent2 = accent === t.accent ? t.accent2 : mix(accent, t.bg2, 0.3);
   const [ar, ag, ab] = hexToRgb(accent);
   const hc = a.highContrast;
