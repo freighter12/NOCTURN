@@ -5,6 +5,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, errorMessage, type ApplyReport, type CloseResult, type CustomPreviewItem, type Preview, type Progress, type ServicePreviewItem, type StartupItem, type TweakView } from "../lib/api";
 import { useApp } from "../lib/app";
+import { useMusic } from "../music/MusicProvider";
+import { useWorkspaces } from "../shell/WorkspaceProvider";
+import { library } from "../lib/api";
 import { takesLabel } from "../lib/format";
 import { I } from "./Icons";
 import { ErrorNote, Note, RiskTag, Spinner, StatusTag } from "./ui";
@@ -13,6 +16,9 @@ type Phase = "loading" | "review" | "running" | "done" | "error";
 
 export function ApplyFlow() {
   const { applyIntent: intent, closeApply, settings, toast, bumpData, navigate } = useApp();
+  const ws = useWorkspaces();
+  const player = useMusic();
+  const [ecoDone, setEcoDone] = useState<string[]>([]);
   const [phase, setPhase] = useState<Phase>("loading");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [tweaks, setTweaks] = useState<TweakView[]>([]);
@@ -35,6 +41,7 @@ export function ApplyFlow() {
     setError(null);
     setReports([]);
     setClosed([]);
+    setEcoDone([]);
     setExcluded(new Set());
     setProgress(null);
     setAckAdvanced(false);
@@ -73,15 +80,19 @@ export function ApplyFlow() {
   const tweakIds = (intent?.tweakIds ?? []).filter((id) => on(`t:${id}`));
   const startupSel = startupRows.filter((s) => s.enabled && on(`s:${s.id}`));
   const closeNames = (intent?.closeApps ?? []).filter((n) => on(`a:${n}`));
+  const ecoApps = (intent?.openApps ?? []).filter((a) => on(`o:${a.id}`));
+  const ecoWs = intent?.workspace && on("w:ws") ? intent.workspace : null;
+  const ecoMusic = intent?.music && on("m:music") ? intent.music : null;
+  const ecoCount = ecoApps.length + (ecoWs ? 1 : 0) + (ecoMusic ? 1 : 0);
   const customSel = customRows.filter((c) => c.will_change && on(`c:${c.id}`));
   const serviceSel = serviceRows.filter((v) => v.will_change && !v.refused && on(`v:${v.name}`));
   const liveItems = (preview?.items ?? []).filter((i) => i.will_change && on(`t:${i.tweak_id}`));
   const advanced = tweakIds.filter((id) => byId.get(id)?.risk === "advanced");
   const needAck = advanced.length > 0 && (settings?.confirm_advanced ?? true);
-  const changeCount = liveItems.length + startupSel.length + closeNames.length + customSel.length + serviceSel.length;
+  const changeCount = liveItems.length + startupSel.length + closeNames.length + customSel.length + serviceSel.length + ecoCount;
   const needsAdmin = liveItems.some((i) => i.requires_admin) || startupSel.some((s) => s.requires_admin) || serviceSel.length > 0;
   // Several items to choose from → show a checkbox on each.
-  const choosable = (preview ? groupByTweak(preview).length : 0) + startupRows.length + (intent?.closeApps?.length ?? 0) + customRows.length + serviceRows.length > 1;
+  const choosable = (preview ? groupByTweak(preview).length : 0) + startupRows.length + (intent?.closeApps?.length ?? 0) + customRows.length + serviceRows.length + (intent?.openApps?.length ?? 0) + (intent?.workspace ? 1 : 0) + (intent?.music ? 1 : 0) > 1;
 
   if (!intent) return null;
 
@@ -104,11 +115,14 @@ export function ApplyFlow() {
       if (k.startsWith("s:")) return `startup app ${startupRows.find((s) => s.id === v)?.name ?? v}`;
       if (k.startsWith("c:")) return `setting ${customRows.find((c) => c.id === v)?.title ?? v}`;
       if (k.startsWith("v:")) return `service ${serviceRows.find((s) => s.name === v)?.display_name ?? v}`;
+      if (k.startsWith("o:")) return `opening ${intent?.openApps?.find((a) => a.id === v)?.name ?? v}`;
+      if (k === "w:ws") return `switching to ${intent?.workspace?.name}`;
+      if (k === "m:music") return `playing ${intent?.music?.label}`;
       return `app ${v}`;
     });
     const keptText = kept.length ? `The user unticked these items, so they were left unchanged: ${kept.join(", ")}.` : "";
     const summary = approved
-      ? [results.length ? `Applied ${ok} setting change(s).` : "", verified, closedText, keptText, ...reports.flatMap((r) => r.notes)].filter(Boolean).join(" ")
+      ? [results.length ? `Applied ${ok} setting change(s).` : "", verified, closedText, ...ecoDone, keptText, ...reports.flatMap((r) => r.notes)].filter(Boolean).join(" ")
       : "The user declined the plan. Nothing was changed.";
     intent?.onDone?.({ approved, txIds, summary });
     closeApply();
@@ -144,6 +158,31 @@ export function ApplyFlow() {
         closeResults = await api.closeApps(closeNames, intent.source === "ai" ? "ai" : "user");
         setClosed(closeResults);
       }
+      // Nocturn ecosystem actions: workspace, apps, music.
+      const done: string[] = [];
+      if (ecoWs) {
+        setProgress({ txId: "", done: 0, total: 1, message: `Switching to ${ecoWs.name}…` });
+        try {
+          await ws.activate(ecoWs.id);
+          done.push(`Switched to the ${ecoWs.name} workspace${ecoWs.launches ? ` and opened its apps` : ""}.`);
+        } catch (e) {
+          done.push(`Couldn't switch to ${ecoWs.name}: ${errorMessage(e)}.`);
+        }
+      }
+      for (const a of ecoApps) {
+        try {
+          await library.launch(a.id);
+          done.push(`Opened ${a.name}.`);
+        } catch (e) {
+          done.push(`Couldn't open ${a.name}: ${errorMessage(e)}.`);
+        }
+      }
+      if (ecoMusic) {
+        if (ecoMusic.shuffle && !player.shuffle) player.setShuffle(true);
+        player.play(ecoMusic.track_ids);
+        done.push(`Started playing ${ecoMusic.label}.`);
+      }
+      setEcoDone(done);
       setReports(out);
       setPhase("done");
       bumpData();
@@ -238,6 +277,48 @@ export function ApplyFlow() {
                         <div className="val">{s.enabled ? "Disabled" : "already off"}</div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {(intent.workspace || (intent.openApps?.length ?? 0) > 0 || intent.music) && (
+                <div>
+                  <b style={{ fontWeight: 600 }}>In Nocturn</b>
+                  <div className="small muted mt-1">Apps open in their own windows; nothing about your PC's settings changes for these.</div>
+                  <div className="mt-1">
+                    {intent.workspace && (
+                      <div className={`change-row ${on("w:ws") ? "" : "same"}`}>
+                        <div className="row" style={{ gap: 8 }}>
+                          {choosable && <Pick checked={on("w:ws")} onChange={() => toggle("w:ws")} label={`Switch to ${intent.workspace.name}`} />}
+                          <span>Workspace</span>
+                        </div>
+                        <div className="val">{ws.active?.name ?? "none"}</div>
+                        <div className="arrow">→</div>
+                        <div className="val">{intent.workspace.name}{intent.workspace.launches ? ` (+${intent.workspace.launches} apps)` : ""}</div>
+                      </div>
+                    )}
+                    {intent.openApps?.map((a) => (
+                      <div key={a.id} className={`change-row ${on(`o:${a.id}`) ? "" : "same"}`}>
+                        <div className="row" style={{ gap: 8 }}>
+                          {choosable && <Pick checked={on(`o:${a.id}`)} onChange={() => toggle(`o:${a.id}`)} label={`Open ${a.name}`} />}
+                          <span>{a.name}</span>
+                        </div>
+                        <div className="val">closed</div>
+                        <div className="arrow">→</div>
+                        <div className="val">opens in {a.opens}</div>
+                      </div>
+                    ))}
+                    {intent.music && (
+                      <div className={`change-row ${on("m:music") ? "" : "same"}`}>
+                        <div className="row" style={{ gap: 8 }}>
+                          {choosable && <Pick checked={on("m:music")} onChange={() => toggle("m:music")} label={`Play ${intent.music.label}`} />}
+                          <span>Nocturn Music</span>
+                        </div>
+                        <div className="val">{player.current ? player.current.title : "nothing playing"}</div>
+                        <div className="arrow">→</div>
+                        <div className="val">{intent.music.label} ({intent.music.track_ids.length} songs{intent.music.shuffle ? ", shuffled" : ""})</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

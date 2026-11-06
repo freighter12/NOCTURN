@@ -200,6 +200,9 @@ export function Assistant() {
       closeApps: (plan.close_apps ?? []).map((a) => a.name),
       customise: (plan.customise ?? []).map((c) => ({ id: c.id, choice: c.choice })),
       services: (plan.services ?? []).map((v) => ({ name: v.name, start: v.start })),
+      openApps: plan.ecosystem?.open_apps ?? [],
+      workspace: plan.ecosystem?.workspace ?? null,
+      music: plan.ecosystem?.music ?? null,
       source: "ai",
       label: plan.title,
       title: plan.title,
@@ -453,7 +456,9 @@ function PlanView({ plan, decision, busy, onReview, onDecline }: { plan: PlanCar
   const apps = plan.close_apps ?? [];
   const custom = (plan.customise ?? []).filter((c) => c.will_change);
   const svc = (plan.services ?? []).filter((v) => v.will_change);
-  const changes = (plan.preview?.changes ?? 0) + plan.startup.length + apps.length + custom.length + svc.length;
+  const eco = plan.ecosystem;
+  const ecoCount = (eco?.open_apps.length ?? 0) + (eco?.workspace ? 1 : 0) + (eco?.music ? 1 : 0);
+  const changes = (plan.preview?.changes ?? 0) + plan.startup.length + apps.length + custom.length + svc.length + ecoCount;
   return (
     <div className="plan">
       <div className="ph">
@@ -504,6 +509,15 @@ function PlanView({ plan, decision, busy, onReview, onDecline }: { plan: PlanCar
             <span className="tag warning">Unsaved work is lost</span>
           </div>
         ))}
+        {eco?.workspace && (
+          <div className="item"><span style={{ flex: 1 }}>Switch to workspace: {eco.workspace.name}{eco.workspace.launches ? <span className="dim"> · opens {eco.workspace.launches} app(s)</span> : null}</span></div>
+        )}
+        {eco?.open_apps.map((a) => (
+          <div key={a.id} className="item"><span style={{ flex: 1 }}>Open {a.name}<span className="dim"> · in {a.opens}</span></span></div>
+        ))}
+        {eco?.music && (
+          <div className="item"><span style={{ flex: 1 }}>Play {eco.music.label}<span className="dim"> · {eco.music.track_ids.length} songs{eco.music.shuffle ? ", shuffled" : ""}</span></span></div>
+        )}
         {custom.map((c) => (
           <div key={c.id} className="item">
             <span style={{ flex: 1 }}>

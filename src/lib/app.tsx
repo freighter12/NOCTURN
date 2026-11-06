@@ -54,6 +54,10 @@ export interface ApplyIntent {
   customise?: { id: string; choice: string }[];
   /** Service start types (Services). Need administrator approval. */
   services?: { name: string; start: import("./api").StartType }[];
+  /** Nocturn ecosystem actions (from an AI plan). */
+  openApps?: { id: string; name: string; opens: string }[];
+  workspace?: { id: string; name: string; launches: number } | null;
+  music?: { label: string; track_ids: number[]; shuffle: boolean } | null;
   source: string;
   label: string;
   title?: string;

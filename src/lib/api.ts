@@ -1001,6 +1001,11 @@ export interface PlanCard {
   preview: Preview | null;
   customise?: CustomPreviewItem[];
   services?: ServicePreviewItem[];
+  ecosystem?: {
+    open_apps: { id: string; name: string; opens: string }[];
+    workspace: { id: string; name: string; launches: number } | null;
+    music: { label: string; track_ids: number[]; shuffle: boolean } | null;
+  };
 }
 export interface StoredMessage {
   id: number;

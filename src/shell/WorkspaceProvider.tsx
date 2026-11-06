@@ -13,6 +13,8 @@ interface Ctx {
   active: Workspace | null;
   /** Switch to a workspace (null = leave workspaces). */
   switchTo: (id: string | null) => void;
+  /** Switch and start its apps and music without asking — for actions the user already approved. */
+  activate: (id: string) => Promise<void>;
 }
 
 const WsCtx = createContext<Ctx | null>(null);
@@ -88,8 +90,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [prefs.workspaces, update, toast, launchAll, m],
   );
 
+  const activate = useCallback(
+    async (id: string) => {
+      const ws = prefs.workspaces.list.find((w) => w.id === id);
+      if (!ws) throw new Error("that workspace no longer exists");
+      update((p) => ({ ...p, workspaces: { ...p.workspaces, active: id } }));
+      const playlist = ws.playlist ? m.playlists.find((p) => p.id === ws.playlist) : undefined;
+      if (playlist?.tracks.length) m.play(playlist.tracks);
+      if (ws.launch.length) {
+        const all = await library.list().catch(() => [] as LibraryItem[]);
+        const items = ws.launch.map((x) => all.find((i) => i.id === x)).filter((i): i is LibraryItem => !!i);
+        if (items.length) await launchAll(ws, items);
+      }
+    },
+    [prefs.workspaces.list, update, m, launchAll],
+  );
+
   return (
-    <WsCtx.Provider value={{ active, switchTo }}>
+    <WsCtx.Provider value={{ active, switchTo, activate }}>
       {children}
       {pending && (
         <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && setPending(null)}>
