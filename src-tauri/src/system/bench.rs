@@ -250,7 +250,7 @@ fn run_storage(drive: &str, progress: &dyn Fn(BenchProgress)) -> AppResult<Vec<M
     let mut buf = Aligned::new(chunk);
     let mut seed = 0x1234_5678_9ABC_DEF0u64;
     // Incompressible data so drives that compress can't cheat.
-    for w in buf.slice().chunks_exact_mut(8) {
+    for w in buf.slice().as_chunks_mut::<8>().0 {
         w.copy_from_slice(&xorshift(&mut seed).to_le_bytes());
     }
 
@@ -262,7 +262,7 @@ fn run_storage(drive: &str, progress: &dyn Fn(BenchProgress)) -> AppResult<Vec<M
     while written < size {
         f.write_all(buf.slice())?;
         written += chunk as u64;
-        if written % (64 << 20) == 0 {
+        if written.is_multiple_of(64 << 20) {
             cancelled()?;
             progress(BenchProgress { stage: "Sequential write".into(), pct: 25.0 * written as f64 / size as f64 });
         }
@@ -281,7 +281,7 @@ fn run_storage(drive: &str, progress: &dyn Fn(BenchProgress)) -> AppResult<Vec<M
             break;
         }
         read += n as u64;
-        if read % (64 << 20) == 0 {
+        if read.is_multiple_of(64 << 20) {
             cancelled()?;
         }
     }
@@ -299,7 +299,7 @@ fn run_storage(drive: &str, progress: &dyn Fn(BenchProgress)) -> AppResult<Vec<M
             f.seek(SeekFrom::Start(off))?;
             f.read_exact(small.slice())?;
             n += 1;
-            if n % 1024 == 0 {
+            if n.is_multiple_of(1024) {
                 cancelled()?;
             }
         }
@@ -319,7 +319,7 @@ fn run_storage(drive: &str, progress: &dyn Fn(BenchProgress)) -> AppResult<Vec<M
             f.seek(SeekFrom::Start(off))?;
             f.write_all(small.slice())?;
             n += 1;
-            if n % 256 == 0 {
+            if n.is_multiple_of(256) {
                 cancelled()?;
             }
         }

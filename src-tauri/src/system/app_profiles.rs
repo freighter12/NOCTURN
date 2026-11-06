@@ -152,7 +152,7 @@ pub fn save(db: &Db, cache: &rules::RuleCache, mut p: AppProfile) -> AppResult<A
     let mut all = list(db);
     all.retain(|x| !x.exe.eq_ignore_ascii_case(&p.exe));
     all.push(p.clone());
-    all.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
+    all.sort_by_key(|a| a.label.to_lowercase());
     db.set_setting(KEY, &all)?;
     db.audit("info", "user", "app_profile.saved", Some(serde_json::json!({ "exe": p.exe, "plan": p.power_plan, "priority": p.priority, "pause": p.pause_maintenance, "enabled": p.enabled })));
     Ok(p)

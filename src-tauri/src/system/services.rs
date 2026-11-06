@@ -266,7 +266,7 @@ pub fn classify(raw: &[RawService], publisher_of: &mut dyn FnMut(&str) -> Option
             let lname = s.name.to_ascii_lowercase();
             let image = image_of(&s.binary);
             let limage = image.as_deref().unwrap_or("").to_ascii_lowercase();
-            let publisher = image.as_deref().and_then(|i| publisher_of(i));
+            let publisher = image.as_deref().and_then(&mut *publisher_of);
             let microsoft = publisher.as_deref().is_some_and(|p| p.to_ascii_lowercase().contains("microsoft"))
                 || (publisher.is_none() && limage.starts_with(&windir));
             let user_service = s.service_type & 0xC0 != 0;
@@ -337,7 +337,7 @@ pub fn list() -> AppResult<Vec<ServiceView>> {
             .clone()
     };
     let mut v = classify(&raw, &mut publisher);
-    v.sort_by(|a, b| a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()));
+    v.sort_by_key(|a| a.display_name.to_lowercase());
     Ok(v)
 }
 

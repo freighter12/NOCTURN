@@ -219,7 +219,7 @@ pub fn detect(custom_exes: &[String]) -> Vec<Game> {
             exes: vec![exe.clone()],
         });
     }
-    games.sort_by(|a, b| a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()));
+    games.sort_by_key(|a| a.name.to_ascii_lowercase());
     games.dedup_by(|a, b| a.id == b.id);
     games
 }

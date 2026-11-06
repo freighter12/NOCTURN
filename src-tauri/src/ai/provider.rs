@@ -370,14 +370,11 @@ async fn anthropic_stream(
     // the last fallback marker count as executable tool calls.
     let sanitized = sanitize_anthropic_content(&content);
     for b in &content {
-        match b.get("type").and_then(|t| t.as_str()) {
-            Some("thinking") => {
-                let t = b.get("thinking").and_then(|v| v.as_str()).unwrap_or("");
-                if !t.is_empty() {
-                    turn.blocks.push(Block::Thinking { text: t.to_string() });
-                }
+        if let Some("thinking") = b.get("type").and_then(|t| t.as_str()) {
+            let t = b.get("thinking").and_then(|v| v.as_str()).unwrap_or("");
+            if !t.is_empty() {
+                turn.blocks.push(Block::Thinking { text: t.to_string() });
             }
-            _ => {}
         }
     }
     for b in &sanitized {

@@ -217,21 +217,29 @@ mod tests {
     #[test]
     fn changes_a_child_process_priority_and_affinity() {
         // A real round trip on a process we own.
-        let mut child = std::process::Command::new(r"C:\Windows\System32\ping.exe")
+        /// Kills and reaps the child however the test ends.
+        struct Reap(std::process::Child);
+        impl Drop for Reap {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let child = Reap(std::process::Command::new(r"C:\Windows\System32\ping.exe")
             .args(["-n", "30", "127.0.0.1"])
             .stdout(std::process::Stdio::null())
             .spawn()
-            .expect("spawn ping");
-        let pid = child.id();
+            .expect("spawn ping"));
+        let pid = child.0.id();
         std::thread::sleep(std::time::Duration::from_millis(300));
         set_priority(pid, "PING.EXE", Priority::BelowNormal).unwrap();
         assert_eq!(priority_label(pid).as_deref(), Some("Below normal"));
         let sys = system_mask();
-        let first = sys & sys.wrapping_neg(); // lowest available CPU
+        let first = sys.isolate_lowest_one(); // lowest available CPU
         set_affinity(pid, "PING.EXE", first).unwrap();
         assert_eq!(affinity(pid).unwrap().0, first);
         assert!(set_affinity(pid, "PING.EXE", 0).is_err());
         assert!(set_priority(pid, "notepad.exe", Priority::High).is_err(), "name mismatch must be refused");
-        let _ = child.kill();
+        drop(child);
     }
 }

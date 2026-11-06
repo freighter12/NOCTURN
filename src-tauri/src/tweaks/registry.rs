@@ -53,7 +53,7 @@ impl RawValue {
         if self.vtype == REG_SZ as u32 || self.vtype == REG_EXPAND_SZ as u32 {
             let words: Vec<u16> = self
                 .bytes
-                .chunks_exact(2)
+                .as_chunks::<2>().0.iter()
                 .map(|c| u16::from_le_bytes([c[0], c[1]]))
                 .take_while(|&w| w != 0)
                 .collect();

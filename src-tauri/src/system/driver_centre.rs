@@ -129,7 +129,7 @@ pub fn problem(code: u32) -> (&'static str, &'static str, &'static str) {
         29 => ("warning", "Disabled by the firmware (BIOS/UEFI).", "Enable the device in the BIOS if you need it."),
         31 => ("critical", "Windows can't load a driver for it.", "Install the maker's latest driver."),
         32 => ("warning", "A driver or service it needs is disabled.", "Reinstall the driver."),
-        33 | 34 | 35 | 36 => ("warning", "Windows can't determine the resources it needs.", "Update the BIOS or the device's driver."),
+        33..=36 => ("warning", "Windows can't determine the resources it needs.", "Update the BIOS or the device's driver."),
         37 => ("critical", "The driver failed to initialise.", "Reinstall or update the driver."),
         38 => ("info", "A previous copy of the driver is still loaded.", "Restart the PC."),
         39 => ("critical", "The driver is corrupted or missing.", "Reinstall the driver."),

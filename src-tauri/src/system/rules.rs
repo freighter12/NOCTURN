@@ -113,7 +113,7 @@ pub fn save(db: &Db, cache: &RuleCache, mut r: ProcessRule) -> AppResult<Process
         r.affinity = Some(format!("0x{m:x}"));
     }
     validate(&r)?;
-    let pri = r.priority.map(|p| serde_json::to_value(p).ok().and_then(|v| v.as_str().map(String::from))).flatten();
+    let pri = r.priority.and_then(|p| serde_json::to_value(p).ok().and_then(|v| v.as_str().map(String::from)));
     let ts = now();
     db.conn().execute(
         "INSERT INTO process_rules(name, priority, affinity, enabled, note, created_at, updated_at)
@@ -257,19 +257,27 @@ mod tests {
         let db = Db::open_in_memory().unwrap();
         let cache = RuleCache::default();
         save(&db, &cache, rule("PING.EXE", Some(Priority::BelowNormal), None)).unwrap();
-        let mut child = std::process::Command::new(r"C:\Windows\System32\ping.exe")
+        /// Kills and reaps the child however the test ends.
+        struct Reap(std::process::Child);
+        impl Drop for Reap {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let child = Reap(std::process::Command::new(r"C:\Windows\System32\ping.exe")
             .args(["-n", "30", "127.0.0.1"])
             .stdout(std::process::Stdio::null())
             .spawn()
-            .unwrap();
+            .unwrap());
         std::thread::sleep(std::time::Duration::from_millis(300));
-        let pid = child.id();
+        let pid = child.0.id();
         let n = apply_to_new(&db, &cache, &[(pid, "PING.EXE".into()), (999_999, "other.exe".into())]);
         assert_eq!(n, 1);
         assert_eq!(process_control::priority_label(pid).as_deref(), Some("Below normal"));
         let r = get(&db, "ping.exe").unwrap().unwrap();
         assert_eq!(r.applied_count, 1);
         assert!(r.last_error.is_none());
-        let _ = child.kill();
+        drop(child);
     }
 }

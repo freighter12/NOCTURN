@@ -222,7 +222,7 @@ pub fn analyse(i: &Inputs) -> HealthReport {
             if discrete && age > 365 {
                 out.push(f(&format!("gpu.driver_old.{}", g.name), Severity::Info, format!("{} driver is over a year old", g.name),
                     "New GPU drivers often include fixes and optimisations for recent games. Get them from NVIDIA/AMD, not third-party updaters.",
-                    format!("Driver {} from {}", g.driver_version.clone().unwrap_or_default(), &date.format("%Y-%m-%d")), None));
+                    format!("Driver {} from {}", g.driver_version.clone().unwrap_or_default(), date.format("%Y-%m-%d")), None));
             }
         }
     }

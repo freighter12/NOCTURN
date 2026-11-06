@@ -274,7 +274,7 @@ fn actor_of(source: &str) -> &'static str {
     }
 }
 
-fn worker_result<'a>(arr: &'a [serde_json::Value], change_id: i64) -> Option<&'a serde_json::Value> {
+fn worker_result(arr: &[serde_json::Value], change_id: i64) -> Option<&serde_json::Value> {
     arr.iter().find(|r| r.get("change_id").and_then(|x| x.as_i64()) == Some(change_id))
 }
 
