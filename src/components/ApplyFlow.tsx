@@ -3,7 +3,7 @@
 // Used by TWEAK pages, profiles, dashboard recommendations and AI plans.
 
 import { useEffect, useMemo, useState } from "react";
-import { api, errorMessage, type ApplyReport, type CloseResult, type Preview, type Progress, type StartupItem, type TweakView } from "../lib/api";
+import { api, errorMessage, type ApplyReport, type CloseResult, type CustomPreviewItem, type Preview, type Progress, type ServicePreviewItem, type StartupItem, type TweakView } from "../lib/api";
 import { useApp } from "../lib/app";
 import { takesLabel } from "../lib/format";
 import { I } from "./Icons";
@@ -23,7 +23,10 @@ export function ApplyFlow() {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [reports, setReports] = useState<ApplyReport[]>([]);
   const [closed, setClosed] = useState<CloseResult[]>([]);
-  // Items the user unticked in the review. Keys: "t:<tweak>", "s:<startup>", "a:<app>".
+  const [customRows, setCustomRows] = useState<CustomPreviewItem[]>([]);
+  const [serviceRows, setServiceRows] = useState<ServicePreviewItem[]>([]);
+  // Items the user unticked in the review. Keys: "t:<tweak>", "s:<startup>",
+  // "a:<app>", "c:<customise setting>", "v:<service>".
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -39,6 +42,10 @@ export function ApplyFlow() {
     if (intent.tweakIds.length) jobs.push(api.preview(intent.tweakIds).then(setPreview));
     else setPreview(null);
     if (intent.startupDisableIds?.length) jobs.push(api.startup().then(setStartup));
+    if (intent.customise?.length) jobs.push(api.previewCustomise({ selections: intent.customise }).then(setCustomRows));
+    else setCustomRows([]);
+    if (intent.services?.length) jobs.push(api.previewServices(intent.services).then(setServiceRows));
+    else setServiceRows([]);
     Promise.all(jobs)
       .then(() => setPhase("review"))
       .catch((e) => {
@@ -66,13 +73,15 @@ export function ApplyFlow() {
   const tweakIds = (intent?.tweakIds ?? []).filter((id) => on(`t:${id}`));
   const startupSel = startupRows.filter((s) => s.enabled && on(`s:${s.id}`));
   const closeNames = (intent?.closeApps ?? []).filter((n) => on(`a:${n}`));
+  const customSel = customRows.filter((c) => c.will_change && on(`c:${c.id}`));
+  const serviceSel = serviceRows.filter((v) => v.will_change && !v.refused && on(`v:${v.name}`));
   const liveItems = (preview?.items ?? []).filter((i) => i.will_change && on(`t:${i.tweak_id}`));
   const advanced = tweakIds.filter((id) => byId.get(id)?.risk === "advanced");
   const needAck = advanced.length > 0 && (settings?.confirm_advanced ?? true);
-  const changeCount = liveItems.length + startupSel.length + closeNames.length;
-  const needsAdmin = liveItems.some((i) => i.requires_admin) || startupSel.some((s) => s.requires_admin);
+  const changeCount = liveItems.length + startupSel.length + closeNames.length + customSel.length + serviceSel.length;
+  const needsAdmin = liveItems.some((i) => i.requires_admin) || startupSel.some((s) => s.requires_admin) || serviceSel.length > 0;
   // Several items to choose from → show a checkbox on each.
-  const choosable = (preview ? groupByTweak(preview).length : 0) + startupRows.length + (intent?.closeApps?.length ?? 0) > 1;
+  const choosable = (preview ? groupByTweak(preview).length : 0) + startupRows.length + (intent?.closeApps?.length ?? 0) + customRows.length + serviceRows.length > 1;
 
   if (!intent) return null;
 
@@ -89,7 +98,14 @@ export function ApplyFlow() {
       : results.length
         ? "All changes verified."
         : "";
-    const kept = [...excluded].map((k) => (k.startsWith("t:") ? byId.get(k.slice(2))?.title ?? k.slice(2) : k.startsWith("s:") ? `startup app ${startupRows.find((s) => s.id === k.slice(2))?.name ?? k.slice(2)}` : `app ${k.slice(2)}`));
+    const kept = [...excluded].map((k) => {
+      const v = k.slice(2);
+      if (k.startsWith("t:")) return byId.get(v)?.title ?? v;
+      if (k.startsWith("s:")) return `startup app ${startupRows.find((s) => s.id === v)?.name ?? v}`;
+      if (k.startsWith("c:")) return `setting ${customRows.find((c) => c.id === v)?.title ?? v}`;
+      if (k.startsWith("v:")) return `service ${serviceRows.find((s) => s.name === v)?.display_name ?? v}`;
+      return `app ${v}`;
+    });
     const keptText = kept.length ? `The user unticked these items, so they were left unchanged: ${kept.join(", ")}.` : "";
     const summary = approved
       ? [results.length ? `Applied ${ok} setting change(s).` : "", verified, closedText, keptText, ...reports.flatMap((r) => r.notes)].filter(Boolean).join(" ")
@@ -112,8 +128,15 @@ export function ApplyFlow() {
         );
       }
       const toDisable = startupSel.map((s) => s.id);
+      const who = intent.source === "ai" ? "ai" : "user";
       if (toDisable.length) {
-        out.push(await api.setStartup(toDisable, false, intent.source === "ai" ? "ai" : "user", setProgress));
+        out.push(await api.setStartup(toDisable, false, who, setProgress));
+      }
+      if (customSel.length) {
+        out.push(await api.applyCustomise({ selections: customSel.map((c) => ({ id: c.id, choice: c.choice })) }, intent.label, setProgress, who));
+      }
+      if (serviceSel.length) {
+        out.push(await api.applyServices(serviceSel.map((v) => ({ name: v.name, start: v.start })), setProgress, who));
       }
       let closeResults: CloseResult[] = [];
       if (closeNames.length) {
@@ -213,6 +236,55 @@ export function ApplyFlow() {
                         <div className="val">{s.enabled ? "Enabled" : "Disabled"}</div>
                         <div className="arrow">→</div>
                         <div className="val">{s.enabled ? "Disabled" : "already off"}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {customRows.length > 0 && (
+                <div>
+                  <b style={{ fontWeight: 600 }}>Windows settings</b>
+                  <div className="small muted mt-1">Taskbar, File Explorer and notification settings for your account. Each can be undone from History.</div>
+                  <div className="mt-1">
+                    {customRows.map((c) => (
+                      <div key={c.id} className={`change-row ${c.will_change && on(`c:${c.id}`) ? "" : "same"}`}>
+                        <div className="row" style={{ gap: 8 }}>
+                          {choosable && c.will_change && <Pick checked={on(`c:${c.id}`)} onChange={() => toggle(`c:${c.id}`)} label={c.title} />}
+                          <span>
+                            {c.title} <span className="target">{c.target}</span>
+                          </span>
+                        </div>
+                        <div className="val">{c.current}</div>
+                        <div className="arrow">→</div>
+                        <div className="val">{c.will_change ? c.proposed : "already set"}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {serviceRows.length > 0 && (
+                <div>
+                  <b style={{ fontWeight: 600 }}>Service start types</b>
+                  <div className="small muted mt-1">Only how each service starts changes — nothing is stopped or removed. Takes effect at the next restart and can be undone from History.</div>
+                  <div className="mt-1">
+                    {serviceRows.map((v) => (
+                      <div key={v.name} className={`change-row ${v.will_change && !v.refused && on(`v:${v.name}`) ? "" : "same"}`}>
+                        <div>
+                          <div className="row" style={{ gap: 8 }}>
+                            {choosable && v.will_change && !v.refused && <Pick checked={on(`v:${v.name}`)} onChange={() => toggle(`v:${v.name}`)} label={v.display_name} />}
+                            <span>
+                              {v.display_name} <span className="target">{v.name}</span>
+                            </span>
+                            <span className="tag"><I.lock /> Admin</span>
+                          </div>
+                          {v.refused && <div className="small" style={{ color: "#ee8a8a" }}>{v.refused}</div>}
+                          {v.warnings.map((w) => <div key={w} className="small dim">{w}</div>)}
+                        </div>
+                        <div className="val">{v.current}</div>
+                        <div className="arrow">→</div>
+                        <div className="val">{v.refused ? "not changed" : v.will_change ? v.proposed : "already set"}</div>
                       </div>
                     ))}
                   </div>

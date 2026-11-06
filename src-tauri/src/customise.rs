@@ -425,6 +425,8 @@ pub struct Selection {
 #[derive(Debug, Clone, Serialize)]
 pub struct PreviewItem {
     pub id: String,
+    /// The choice being applied (a choice ID or "default").
+    pub choice: String,
     pub title: String,
     pub target: String,
     pub current: String,
@@ -462,6 +464,7 @@ fn plan(sel: &[Selection]) -> AppResult<Vec<(PlannedOp, PreviewItem)>> {
             },
             PreviewItem {
                 id: s.id.into(),
+                choice: x.choice.clone(),
                 title: s.title.into(),
                 target: s.target(),
                 current: cur_label,
@@ -488,10 +491,12 @@ pub fn reset_selection(section: Option<Section>) -> Vec<Selection> {
         .collect()
 }
 
-pub fn apply(db: &Db, data_dir: &Path, sel: &[Selection], label: &str, progress: &dyn Fn(Progress)) -> AppResult<ApplyReport> {
+/// `source` is "user" or "ai" (an approved AI plan); it is recorded in the journal.
+pub fn apply(db: &Db, data_dir: &Path, sel: &[Selection], label: &str, source: &str, progress: &dyn Fn(Progress)) -> AppResult<ApplyReport> {
+    let source = if source == "ai" { "ai" } else { "user" };
     let ops: Vec<PlannedOp> = plan(sel)?.into_iter().map(|(op, _)| op).collect();
     let label: String = label.chars().filter(|c| !c.is_control()).take(80).collect();
-    let mut r = engine::run_plan(db, data_dir, ops, "user", &format!("Customise: {label}"), false, progress)?;
+    let mut r = engine::run_plan(db, data_dir, ops, source, &format!("Customise: {label}"), false, progress)?;
     notify_shell();
     // The engine's wording is written for games; say what applies here.
     for n in &mut r.notes {
@@ -656,11 +661,11 @@ mod tests {
         let sel = |c: &str| vec![Selection { id: s.id.into(), choice: c.into() }];
 
         let flip = if current_of(s).0.as_deref() == Some("on") { "off" } else { "on" };
-        let a = apply(&db, dir.path(), &sel(flip), "test", &|_| {}).unwrap();
+        let a = apply(&db, dir.path(), &sel(flip), "test", "user", &|_| {}).unwrap();
         assert_eq!(a.status, "completed", "{a:?}");
         assert_eq!(current_of(s).0.as_deref(), Some(flip));
 
-        let b = apply(&db, dir.path(), &sel(DEFAULT), "test", &|_| {}).unwrap();
+        let b = apply(&db, dir.path(), &sel(DEFAULT), "test", "user", &|_| {}).unwrap();
         assert_eq!(b.status, "completed", "{b:?}");
         assert_eq!(registry::read(Hive::Hkcu, s.path, s.name).unwrap(), None);
 

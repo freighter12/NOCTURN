@@ -198,6 +198,8 @@ export function Assistant() {
       tweakIds: plan.tweaks.map((t) => t.id),
       startupDisableIds: plan.startup.map((s) => s.id),
       closeApps: (plan.close_apps ?? []).map((a) => a.name),
+      customise: (plan.customise ?? []).map((c) => ({ id: c.id, choice: c.choice })),
+      services: (plan.services ?? []).map((v) => ({ name: v.name, start: v.start })),
       source: "ai",
       label: plan.title,
       title: plan.title,
@@ -449,7 +451,9 @@ const CONFIDENCE: Record<string, string> = { high: "High confidence", medium: "M
 
 function PlanView({ plan, decision, busy, onReview, onDecline }: { plan: PlanCard; decision: boolean | undefined; busy: boolean; onReview: (p: PlanCard) => void; onDecline: (p: PlanCard) => void }) {
   const apps = plan.close_apps ?? [];
-  const changes = (plan.preview?.changes ?? 0) + plan.startup.length + apps.length;
+  const custom = (plan.customise ?? []).filter((c) => c.will_change);
+  const svc = (plan.services ?? []).filter((v) => v.will_change);
+  const changes = (plan.preview?.changes ?? 0) + plan.startup.length + apps.length + custom.length + svc.length;
   return (
     <div className="plan">
       <div className="ph">
@@ -500,6 +504,23 @@ function PlanView({ plan, decision, busy, onReview, onDecline }: { plan: PlanCar
             <span className="tag warning">Unsaved work is lost</span>
           </div>
         ))}
+        {custom.map((c) => (
+          <div key={c.id} className="item">
+            <span style={{ flex: 1 }}>
+              {c.title}: {c.proposed}
+              <span className="dim"> · now {c.current}</span>
+            </span>
+          </div>
+        ))}
+        {svc.map((v) => (
+          <div key={v.name} className="item">
+            <span style={{ flex: 1 }}>
+              Service {v.display_name}: {v.current} → {v.proposed}
+              {v.warnings.map((w) => <div key={w} className="small dim">{w}</div>)}
+            </span>
+            <span className="tag"><I.lock /> Admin</span>
+          </div>
+        ))}
         {plan.startup.map((s) => (
           <div key={s.id} className="item">
             <span style={{ flex: 1 }}>Disable startup app: {s.name}</span>
@@ -519,6 +540,8 @@ function PlanView({ plan, decision, busy, onReview, onDecline }: { plan: PlanCar
             {plan.startup.length ? `${plan.startup.length} startup app(s)` : ""}
             {apps.length > 0 && (plan.preview || plan.startup.length > 0) ? " · " : ""}
             {apps.length > 0 ? `${apps.length} app(s) to close` : ""}
+            {custom.length > 0 ? ` · ${custom.length} Windows setting(s)` : ""}
+            {svc.length > 0 ? ` · ${svc.length} service(s)` : ""}
             {changes === 0 && "Everything here is already configured"}
           </span>
           <button className="btn ghost sm" disabled={busy} onClick={() => onDecline(plan)}>

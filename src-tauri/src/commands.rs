@@ -543,11 +543,13 @@ pub async fn preview_services(selections: Vec<crate::system::services::Selection
 pub async fn apply_services(
     state: State<'_, Shared>,
     selections: Vec<crate::system::services::Selection>,
+    source: Option<String>,
     on_progress: Channel<engine::Progress>,
 ) -> AppResult<engine::ApplyReport> {
+    let source = source.unwrap_or_else(|| "user".into());
     let st = state.inner().clone();
     blocking(move || {
-        let r = crate::system::services::apply(&st.db, &st.data_dir, &selections, &|p| {
+        let r = crate::system::services::apply(&st.db, &st.data_dir, &selections, &source, &|p| {
             let _ = on_progress.send(p);
         });
         st.invalidate_health();
@@ -599,12 +601,14 @@ pub async fn apply_customise(
     reset: Option<crate::customise::Section>,
     reset_all: Option<bool>,
     label: String,
+    source: Option<String>,
     on_progress: Channel<engine::Progress>,
 ) -> AppResult<engine::ApplyReport> {
+    let source = source.unwrap_or_else(|| "user".into());
     let st = state.inner().clone();
     blocking(move || {
         let sel = customise_selection(selections, reset, reset_all.unwrap_or(false))?;
-        crate::customise::apply(&st.db, &st.data_dir, &sel, &label, &|p| {
+        crate::customise::apply(&st.db, &st.data_dir, &sel, &label, &source, &|p| {
             let _ = on_progress.send(p);
         })
     })

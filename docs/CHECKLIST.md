@@ -71,6 +71,13 @@ Last updated: 2026-11-06
 - ⬜ FPS / frame-time capture (needs Intel PresentMon — not bundled yet)
 - ✅ Scheduled maintenance page: 5 fixed tasks — new-crash check (daily), device-problem check (weekly), free-space check (daily), temp-file cleanup (opt-in, only task that changes anything, two-step Run now), network stability recording (opt-in); interval 1/7/14/30 days; runs in-app (starts 2 min after launch, checks every minute), deferred while a game or benchmark runs or CPU > 70% (deferral logged at most hourly); only new problems raise alerts (first check is a baseline), alerts open the right page; one-year run history. Verified live: all four read-only/network tasks run from the UI, driver alert routed to Diagnostics; scheduler tick unit-tested on a real AppState
 
+## Advanced expansion — Priority 4
+
+- ✅ AI tools for every module: get_crash_analysis, get_driver_centre, list_services (tier/name filters), get_benchmarks (+ boot times), get_maintenance, get_customise_settings, get_games — all read-only, size-capped, tested on real data
+- ✅ AI plans can include Customise choices and service start types, validated by the same code as the pages (protected services refused even when the AI asks); the approval dialog previews them with per-item ticks and journals them with source . Verified live: AI-style plan applied a Customise change (source ai) and rolled back from History
+- ⬜ Cross-module app profiles with automatic switching
+- ⬜ Release hardening
+
 ## Phase 6 — Testing and release
 
 - ✅ Rust unit/integration tests: 138 passing + 2 benchmark-kernel tests (4 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin, storage benchmark)

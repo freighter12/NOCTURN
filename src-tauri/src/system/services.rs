@@ -399,6 +399,8 @@ pub struct Selection {
 #[derive(Debug, Clone, Serialize)]
 pub struct PreviewItem {
     pub name: String,
+    /// The start type being applied.
+    pub start: StartType,
     pub display_name: String,
     pub current: String,
     pub proposed: String,
@@ -451,6 +453,7 @@ fn plan(sel: &[Selection]) -> AppResult<(Vec<PlannedOp>, Vec<PreviewItem>)> {
         }
         items.push(PreviewItem {
             name: s.name.clone(),
+            start: x.start,
             display_name: s.display_name.clone(),
             current: s.start_label.clone(),
             proposed: x.start.label().into(),
@@ -467,7 +470,9 @@ pub fn preview(sel: &[Selection]) -> AppResult<Vec<PreviewItem>> {
     Ok(plan(sel)?.1)
 }
 
-pub fn apply(db: &Db, data_dir: &Path, sel: &[Selection], progress: &dyn Fn(Progress)) -> AppResult<ApplyReport> {
+/// `source` is "user" or "ai" (an approved AI plan); it is recorded in the journal.
+pub fn apply(db: &Db, data_dir: &Path, sel: &[Selection], source: &str, progress: &dyn Fn(Progress)) -> AppResult<ApplyReport> {
+    let source = if source == "ai" { "ai" } else { "user" };
     let (ops, items) = plan(sel)?;
     if let Some(r) = items.iter().find_map(|i| i.refused.clone()) {
         return Err(AppError::Forbidden(r));
@@ -480,7 +485,7 @@ pub fn apply(db: &Db, data_dir: &Path, sel: &[Selection], progress: &dyn Fn(Prog
     } else {
         format!("Services: {} start-type changes", ops.len())
     };
-    let mut r = engine::run_plan(db, data_dir, ops, "user", &label, false, progress)?;
+    let mut r = engine::run_plan(db, data_dir, ops, source, &label, false, progress)?;
     for n in &mut r.notes {
         if n.starts_with("Restart your PC") {
             *n = "Takes effect the next time Windows starts. Running services keep running until then.".into();
@@ -834,7 +839,7 @@ mod tests {
                 continue; // not installed on this machine
             }
             let sel = vec![Selection { name: name.into(), start: StartType::Disabled }];
-            let e = apply(&db, dir.path(), &sel, &|_| {}).unwrap_err();
+            let e = apply(&db, dir.path(), &sel, "user", &|_| {}).unwrap_err();
             assert!(matches!(e, AppError::Forbidden(_)), "{name}: {e}");
         }
         assert!(crate::tweaks::journal::list_tx(&db, 10).unwrap().is_empty(), "nothing journaled");

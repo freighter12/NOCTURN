@@ -592,6 +592,7 @@ export interface ServiceView {
 }
 export interface ServicePreviewItem {
   name: string;
+  start: StartType;
   display_name: string;
   current: string;
   proposed: string;
@@ -631,6 +632,7 @@ export interface CustomSelection {
 }
 export interface CustomPreviewItem {
   id: string;
+  choice: string;
   title: string;
   target: string;
   current: string;
@@ -977,6 +979,8 @@ export interface PlanCard {
   startup: { id: string; name: string; requires_admin: boolean }[];
   close_apps?: { name: string; instances: number; memory_bytes: number }[];
   preview: Preview | null;
+  customise?: CustomPreviewItem[];
+  services?: ServicePreviewItem[];
 }
 export interface StoredMessage {
   id: number;
@@ -1107,14 +1111,14 @@ export const api = {
 
   serviceList: () => invoke<ServiceView[]>("list_services"),
   previewServices: (selections: { name: string; start: StartType }[]) => invoke<ServicePreviewItem[]>("preview_services", { selections }),
-  applyServices: (selections: { name: string; start: StartType }[], onProgress?: (p: Progress) => void) =>
-    invoke<ApplyReport>("apply_services", { selections, onProgress: progressChannel(onProgress) }),
+  applyServices: (selections: { name: string; start: StartType }[], onProgress?: (p: Progress) => void, source: "user" | "ai" = "user") =>
+    invoke<ApplyReport>("apply_services", { selections, source, onProgress: progressChannel(onProgress) }),
   serviceChanges: () => invoke<StartupChange[]>("list_service_changes"),
 
   customise: () => invoke<CustomSetting[]>("list_customise"),
   previewCustomise: (req: CustomRequest) => invoke<CustomPreviewItem[]>("preview_customise", req),
-  applyCustomise: (req: CustomRequest, label: string, onProgress?: (p: Progress) => void) =>
-    invoke<ApplyReport>("apply_customise", { ...req, label, onProgress: progressChannel(onProgress) }),
+  applyCustomise: (req: CustomRequest, label: string, onProgress?: (p: Progress) => void, source: "user" | "ai" = "user") =>
+    invoke<ApplyReport>("apply_customise", { ...req, label, source, onProgress: progressChannel(onProgress) }),
   restartExplorer: () => invoke<void>("restart_explorer"),
 
   startup: () => invoke<StartupItem[]>("list_startup"),

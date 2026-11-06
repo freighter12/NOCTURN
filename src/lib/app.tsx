@@ -42,6 +42,10 @@ export interface ApplyIntent {
   startupDisableIds?: string[];
   /** Process names to close (every instance). Not reversible. */
   closeApps?: string[];
+  /** Taskbar/Explorer/notification choices (Customise). */
+  customise?: { id: string; choice: string }[];
+  /** Service start types (Services). Need administrator approval. */
+  services?: { name: string; start: import("./api").StartType }[];
   source: string;
   label: string;
   title?: string;
@@ -125,6 +129,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dataVersion,
     bumpData: () => setDataVersion((v) => v + 1),
   };
+
+  // Dev builds only: lets automated UI tests open the approval dialog with an
+  // AI-style plan. Stripped from production builds by Vite.
+  if (import.meta.env.DEV) (window as unknown as { __requestApply?: (i: ApplyIntent) => void }).__requestApply = setApplyIntent;
 
   return (
     <AppCtx.Provider value={value}>
