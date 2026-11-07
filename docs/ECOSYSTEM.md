@@ -111,5 +111,5 @@ unusable. Studio offers "reset this section" and "reset everything".
 
 - **Licensed Nocturn catalogue.** The player, library and track `source` field are ready; a catalogue needs licensing agreements and hosting. Until then Nocturn Music plays the user's own files.
 - **Code signing** for the installers (needs a certificate).
-- **Real app icons** in the Library (Windows icon extraction) — tiles use monograms/emoji today.
+- ~~**Real app icons** in the Library~~ — done 2026-11-07 (see CHECKLIST Polish).
 - **Store/Xbox game detection** for the Gaming page.

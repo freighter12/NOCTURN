@@ -563,6 +563,8 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--line-2)
 .app-icon { display: inline-grid; place-items: center; border-radius: 26%; color: #f4f5f8; font-weight: 600; letter-spacing: -0.02em; flex: none; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
 .app-icon.nocturn { background: linear-gradient(150deg, var(--bg-4), var(--bg-1)); color: var(--moon); box-shadow: inset 0 0 0 1px var(--line-3); }
 .app-icon.nocturn svg { width: 46%; height: 46%; }
+.app-icon.real { background: var(--bg-3); box-shadow: inset 0 0 0 1px var(--line-2); }
+.app-icon.real img { display: block; image-rendering: auto; pointer-events: none; }
 .app-actions { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; opacity: 0; transition: opacity var(--t-fast); }
 .app-tile:hover .app-actions, .app-tile:focus-within .app-actions { opacity: 1; }
 .app-actions .btn.on { color: var(--moon); }
@@ -692,6 +694,8 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--line-2)
 .palette-item.active { background: var(--bg-4); color: var(--ink-0); box-shadow: inset 2px 0 0 var(--moon); }
 .pi-icon { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border-radius: 6px; background: var(--bg-3); color: var(--ink-1); font-size: 11px; font-weight: 600; }
 .pi-icon svg { width: 14px; height: 14px; }
+.pi-icon.real { background: transparent; }
+.pi-icon.real img { width: 20px; height: 20px; display: block; }
 .pi-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(13.5px * var(--fs, 1)); }
 .pi-hint { margin-left: auto; padding-left: 12px; color: var(--ink-3); font-size: calc(12px * var(--fs, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
 .pi-enter { color: var(--ink-2); font-size: 12px; margin-left: 8px; }

@@ -79,6 +79,17 @@ export function Settings() {
             </div>
           </Panel>
 
+          <Panel title="In the background">
+            <div className="list">
+              <Row title="Keep running in the tray" desc="The close button hides NOCTURN to the system tray so scheduled checks and app profiles keep working. Quit from the tray menu. Off: closing quits.">
+                <Toggle on={draft.close_to_tray} onChange={(v) => setFlag({ close_to_tray: v })} label="Keep running in the tray" disabled={saving} />
+              </Row>
+              <Row title="Desktop notifications" desc="Windows notifications when a scheduled check finds something new (a crash, a device problem, low disk space) while NOCTURN isn't in front.">
+                <Toggle on={draft.desktop_notifications} onChange={(v) => setFlag({ desktop_notifications: v })} label="Desktop notifications" disabled={saving} />
+              </Row>
+            </div>
+          </Panel>
+
           <Panel title="About NOCTURN">
             <dl className="kv">
               <dt>Version</dt>

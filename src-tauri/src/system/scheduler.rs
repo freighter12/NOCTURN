@@ -316,6 +316,7 @@ pub fn run_now(app: Option<&AppHandle>, st: &Shared, task: TaskId, trigger: &str
     let id = record(&st.db, task, &started, status, trigger, &summary)?;
     if let (Some(app), Some(a)) = (app, alert) {
         let _ = app.emit("alert", &a);
+        crate::tray::notify(app, &a.title, &a.detail);
     }
     st.db.audit(if status == "failed" { "warn" } else { "info" }, if trigger == "manual" { "user" } else { "system" }, "maintenance.run", Some(serde_json::json!({ "task": task.as_str(), "status": status })));
     Ok(RunRecord { id, task, started_at: started, finished_at: now(), status: status.into(), trigger: trigger.into(), summary })

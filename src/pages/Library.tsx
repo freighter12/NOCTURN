@@ -60,7 +60,7 @@ function AddPanel({ items, onAdded, onClose }: { items: LibraryItem[]; onAdded: 
               {candidates.slice(0, 300).map((a) => (
                 <label key={a.app_id} className="pick">
                   <input type="checkbox" className="check" checked={picked.has(a.app_id)} onChange={() => setPicked((p) => { const n = new Set(p); n.has(a.app_id) ? n.delete(a.app_id) : n.add(a.app_id); return n; })} />
-                  <AppIcon item={{ name: a.name, icon: {} }} size={28} />
+                  <AppIcon item={{ name: a.name, icon: {} }} appId={a.app_id} size={28} />
                   <span className="truncate">{a.name}</span>
                   <span className="small dim" style={{ marginLeft: "auto" }}>{a.category}</span>
                 </label>
@@ -118,9 +118,12 @@ function EditPanel({ item, categories, onSaved, onClose }: { item: LibraryItem; 
   const [category, setCategory] = useState(item.category);
   const [glyph, setGlyph] = useState(item.icon.glyph ?? "");
   const [colour, setColour] = useState(item.icon.colour ?? "#3b4a6b");
+  // Installed apps can keep the icon Windows has for them.
+  const canUseOwn = item.kind === "installed";
+  const [own, setOwn] = useState(canUseOwn && !item.icon.glyph && !item.icon.colour);
   async function save() {
     try {
-      await library.edit({ id: item.id, name, category, icon: { glyph: glyph || null, colour } });
+      await library.edit({ id: item.id, name, category, icon: own ? { glyph: null, colour: null } : { glyph: glyph || null, colour } });
       onSaved();
       onClose();
     } catch (e) {
@@ -130,7 +133,7 @@ function EditPanel({ item, categories, onSaved, onClose }: { item: LibraryItem; 
   return (
     <Panel className="mt-2" title={`Edit ${item.name}`}>
       <div className="row" style={{ gap: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
-        <AppIcon item={{ name, icon: { glyph, colour } }} size={52} />
+        <AppIcon item={own ? { name, icon: {}, kind: item.kind, target: item.target } : { name, icon: { glyph, colour } }} size={52} />
         <div className="field" style={{ flex: 2, minWidth: 180 }}>
           <label htmlFor="lename">Name</label>
           <input id="lename" className="input" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
@@ -140,14 +143,24 @@ function EditPanel({ item, categories, onSaved, onClose }: { item: LibraryItem; 
           <input id="lecat" className="input" list="lecats" maxLength={40} value={category} onChange={(e) => setCategory(e.target.value)} />
           <datalist id="lecats">{categories.map((c) => <option key={c} value={c} />)}</datalist>
         </div>
-        <div className="field" style={{ width: 110 }}>
-          <label htmlFor="leglyph">Icon text</label>
-          <input id="leglyph" className="input" maxLength={2} placeholder="Ab or 🎮" value={glyph} onChange={(e) => setGlyph(e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="lecol">Colour</label>
-          <input id="lecol" type="color" value={colour} onChange={(e) => setColour(e.target.value)} />
-        </div>
+        {canUseOwn && (
+          <div className="field">
+            <label>Icon</label>
+            <Seg<"own" | "custom"> value={own ? "own" : "custom"} onChange={(v) => setOwn(v === "own")} options={[{ value: "own", label: "App's icon" }, { value: "custom", label: "Custom" }]} />
+          </div>
+        )}
+        {!own && (
+          <>
+            <div className="field" style={{ width: 110 }}>
+              <label htmlFor="leglyph">Icon text</label>
+              <input id="leglyph" className="input" maxLength={2} placeholder="Ab or 🎮" value={glyph} onChange={(e) => setGlyph(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="lecol">Colour</label>
+              <input id="lecol" type="color" value={colour} onChange={(e) => setColour(e.target.value)} />
+            </div>
+          </>
+        )}
         <button className="btn ghost" onClick={onClose}>Cancel</button>
         <button className="btn primary" disabled={!name.trim()} onClick={save}>Save</button>
       </div>

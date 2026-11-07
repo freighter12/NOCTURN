@@ -963,6 +963,8 @@ export interface AppSettings {
   restore_point_default: boolean;
   confirm_advanced: boolean;
   reduce_motion: boolean;
+  close_to_tray: boolean;
+  desktop_notifications: boolean;
   ai: AiSettings;
   monitor: MonitorSettings;
 }
@@ -1261,6 +1263,8 @@ export const library = {
   edit: (edit: LibraryEdit) => invoke<LibraryItem>("library_edit", { edit }),
   remove: (id: string) => invoke<void>("library_remove", { id }),
   launch: (id: string, deepLink?: string) => invoke<{ via: "app" | "browser"; detail: string }>("library_launch", { id, deepLink: deepLink ?? null }),
+  /** Real icons for Start-menu AppIDs as data URLs (null = none). */
+  icons: (appIds: string[]) => invoke<Record<string, string | null>>("library_icons", { appIds }),
 };
 
 // ------------------------------------------------------------------ music

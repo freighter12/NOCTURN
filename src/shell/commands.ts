@@ -15,6 +15,8 @@ export interface Command {
   icon?: string;
   /** Optional text badge shown instead of an icon (e.g. an app's initials). */
   badge?: { text: string; colour?: string | null };
+  /** Start-menu AppID whose real icon to show (falls back to the badge). */
+  appId?: string;
   run: () => void;
 }
 

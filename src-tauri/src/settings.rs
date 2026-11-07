@@ -84,13 +84,17 @@ pub struct AppSettings {
     pub confirm_advanced: bool,
     /// Reduce UI motion.
     pub reduce_motion: bool,
+    /// The close button hides NOCTURN to the tray instead of quitting.
+    pub close_to_tray: bool,
+    /// Windows notifications for maintenance alerts while NOCTURN isn't in front.
+    pub desktop_notifications: bool,
     pub ai: AiSettings,
     pub monitor: MonitorSettings,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
-        AppSettings { restore_point_default: true, confirm_advanced: true, reduce_motion: false, ai: AiSettings::default(), monitor: MonitorSettings::default() }
+        AppSettings { restore_point_default: true, confirm_advanced: true, reduce_motion: false, close_to_tray: true, desktop_notifications: true, ai: AiSettings::default(), monitor: MonitorSettings::default() }
     }
 }
 

@@ -2,11 +2,11 @@
 // apps, switch workspaces, play music, change theme, or ask the AI.
 // Anything that changes the system goes through the usual approval dialog.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { I } from "../components/Icons";
 import { library, type LibraryItem } from "../lib/api";
 import { useApp, type PageId } from "../lib/app";
-import { launchItem } from "../library/tiles";
+import { launchItem, useAppIcon } from "../library/tiles";
 import { useMusic } from "../music/MusicProvider";
 import { pushRecent, rank, type Command } from "./commands";
 import { ALL_PAGES, sectionOf } from "./nav";
@@ -14,6 +14,22 @@ import { usePrefs } from "./PrefsProvider";
 import { previewIntro } from "./splash";
 import { OFFICIAL_THEMES } from "./theme";
 import { useWorkspaces } from "./WorkspaceProvider";
+
+function CommandIcon({ c, Icon }: { c: Command; Icon: ComponentType | null }) {
+  const real = useAppIcon(c.appId);
+  if (real) {
+    return (
+      <span className="pi-icon real">
+        <img src={real} alt="" draggable={false} />
+      </span>
+    );
+  }
+  return (
+    <span className="pi-icon" style={c.badge?.colour ? { background: c.badge.colour, color: "#fff" } : undefined}>
+      {Icon ? <Icon /> : c.badge ? c.badge.text : null}
+    </span>
+  );
+}
 
 /** Open the palette from anywhere (e.g. the title-bar button). */
 export const openPalette = () => window.dispatchEvent(new Event("nocturn:palette"));
@@ -154,6 +170,7 @@ export function CommandPalette() {
         hint: a.kind === "website" ? "Website" : a.category,
         keywords: [a.category, "open", "launch"],
         badge: { text: a.icon.glyph || a.name.replace(/[^\p{L}\p{N}]/gu, "").slice(0, 2) || "?", colour: a.icon.colour },
+        appId: a.kind === "installed" && !a.icon.glyph && !a.icon.colour ? a.target : undefined,
         run: () => void launchItem(a, toast),
       });
     }
@@ -288,7 +305,7 @@ export function CommandPalette() {
           {results.map((c, i) => {
             const heading = c.group !== lastGroup ? c.group : null;
             lastGroup = c.group;
-            const Icon = c.icon && c.icon in I ? I[c.icon as keyof typeof I] : null;
+            const Icon = (c.icon && c.icon in I ? I[c.icon as keyof typeof I] : null) as ComponentType | null;
             return (
               <div key={`${c.group}:${c.id}`}>
                 {heading && <div className="palette-group">{heading === "Ask" ? "Nocturn AI" : heading}</div>}
@@ -301,9 +318,7 @@ export function CommandPalette() {
                   onMouseMove={() => i !== active && setActive(i)}
                   onClick={() => run(c)}
                 >
-                  <span className="pi-icon" style={c.badge?.colour ? { background: c.badge.colour, color: "#fff" } : undefined}>
-                    {Icon ? <Icon /> : c.badge ? c.badge.text : null}
-                  </span>
+                  <CommandIcon c={c} Icon={Icon} />
                   <span className="pi-label">{c.label}</span>
                   {c.hint && <span className="pi-hint">{c.hint}</span>}
                   {i === active && <span className="pi-enter" aria-hidden>↵</span>}

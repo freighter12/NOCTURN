@@ -1,6 +1,7 @@
 // Shared pieces of the App Library: Nocturn's own apps, app icons and the
 // launch action (with an honest message about where the app opened).
 
+import { useEffect, useState } from "react";
 import { I } from "../components/Icons";
 import { errorMessage, library, type LibraryItem } from "../lib/api";
 import type { PageId } from "../lib/app";
@@ -26,7 +27,69 @@ function hash(s: string) {
   return Math.abs(h);
 }
 
-export function AppIcon({ item, size = 44 }: { item: Pick<LibraryItem, "name" | "icon">; size?: number }) {
+// ------------------------------------------------------------ real icons
+
+// Icons Windows gave us, by Start-menu AppID (null = it has none).
+const iconCache = new Map<string, string | null>();
+const waiting = new Map<string, ((v: string | null) => void)[]>();
+let flushTimer: number | undefined;
+
+function flush() {
+  flushTimer = undefined;
+  const ids = [...waiting.keys()].filter((id) => !iconCache.has(id));
+  for (let i = 0; i < ids.length; i += 100) {
+    const batch = ids.slice(i, i + 100);
+    library
+      .icons(batch)
+      .then((map) => batch.forEach((id) => iconCache.set(id, map[id] ?? null)))
+      .catch(() => batch.forEach((id) => iconCache.set(id, null)))
+      .finally(() =>
+        batch.forEach((id) => {
+          const ws = waiting.get(id) ?? [];
+          waiting.delete(id);
+          ws.forEach((f) => f(iconCache.get(id) ?? null));
+        }),
+      );
+  }
+}
+
+/** The app's own icon (data URL), null if it has none, undefined while loading. Requests are batched. */
+export function useAppIcon(appId: string | undefined): string | null | undefined {
+  const [src, setSrc] = useState<string | null | undefined>(() => (appId ? iconCache.get(appId) : undefined));
+  useEffect(() => {
+    if (!appId) return setSrc(undefined);
+    if (iconCache.has(appId)) return setSrc(iconCache.get(appId));
+    let live = true;
+    setSrc(undefined);
+    const list = waiting.get(appId) ?? [];
+    list.push((v) => live && setSrc(v));
+    waiting.set(appId, list);
+    flushTimer ??= window.setTimeout(flush, 16);
+    return () => {
+      live = false;
+    };
+  }, [appId]);
+  return src;
+}
+
+type IconItem = Pick<LibraryItem, "name" | "icon"> & Partial<Pick<LibraryItem, "kind" | "target">>;
+
+/**
+ * An app's tile icon: its real Windows icon for installed apps (unless the
+ * user chose their own text/colour), otherwise a monogram. `appId` gives
+ * the Start-menu ID directly (e.g. in the Add apps picker).
+ */
+export function AppIcon({ item, size = 44, appId }: { item: IconItem; size?: number; appId?: string }) {
+  const custom = !!(item.icon.glyph || item.icon.colour);
+  const id = custom ? undefined : (appId ?? (item.kind === "installed" ? item.target : undefined));
+  const real = useAppIcon(id);
+  if (real) {
+    return (
+      <span className="app-icon real" style={{ width: size, height: size }} aria-hidden>
+        <img src={real} alt="" draggable={false} style={{ width: Math.round(size * 0.74), height: Math.round(size * 0.74) }} />
+      </span>
+    );
+  }
   const bg = item.icon.colour ?? PALETTE[hash(item.name) % PALETTE.length];
   const glyph = item.icon.glyph || item.name.replace(/[^\p{L}\p{N}]/gu, "").slice(0, 2) || "?";
   return (

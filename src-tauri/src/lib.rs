@@ -14,6 +14,7 @@ mod customise;
 mod db;
 mod games;
 mod library;
+mod library_icons;
 mod music;
 mod privacy;
 mod error;
@@ -25,6 +26,7 @@ mod storage;
 mod startup_insight;
 mod state;
 mod system;
+mod tray;
 mod tweaks;
 mod util;
 
@@ -41,11 +43,10 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.unminimize();
-                let _ = w.set_focus();
-            }
+            tray::show_main(app);
         }))
+        .plugin(tauri_plugin_notification::init())
+        .on_window_event(tray::on_window_event)
         // Nocturn Music playback and artwork: serves only indexed tracks,
         // with byte ranges so seeking works (http://media.localhost/...).
         .register_asynchronous_uri_scheme_protocol("media", |ctx, request, responder| {
@@ -101,6 +102,9 @@ pub fn run() {
             });
 
             app.manage(state);
+            if let Err(e) = tray::init(app.handle()) {
+                tracing::warn!("tray icon unavailable: {e}");
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -224,6 +228,8 @@ pub fn run() {
             commands::ai_get_conversation,
             commands::ai_rename_conversation,
             commands::ai_delete_conversation,
+            tray::tray_update,
+            commands::library_icons,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NOCTURN");

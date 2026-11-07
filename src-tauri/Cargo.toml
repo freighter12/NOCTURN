@@ -40,7 +40,8 @@ rusqlite = { version = "0.41.1", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sysinfo = "0.40.1"
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time", "process"] }
@@ -49,11 +50,13 @@ tracing = "0.1.44"
 tracing-appender = "0.2.5"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 uuid = { version = "1.29.0", features = ["v4", "serde"] }
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Performance", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_Security", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_System_Power", "Win32_NetworkManagement_WiFi", "Win32_Security_Credentials", "Win32_Security_WinTrust", "Win32_Security_Cryptography", "Win32_System_Com", "Win32_Storage_FileSystem", "Win32_System_Registry", "Win32_System_Services"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Performance", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_Security", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_System_Power", "Win32_NetworkManagement_WiFi", "Win32_Security_Credentials", "Win32_Security_WinTrust", "Win32_Security_Cryptography", "Win32_System_Com", "Win32_Storage_FileSystem", "Win32_System_Registry", "Win32_System_Services", "Win32_Graphics_Gdi"] }
 winreg = "0.56.0"
 nocturn-bench = { path = "bench" }
 wmi = "0.18.4"
 lofty = "0.25.5"
+png = "0.18"
+base64 = "0.21"
 
 [dev-dependencies]
 tempfile = "3.27.0"

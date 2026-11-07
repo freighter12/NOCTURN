@@ -184,6 +184,13 @@ pub async fn library_start_apps(refresh: Option<bool>) -> AppResult<Vec<crate::l
     blocking(move || crate::library::start_apps(refresh.unwrap_or(false))).await
 }
 
+/// Real icons for Start-menu apps (only AppIDs in the current Start list).
+#[tauri::command]
+pub async fn library_icons(state: State<'_, Shared>, app_ids: Vec<String>) -> AppResult<std::collections::HashMap<String, Option<String>>> {
+    let dir = state.data_dir.clone();
+    blocking(move || crate::library_icons::icons(&dir, &app_ids)).await
+}
+
 #[derive(Serialize)]
 pub struct ServiceView {
     id: &'static str,
