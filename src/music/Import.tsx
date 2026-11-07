@@ -10,6 +10,7 @@ import { ErrorNote, Note, Panel, Seg, Spinner } from "../components/ui";
 import { errorMessage, music, type ImportInfo, type ImportItem, type ImportPreview, type Playlist } from "../lib/api";
 import { useApp } from "../lib/app";
 import { fmtTime, useMusic } from "./MusicProvider";
+import { streamSongs, useStreamStatus } from "./Streaming";
 
 type Mode = "link" | "list";
 type Filter = "all" | "found" | "missing";
@@ -39,6 +40,9 @@ export function ImportPanel({ refresh, onDone, onCancel }: { refresh?: { playlis
   const [skip, setSkip] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState<Filter>("all");
   const file = useRef<HTMLInputElement>(null);
+  const streaming = useStreamStatus();
+  const [stream, setStream] = useState(true);
+  const [streamProgress, setStreamProgress] = useState<string | null>(null);
 
   async function find(input: { link?: string; text?: string }) {
     setBusy(true);
@@ -67,16 +71,36 @@ export function ImportPanel({ refresh, onDone, onCancel }: { refresh?: { playlis
     if (!preview) return;
     setBusy(true);
     try {
-      const items = preview.items.map((it, i) => (skip.has(i) ? { ...it, track_id: null, confidence: null } : it));
+      let items = preview.items.map((it, i) => (skip.has(i) ? { ...it, track_id: null, confidence: null } : it));
+      let streamed = 0;
+      if (streaming?.enabled && stream) {
+        // Find the missing songs on YouTube and add them as streaming songs.
+        const want = items.map((it, i) => ({ it, i })).filter(({ it, i }) => it.track_id == null && !skip.has(i));
+        if (want.length) {
+          setStreamProgress(`Finding songs on YouTube… 0 of ${want.length}`);
+          const res = await streamSongs(want.map(({ it }) => it), (p) => setStreamProgress(`Finding songs on YouTube… ${p.done} of ${p.total} (${p.found} found)`));
+          items = items.map((it) => ({ ...it }));
+          res.forEach((r) => {
+            const at = want[r.index]?.i;
+            if (at != null && r.track_id != null) {
+              items[at] = { ...items[at], track_id: r.track_id, confidence: "stream" };
+              streamed++;
+            }
+          });
+          await m.reload();
+        }
+      }
       const p = await music.importSave({ playlist_id: refresh?.playlist.id ?? null, name: name.trim() || preview.name, source: preview.source, url: preview.url, items });
       await m.reloadPlaylists();
       const n = items.filter((x) => x.track_id != null).length;
-      toast({ tone: "good", title: refresh ? `Updated ${p.name}` : `Created ${p.name}`, detail: `${n} of ${items.length} songs are in your library.` });
+      const local = n - streamed;
+      toast({ tone: "good", title: refresh ? `Updated ${p.name}` : `Created ${p.name}`, detail: streamed ? `${local} from your library, ${streamed} streamed from YouTube${n < items.length ? `, ${items.length - n} not found` : ""}.` : `${n} of ${items.length} songs are in your library.` });
       onDone(p);
     } catch (e) {
       toast({ tone: "critical", title: "Couldn't save the playlist", detail: errorMessage(e) });
     } finally {
       setBusy(false);
+      setStreamProgress(null);
     }
   }
 
@@ -133,7 +157,7 @@ export function ImportPanel({ refresh, onDone, onCancel }: { refresh?: { playlis
           <div className="import-summary">
             <div className="big">{preview.matched}<span className="dim"> / {preview.items.length}</span></div>
             <div>
-              <div>songs from <b>{preview.name}</b> are in your library</div>
+              <div>songs from <b>{preview.name}</b> are in your library{preview.items.some((it) => it.track_id != null && m.byId.get(it.track_id)?.source === "youtube") ? " (some as streaming songs)" : ""}</div>
               <div className="small dim">{preview.source === "List" ? "From your list" : `From ${preview.source}`} · {preview.items.length - preview.matched} missing{preview.matched > 0 ? " · untick any match that's wrong" : ""}</div>
             </div>
           </div>
@@ -158,7 +182,7 @@ export function ImportPanel({ refresh, onDone, onCancel }: { refresh?: { playlis
                     <div className="truncate">{it.title}<span className="dim"> · {it.artist || "unknown artist"}</span></div>
                     {local ? (
                       <div className="small dim truncate">
-                        {it.confidence === "likely" ? "Probably " : ""}→ {local.title} · {local.artist} · {fmtTime(local.duration_ms)}
+                        {local.source === "youtube" ? "Streams from YouTube · " : it.confidence === "likely" ? "Probably " : ""}→ {local.title} · {local.artist} · {fmtTime(local.duration_ms)}
                       </div>
                     ) : (
                       <div className="small dim">Not in your library</div>
@@ -170,6 +194,16 @@ export function ImportPanel({ refresh, onDone, onCancel }: { refresh?: { playlis
             })}
           </div>
 
+          {missing.length > 0 && (streaming?.enabled ? (
+            <label className="row small" style={{ gap: 8, alignItems: "center" }}>
+              <input type="checkbox" className="check" checked={stream} onChange={(e) => setStream(e.target.checked)} />
+              Stream the {missing.length} missing song{missing.length === 1 ? "" : "s"} from YouTube
+              <span className="dim">(found when you save; takes a few seconds per 4 songs)</span>
+            </label>
+          ) : (
+            <div className="small dim">To play the missing songs without downloading them, turn on streaming in Music › Sources.</div>
+          ))}
+          {streamProgress && <div className="row small" style={{ gap: 8 }}><Spinner /> {streamProgress}</div>}
           <div className="row" style={{ gap: 8, alignItems: "flex-end" }}>
             <div className="field" style={{ flex: 1 }}>
               <label htmlFor="imp-name">Playlist name</label>
@@ -191,6 +225,8 @@ export function ImportedInfo({ playlist, onRefresh }: { playlist: Playlist; onRe
   const { toast } = useApp();
   const [info, setInfo] = useState<ImportInfo | null>(null);
   const [open, setOpen] = useState(false);
+  const streaming = useStreamStatus();
+  const [streamBusy, setStreamBusy] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -203,6 +239,24 @@ export function ImportedInfo({ playlist, onRefresh }: { playlist: Playlist; onRe
   if (!info) return null;
   const found = info.missing.filter((x) => x.track_id != null && m.byId.has(x.track_id));
   const still = info.missing.filter((x) => x.track_id == null);
+
+  async function streamMissing() {
+    setStreamBusy(`Finding songs on YouTube… 0 of ${still.length}`);
+    try {
+      const res = await streamSongs(still, (p) => setStreamBusy(`Finding songs on YouTube… ${p.done} of ${p.total} (${p.found} found)`));
+      const ids = res.map((r) => r.track_id).filter((x): x is number => x != null);
+      await m.reload();
+      if (ids.length) {
+        await music.savePlaylist({ ...playlist, tracks: [...playlist.tracks, ...ids] });
+        await m.reloadPlaylists();
+      }
+      toast({ tone: ids.length ? "good" : "warning", title: ids.length ? `Added ${ids.length} streaming song${ids.length === 1 ? "" : "s"}` : "None of them were found on YouTube", detail: ids.length < still.length ? `${still.length - ids.length} couldn't be matched to an upload of the right length and version.` : undefined });
+    } catch (e) {
+      toast({ tone: "critical", title: "Couldn't stream them", detail: errorMessage(e) });
+    } finally {
+      setStreamBusy(null);
+    }
+  }
 
   async function addFound() {
     try {
@@ -224,9 +278,11 @@ export function ImportedInfo({ playlist, onRefresh }: { playlist: Playlist; onRe
         <span className="row" style={{ gap: 6, marginLeft: "auto" }}>
           {info.url && <button className="btn ghost sm" onClick={() => music.importOpen(playlist.id).catch((e) => toast({ tone: "critical", title: "Couldn't open it", detail: errorMessage(e) }))}>Open original</button>}
           {info.url && <button className="btn ghost sm" onClick={() => onRefresh(info.url!)}><I.refresh /> Update from link</button>}
+          {still.length > 0 && streaming?.enabled && <button className="btn sm" disabled={!!streamBusy} onClick={streamMissing}>{streamBusy ? <Spinner /> : <I.play />} Stream missing ({still.length})</button>}
           {still.length > 0 && <button className="btn ghost sm" onClick={() => setOpen((o) => !o)}>{open ? "Hide" : "Show"} missing ({still.length})</button>}
         </span>
       </div>
+      {streamBusy && <div className="row small mt-2" style={{ gap: 8 }}><Spinner /> {streamBusy}</div>}
       {found.length > 0 && (
         <div className="row mt-2" style={{ gap: 10, alignItems: "center" }}>
           <span className="small">{found.length} song{found.length === 1 ? " that was" : "s that were"} missing {found.length === 1 ? "is" : "are"} now in your library.</span>

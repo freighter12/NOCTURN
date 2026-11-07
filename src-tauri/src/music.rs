@@ -436,7 +436,9 @@ pub fn save_playlist(db: &Db, p: PlaylistInput) -> AppResult<Playlist> {
     }
     tx.commit()?;
     drop(conn);
-    playlists(db)?.into_iter().find(|x| x.id == id).ok_or_else(|| AppError::msg("playlist vanished"))
+    let saved = playlists(db)?.into_iter().find(|x| x.id == id).ok_or_else(|| AppError::msg("playlist vanished"))?;
+    prune_streams(db, chrono::Duration::hours(1))?;
+    Ok(saved)
 }
 
 pub fn delete_playlist(db: &Db, id: &str) -> AppResult<()> {
@@ -444,7 +446,26 @@ pub fn delete_playlist(db: &Db, id: &str) -> AppResult<()> {
     conn.execute("DELETE FROM music_playlist_tracks WHERE playlist_id = ?1", [id])?;
     conn.execute("DELETE FROM music_playlist_imports WHERE playlist_id = ?1", [id])?;
     conn.execute("DELETE FROM music_playlists WHERE id = ?1", [id])?;
+    drop(conn);
+    prune_streams(db, chrono::Duration::hours(1))?;
     Ok(())
+}
+
+/// Remove streaming songs nothing uses any more (no playlist, not liked) and
+/// older than `grace` — so an import that's still being saved is never touched.
+pub fn prune_streams(db: &Db, grace: chrono::Duration) -> AppResult<usize> {
+    let cutoff = (chrono::Utc::now() - grace).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let conn = db.conn();
+    let n = conn.execute(
+        "DELETE FROM music_tracks WHERE source = 'youtube' AND added_at < ?1
+           AND id NOT IN (SELECT track_id FROM music_playlist_tracks)
+           AND id NOT IN (SELECT track_id FROM music_likes)",
+        [cutoff],
+    )?;
+    if n > 0 {
+        conn.execute("DELETE FROM music_plays WHERE track_id NOT IN (SELECT id FROM music_tracks)", [])?;
+    }
+    Ok(n)
 }
 
 // ------------------------------------------------------------------- lyrics
@@ -565,12 +586,21 @@ pub fn parse_range(h: Option<&str>, total: u64) -> Option<(u64, u64)> {
 const CHUNK: u64 = 2 * 1024 * 1024;
 
 /// Serve `/track/<id>` (audio, ranged) or `/art/<id>` (cover image).
-pub fn serve(db: &Db, path: &str, range: Option<&str>) -> Served {
+pub fn serve(db: &Db, data_dir: &Path, streaming: bool, path: &str, range: Option<&str>) -> Served {
     let not_found = || Served { status: 404, mime: "text/plain".into(), body: b"not found".to_vec(), range: None };
     let mut parts = path.trim_matches('/').splitn(2, '/');
     let (kind, id) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
     let Ok(id) = id.parse::<i64>() else { return not_found() };
     let Ok(Some(file)) = track_path(db, id) else { return not_found() };
+    // Streaming tracks (youtube:<video id>) are relayed, never read from disk.
+    let fs_path = file.to_string_lossy().to_string();
+    if fs_path.starts_with("youtube") {
+        return match kind {
+            "track" => crate::music_stream_engine::serve_track(db, data_dir, streaming, id, &fs_path, range),
+            "art" => crate::music_stream_engine::serve_art(data_dir, &fs_path),
+            _ => not_found(),
+        };
+    }
     match kind {
         "track" => {
             let Ok(mut f) = std::fs::File::open(&file) else { return not_found() };
@@ -663,20 +693,24 @@ mod tests {
         assert_eq!(t[0].album, "Album", "folder name as album");
         assert!((1400..=1600).contains(&t[0].duration_ms), "{}", t[0].duration_ms);
 
-        // Rescan: unchanged files are skipped; a deleted file is removed.
+        // Rescan: unchanged files are skipped; a deleted file is removed;
+        // streaming tracks (not files) are never touched by a scan.
+        db.conn().execute("INSERT INTO music_tracks(source, path, folder, title, artist, album, album_artist, duration_ms, size, mtime, added_at) VALUES ('youtube', 'youtube:mQER0A0ej0M', 'youtube', 'Hey Jude', 'The Beatles', '', 'The Beatles', 1, 0, 0, 'x')", []).unwrap();
         assert_eq!(scan(&db, &|_| {}).unwrap().added, 0);
         std::fs::remove_file(album.join("01 First.wav")).unwrap();
         assert_eq!(scan(&db, &|_| {}).unwrap().removed, 1);
+        assert!(tracks(&db).unwrap().iter().any(|t| t.source == "youtube"), "streaming track survived the scan");
+        db.conn().execute("DELETE FROM music_tracks WHERE source = 'youtube'", []).unwrap();
         let t = tracks(&db).unwrap();
         assert_eq!(t.len(), 1);
 
         // Serving: only indexed IDs, ranges honoured.
         let id = t[0].id;
-        let s = serve(&db, &format!("/track/{id}"), Some("bytes=0-9"));
+        let s = serve(&db, std::path::Path::new("."), false, &format!("/track/{id}"), Some("bytes=0-9"));
         assert_eq!((s.status, s.body.len(), &s.body[..4]), (206, 10, &b"RIFF"[..]));
-        assert_eq!(serve(&db, "/track/99999", None).status, 404);
-        assert_eq!(serve(&db, "/track/../../etc/passwd", None).status, 404);
-        assert_eq!(serve(&db, "/art/abc", None).status, 404);
+        assert_eq!(serve(&db, std::path::Path::new("."), false, "/track/99999", None).status, 404);
+        assert_eq!(serve(&db, std::path::Path::new("."), false, "/track/../../etc/passwd", None).status, 404);
+        assert_eq!(serve(&db, std::path::Path::new("."), false, "/art/abc", None).status, 404);
 
         // Likes, plays, playlists, lyrics.
         set_like(&db, id, true).unwrap();

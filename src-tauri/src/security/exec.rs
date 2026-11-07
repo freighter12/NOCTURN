@@ -5,6 +5,11 @@
 //! (never via `PATH`, which could be hijacked), arguments are fixed, and the
 //! few dynamic parameters are validated newtypes. PowerShell is only ever
 //! invoked with one of the compile-time scripts in [`PsScript`].
+//!
+//! The one exception to "System32 only" is Nocturn Music streaming: yt-dlp
+//! and Deno, which NOCTURN downloads itself (only when the user turns
+//! streaming on), verifies against the publishers' SHA-256 checksums and
+//! re-checks before running. They get fixed arguments and a validated video ID.
 
 use std::io::Read;
 use std::os::windows::process::CommandExt;
@@ -195,6 +200,29 @@ pub enum SafeCommand {
     IpconfigFlushDns,
     NetshWlanInterfaces,
     PowerShell(PsScript),
+    /// `yt-dlp --version`
+    YtDlpVersion { exe: PathBuf },
+    /// Stream info (JSON) for one YouTube video, audio only.
+    YtDlpExtract { exe: PathBuf, deno: PathBuf, video: VideoId },
+    /// Unpack a downloaded archive with Windows' own tar.exe.
+    TarExtract { archive: PathBuf, dest: PathBuf },
+}
+
+/// A YouTube video ID (11 characters of [A-Za-z0-9_-]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VideoId(String);
+
+impl VideoId {
+    pub fn parse(s: &str) -> AppResult<Self> {
+        if s.len() == 11 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+            Ok(VideoId(s.to_string()))
+        } else {
+            Err(AppError::Invalid("not a YouTube video ID".into()))
+        }
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl SafeCommand {
@@ -209,6 +237,26 @@ impl SafeCommand {
                 (sys32.join("powercfg.exe"), vec!["/setactive".into(), g.as_str().into()])
             }
             SafeCommand::IpconfigFlushDns => (sys32.join("ipconfig.exe"), vec!["/flushdns".into()]),
+            SafeCommand::YtDlpVersion { exe } => (exe.clone(), vec!["--no-config".into(), "--version".into()]),
+            SafeCommand::YtDlpExtract { exe, deno, video } => (
+                exe.clone(),
+                vec![
+                    "--no-config".into(),
+                    "--no-playlist".into(),
+                    "--no-cache-dir".into(),
+                    "--js-runtimes".into(),
+                    format!("deno:{}", deno.display()),
+                    "-f".into(),
+                    "bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]/bestaudio[ext=webm]/bestaudio".into(),
+                    "-J".into(),
+                    "--".into(),
+                    video.as_str().into(),
+                ],
+            ),
+            SafeCommand::TarExtract { archive, dest } => (
+                sys32.join("tar.exe"),
+                vec!["-xf".into(), archive.display().to_string(), "-C".into(), dest.display().to_string()],
+            ),
             SafeCommand::NetshWlanInterfaces => (
                 sys32.join("netsh.exe"),
                 vec!["wlan".into(), "show".into(), "interfaces".into()],
@@ -239,6 +287,8 @@ impl SafeCommand {
             SafeCommand::PowerShell(PsScript::CreateRestorePoint) => Duration::from_secs(180),
             SafeCommand::PowerShell(PsScript::Drivers) => Duration::from_secs(60),
             SafeCommand::PowerShell(_) => Duration::from_secs(30),
+            SafeCommand::YtDlpExtract { .. } => Duration::from_secs(60),
+            SafeCommand::TarExtract { .. } => Duration::from_secs(120),
             _ => Duration::from_secs(15),
         }
     }

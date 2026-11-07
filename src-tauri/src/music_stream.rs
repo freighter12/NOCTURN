@@ -9,9 +9,6 @@
 //! artists, "Official Audio") are preferred, and a song is left unmatched
 //! rather than guessed when nothing fits.
 
-// Wired into playback once the stream extractor (yt-dlp) is in place.
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -46,7 +43,7 @@ const VERSION_WORDS: &[&str] = &[
     "live", "cover", "karaoke", "instrumental", "nightcore", "sped up", "speed up", "slowed", "reverb", "8d", "remix", "acoustic", "piano", "reaction", "tutorial", "lesson",
     "hour", "loop", "extended", "edit", "mashup", "bass boosted", "mix", "version", "demo", "concert", "tribute", "parody", "chipmunk", "lofi", "lo fi", "orchestral", "unplugged",
     "session", "rehearsal", "isolated", "acapella", "a cappella", "backing track", "minus one", "drum cover", "guitar cover", "bass cover", "shorts", "teaser", "trailer", "snippet",
-    "behind the scenes", "making of", "interview", "documentary", "commentary", "explained", "unboxing", "dance practice", "choreography", "fancam",
+    "behind the scenes", "making of", "interview", "documentary", "commentary", "explained", "unboxing", "dance practice", "choreography", "fancam", "432hz", "528hz", "8 bit", "music box", "ringtone", "reverse", "reversed",
 ];
 
 /// Words that make signed-out YouTube search show "Confirm your age" instead of results.
@@ -133,10 +130,33 @@ pub fn score(want: &RemoteTrack, c: &Candidate) -> Option<(f64, &'static str)> {
 
 /// The best candidate for a song, if any fits.
 pub fn pick(want: &RemoteTrack, cands: &[Candidate]) -> Option<Pick> {
+    // No length to check against (e.g. a pasted list): use the length most
+    // uploads of this song agree on, so one long video can't win.
+    let derived;
+    let want = if want.duration_ms.is_none() {
+        match consensus_length(want, cands) {
+            Some(d) => {
+                derived = RemoteTrack { duration_ms: Some(d), ..want.clone() };
+                &derived
+            }
+            None => want,
+        }
+    } else {
+        want
+    };
     cands
         .iter()
         .filter_map(|c| score(want, c).map(|(s, conf)| Pick { candidate: c.clone(), confidence: conf, score: s }))
         .max_by(|a, b| a.score.total_cmp(&b.score))
+}
+
+/// Median length of the uploads that are clearly this song (title and artist
+/// match, no other version), if at least two agree within 5 s.
+fn consensus_length(want: &RemoteTrack, cands: &[Candidate]) -> Option<i64> {
+    let mut lens: Vec<i64> = cands.iter().filter(|c| score(want, c).is_some()).filter_map(|c| c.duration_ms).collect();
+    lens.sort_unstable();
+    let mid = *lens.get(lens.len() / 2)?;
+    (lens.iter().filter(|l| (*l - mid).abs() <= 5000).count() >= 2).then_some(mid)
 }
 
 /// The search text for a song: first artist + title without bracketed noise.
@@ -170,10 +190,7 @@ pub enum SearchPage {
 /// Parse a YouTube search results page (both the older `videoRenderer` and
 /// the newer `lockupViewModel` layouts).
 pub fn parse_search(html: &str) -> AppResult<SearchPage> {
-    let start = html.find("var ytInitialData = ").map(|i| i + "var ytInitialData = ".len());
-    let v: Value = start
-        .and_then(|s| html[s..].find(";</script>").map(|e| &html[s..s + e]))
-        .and_then(|j| serde_json::from_str(j).ok())
+    let v: Value = crate::music_import::yt_initial_data(html)
         .ok_or_else(|| AppError::msg("YouTube's search page couldn't be read (it may be asking to confirm you're not a bot) — try again later"))?;
     let mut out: Vec<Candidate> = Vec::new();
     let mut age_gate = false;
@@ -259,6 +276,11 @@ pub async fn search(query: &str) -> AppResult<SearchPage> {
 /// Find the video for a song. Tries the plain query, then (if the age gate
 /// hid the results or nothing fit) without explicit words, then with "audio".
 pub async fn resolve(want: &RemoteTrack) -> AppResult<Option<Pick>> {
+    resolve_excluding(want, &std::collections::HashSet::new()).await
+}
+
+/// As [`resolve`], never picking one of `exclude` (videos that stopped working).
+pub async fn resolve_excluding(want: &RemoteTrack, exclude: &std::collections::HashSet<String>) -> AppResult<Option<Pick>> {
     let base = query_for(want);
     let mut queries = vec![base.clone()];
     let clean = without_explicit(&base);
@@ -270,7 +292,7 @@ pub async fn resolve(want: &RemoteTrack) -> AppResult<Option<Pick>> {
     let mut all: Vec<Candidate> = Vec::new();
     for q in queries {
         if let SearchPage::Results(c) = search(&q).await? {
-            all.extend(c.into_iter().filter(|c| seen.insert(c.video_id.clone())));
+            all.extend(c.into_iter().filter(|c| !exclude.contains(&c.video_id) && seen.insert(c.video_id.clone())));
             if let Some(p) = pick(want, &all) {
                 return Ok(Some(p));
             }
@@ -284,7 +306,7 @@ mod tests {
     use super::*;
 
     fn want(title: &str, artist: &str, secs: Option<i64>) -> RemoteTrack {
-        RemoteTrack { title: title.into(), artist: artist.into(), album: String::new(), duration_ms: secs.map(|s| s * 1000), path: None }
+        RemoteTrack { title: title.into(), artist: artist.into(), album: String::new(), duration_ms: secs.map(|s| s * 1000), path: None, video_id: None }
     }
     fn cand(id: &str, title: &str, channel: &str, secs: i64, official: bool) -> Candidate {
         Candidate { video_id: format!("{id:_<11}"), title: title.into(), channel: channel.into(), duration_ms: Some(secs * 1000), official }
@@ -369,6 +391,56 @@ mod tests {
         // Audio upload beats the official video of the same length.
         let c = vec![cand("V", "Ella Langley - Choosin' Texas (Official Video)", "Ella Langley", 220, true), cand("A", "Choosin' Texas", "Ella Langley - Topic", 220, true)];
         assert!(pick(&w, &c).unwrap().candidate.video_id.starts_with('A'));
+    }
+
+    #[test]
+    fn escaped_page_data_form() {
+        // window['ytInitialData'] = JSON.parse('…') with \x escapes, as YouTube sometimes sends.
+        let html = r#"<script>window['ytInitialData'] = JSON.parse('\x7b\x22a\x22:[\x7b\x22videoRenderer\x22:\x7b\x22videoId\x22:\x22mQER0A0ej0M\x22,\x22title\x22:\x7b\x22runs\x22:[\x7b\x22text\x22:\x22Hey Jude — it\'s\x22\x7d]\x7d,\x22lengthText\x22:\x7b\x22simpleText\x22:\x227:06\x22\x7d\x7d\x7d]\x7d');</script>"#;
+        match parse_search(html).unwrap() {
+            SearchPage::Results(c) => {
+                assert_eq!(c.len(), 1);
+                assert_eq!(c[0].title, "Hey Jude \u{2014} it's");
+                assert_eq!(c[0].duration_ms, Some(426_000));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn no_length_given_uses_what_uploads_agree_on() {
+        let w = want("Janice STFU", "Drake", None);
+        let c = vec![
+            cand("L", "Drake - Janice STFU (Full Version / Extended)", "Drake", 514, true),
+            cand("A", "Drake - Janice STFU", "Drake", 237, true),
+            cand("B", "Janice STFU", "Drake", 238, true),
+            cand("C", "Drake - Janice STFU (Lyrics)", "TrendingTracks", 237, false),
+            cand("D", "Drake - Janice STFU (432hz)", "Some Channel", 238, false),
+            cand("E", "Drake - Janice STFU (Visualizer)", "Drake", 512, true),
+        ];
+        let p = pick(&w, &c).unwrap();
+        assert!(p.candidate.duration_ms.unwrap() < 300_000, "picked {}", p.candidate.title);
+        assert!(score(&w, &c[4]).is_none(), "432 Hz re-tunes are rejected");
+    }
+
+    #[test]
+    fn json_script_element_form() {
+        let html = r#"<script id="yt-initial-data" type="application/json" nonce="x">{"a":[{"videoRenderer":{"videoId":"mQER0A0ej0M","title":{"runs":[{"text":"Hey Jude"}]},"ownerText":{"runs":[{"text":"The Beatles - Topic"}]},"lengthText":{"simpleText":"7:06"}}}]}</script><script>var ytDataEl = document.getElementById('yt-initial-data');</script>"#;
+        match parse_search(html).unwrap() {
+            SearchPage::Results(c) => assert_eq!((c.len(), c[0].official), (1, true)),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    /// Parse a saved results page: SEARCH_HTML=path cargo test --lib saved_search_page -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn saved_search_page() {
+        let html = std::fs::read_to_string(std::env::var("SEARCH_HTML").unwrap()).unwrap();
+        match parse_search(&html).unwrap() {
+            SearchPage::Results(c) => c.iter().take(8).for_each(|c| println!("{:?}", (&c.title, &c.channel, c.duration_ms.map(|d| d / 1000), c.official))),
+            other => println!("{other:?}"),
+        }
     }
 
     #[test]

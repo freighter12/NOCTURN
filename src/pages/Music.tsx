@@ -5,12 +5,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { I } from "../components/Icons";
 import { Empty, ErrorNote, Note, PageHead, Panel, Seg, Spinner } from "../components/ui";
-import { errorMessage, music, type Playlist, type Track } from "../lib/api";
+import { errorMessage, music, musicStream, type Playlist, type Track } from "../lib/api";
 import { useApp, useLoad } from "../lib/app";
 import { relative } from "../lib/format";
 import { fmtTime, useMusic } from "../music/MusicProvider";
 import { Art } from "../music/Player";
 import { ImportedInfo, ImportPanel } from "../music/Import";
+import { StreamingPanel } from "../music/Streaming";
 import { usePrefs } from "../shell/PrefsProvider";
 
 type Tab = "home" | "search" | "songs" | "albums" | "artists" | "playlists" | "liked" | "history" | "sources";
@@ -33,7 +34,7 @@ function TrackRow({ t, n, list, onRemove }: { t: Track; n: number; list: number[
       <Art track={t} size={36} />
       <div className="stack" style={{ gap: 0, minWidth: 0 }}>
         <span className="truncate" style={{ fontWeight: 500 }}>{t.title}</span>
-        <span className="small muted truncate">{t.artist}</span>
+        <span className="small muted truncate">{t.source === "youtube" && <span className="stream-tag" title="Streamed from YouTube (not in your library)">YouTube</span>}{t.artist}</span>
       </div>
       <span className="small muted truncate">{t.album}</span>
       <button className={`btn ghost icon sm ${t.liked ? "on liked" : ""}`} aria-label={t.liked ? `Unlike ${t.title}` : `Like ${t.title}`} onClick={() => m.setLiked(t.id, !t.liked)}><I.heart /></button>
@@ -46,6 +47,7 @@ function TrackRow({ t, n, list, onRemove }: { t: Track; n: number; list: number[
             <div className="ws-menu" style={{ left: "auto", right: 0, transform: "none", top: 30 }} role="menu">
               <button role="menuitem" onClick={() => { m.playNext([t.id]); setMenu(false); }}>Play next</button>
               <button role="menuitem" onClick={() => { m.addToQueue([t.id]); setMenu(false); }}>Add to queue</button>
+              {t.source === "youtube" && <RematchItem t={t} done={() => setMenu(false)} />}
               <div className="ws-sep" />
               {m.playlists.slice(0, 12).map((p) => (
                 <button key={p.id} role="menuitem" onClick={async () => { await music.savePlaylist({ ...p, tracks: [...p.tracks, t.id] }); await m.reloadPlaylists(); setMenu(false); }}>Add to {p.name}</button>
@@ -62,6 +64,33 @@ function TrackRow({ t, n, list, onRemove }: { t: Track; n: number; list: number[
         )}
       </div>
     </div>
+  );
+}
+
+function RematchItem({ t, done }: { t: Track; done: () => void }) {
+  const m = useMusic();
+  const { toast } = useApp();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      role="menuitem"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const v = await musicStream.rematch(t.id);
+          await m.reload();
+          toast(v ? { tone: "good", title: "Switched to another upload", detail: `${t.title} will play from a different YouTube video. If it's still wrong, try again.` } : { tone: "warning", title: "No other upload fits", detail: "Nothing else on YouTube matched this song's title, artist and length." });
+        } catch (e) {
+          toast({ tone: "critical", title: "Couldn't find another upload", detail: errorMessage(e) });
+        } finally {
+          setBusy(false);
+          done();
+        }
+      }}
+    >
+      {busy ? "Searching…" : "Wrong song? Find another upload"}
+    </button>
   );
 }
 
@@ -315,8 +344,9 @@ function Sources() {
         <div className="hint small dim mt-1">In File Explorer, Shift + right-click a folder and choose "Copy as path", then paste it here. MP3, FLAC, M4A/AAC, OGG, Opus, WAV and WMA are supported.</div>
         {scanning && <div className="small mt-1"><Spinner /> {scanning}</div>}
       </Panel>
+      <StreamingPanel />
       <Note>
-        Nocturn Music has no ads and never will. Today it plays music you own. A Nocturn catalogue of licensed and independent music is planned as another source; Nocturn won't download, rip or capture music from other services.
+        Nocturn Music has no ads. Your own files always come first; streaming is optional and only fills in songs you don't have. Nothing is saved to disk from streams.
       </Note>
     </div>
   );

@@ -90,13 +90,15 @@ pub struct AppSettings {
     pub desktop_notifications: bool,
     /// Look for a newer version at start-up and daily (never installs by itself).
     pub auto_update_check: bool,
+    /// Play songs that aren't in the library from YouTube (unofficial; off by default).
+    pub music_streaming: bool,
     pub ai: AiSettings,
     pub monitor: MonitorSettings,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
-        AppSettings { restore_point_default: true, confirm_advanced: true, reduce_motion: false, close_to_tray: true, desktop_notifications: true, auto_update_check: true, ai: AiSettings::default(), monitor: MonitorSettings::default() }
+        AppSettings { restore_point_default: true, confirm_advanced: true, reduce_motion: false, close_to_tray: true, desktop_notifications: true, auto_update_check: true, music_streaming: false, ai: AiSettings::default(), monitor: MonitorSettings::default() }
     }
 }
 

@@ -966,6 +966,7 @@ export interface AppSettings {
   close_to_tray: boolean;
   desktop_notifications: boolean;
   auto_update_check: boolean;
+  music_streaming: boolean;
   ai: AiSettings;
   monitor: MonitorSettings;
 }
@@ -1323,9 +1324,42 @@ export interface ImportItem {
   album: string;
   duration_ms: number | null;
   path?: string | null;
+  video_id?: string | null;
   track_id: number | null;
   /** "exact" | "likely" | null */
   confidence: string | null;
+}
+export interface StreamStatus {
+  enabled: boolean;
+  installed: boolean;
+  ytdlp_version: string | null;
+  installed_at: string | null;
+  checked_at: string | null;
+  streaming_tracks: number;
+  unused_tracks: number;
+}
+export interface StreamInstallProgress {
+  stage: string;
+  fraction: number | null;
+}
+export interface StreamResolved {
+  index: number;
+  track_id: number | null;
+  confidence: string | null;
+  problem: string | null;
+}
+export interface StreamResolveProgress {
+  done: number;
+  total: number;
+  found: number;
+}
+/** A song to find on YouTube. */
+export interface StreamWanted {
+  title: string;
+  artist: string;
+  album: string;
+  duration_ms: number | null;
+  video_id?: string | null;
 }
 export interface ImportPreview {
   source: string;
@@ -1393,4 +1427,25 @@ export const music = {
   lyrics: (id: number) => invoke<Lyrics | null>("music_lyrics", { id }),
   session: () => invoke<MusicSession>("music_session"),
   saveSession: (session: MusicSession) => invoke<void>("music_save_session", { session }),
+};
+
+/** Unofficial YouTube streaming (opt-in). */
+export const musicStream = {
+  status: () => invoke<StreamStatus>("music_stream_status"),
+  enable: (onProgress?: (p: StreamInstallProgress) => void) => {
+    const ch = new Channel<StreamInstallProgress>();
+    if (onProgress) ch.onmessage = onProgress;
+    return invoke<StreamStatus>("music_stream_enable", { onProgress: ch });
+  },
+  disable: (removeTools: boolean) => invoke<StreamStatus>("music_stream_disable", { removeTools }),
+  update: () => invoke<boolean>("music_stream_update"),
+  resolve: (items: StreamWanted[], onProgress?: (p: StreamResolveProgress) => void) => {
+    const ch = new Channel<StreamResolveProgress>();
+    if (onProgress) ch.onmessage = onProgress;
+    return invoke<StreamResolved[]>("music_stream_resolve", { items: items.map((i) => ({ title: i.title, artist: i.artist, album: i.album ?? "", duration_ms: i.duration_ms ?? null, video_id: i.video_id ?? null })), onProgress: ch });
+  },
+  prepare: (id: number) => invoke<void>("music_stream_prepare", { id }),
+  error: (id: number) => invoke<string | null>("music_stream_error", { id }),
+  rematch: (id: number) => invoke<string | null>("music_stream_rematch", { id }),
+  prune: () => invoke<number>("music_stream_prune"),
 };

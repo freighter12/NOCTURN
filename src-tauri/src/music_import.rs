@@ -147,6 +147,9 @@ pub struct RemoteTrack {
     /// File path from an M3U list, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    /// YouTube video ID when the list came from a YouTube playlist.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -244,7 +247,7 @@ pub fn parse_spotify_embed(html: &str) -> AppResult<RemoteList> {
                 .filter_map(|t| {
                     let title = t.get("title")?.as_str()?.trim().to_string();
                     let artist = t.get("subtitle").and_then(Value::as_str).unwrap_or("").replace('\u{a0}', " ").trim().to_string();
-                    (!title.is_empty()).then(|| RemoteTrack { title, artist, album: album.clone(), duration_ms: t.get("duration").and_then(Value::as_i64), path: None })
+                    (!title.is_empty()).then(|| RemoteTrack { title, artist, album: album.clone(), duration_ms: t.get("duration").and_then(Value::as_i64), path: None, video_id: None })
                 })
                 .collect()
         })
@@ -277,6 +280,7 @@ async fn fetch_deezer(kind: &str, id: &str) -> AppResult<RemoteList> {
                 album: album_name.clone().or_else(|| str_at(t, &["album", "title"]).map(String::from)).unwrap_or_default(),
                 duration_ms: t.get("duration").and_then(Value::as_i64).map(|s| s * 1000),
                 path: None,
+                video_id: None,
             });
         }
         pages += 1;
@@ -289,6 +293,81 @@ async fn fetch_deezer(kind: &str, id: &str) -> AppResult<RemoteList> {
         }
     }
     Ok(RemoteList { source: "Deezer".into(), name, url: None, tracks, truncated: false })
+}
+
+/// Undo JavaScript string escapes (\xNN, \uXXXX, \n, \', \\ …).
+fn js_unescape(s: &str) -> Option<String> {
+    let mut out = String::with_capacity(s.len());
+    let mut it = s.chars();
+    while let Some(c) = it.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match it.next()? {
+            'x' => {
+                let h: String = it.by_ref().take(2).collect();
+                out.push(char::from_u32(u32::from_str_radix(&h, 16).ok()?)?);
+            }
+            'u' => {
+                let h: String = it.by_ref().take(4).collect();
+                let mut cp = u32::from_str_radix(&h, 16).ok()?;
+                // Surrogate pair 😀
+                if (0xD800..0xDC00).contains(&cp) {
+                    let rest: String = it.clone().take(6).collect();
+                    if let Some(lo) = rest.strip_prefix("\\u").and_then(|l| u32::from_str_radix(l, 16).ok()) {
+                        for _ in 0..6 {
+                            it.next();
+                        }
+                        cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                    }
+                }
+                out.push(char::from_u32(cp).unwrap_or('\u{fffd}'));
+            }
+            'n' => out.push('\n'),
+            't' => out.push('\t'),
+            'r' => out.push('\r'),
+            'b' => out.push('\u{8}'),
+            'f' => out.push('\u{c}'),
+            '0' => out.push('\0'),
+            other => out.push(other), // \' \" \\ \/
+        }
+    }
+    Some(out)
+}
+
+/// YouTube's page data, in whichever form the page uses:
+/// `var ytInitialData = {…};`, `window["ytInitialData"] = {…};` or
+/// `window['ytInitialData'] = JSON.parse('…escaped…');`.
+pub(crate) fn yt_initial_data(html: &str) -> Option<Value> {
+    // <script id="yt-initial-data" type="application/json">{…}</script>
+    if let Some(i) = html.find("id=\"yt-initial-data\"") {
+        let body = &html[i..];
+        if let Some(start) = body.find('>') {
+            let rest = &body[start + 1..];
+            if let Some(v) = rest.find("</script>").and_then(|e| serde_json::from_str(&rest[..e]).ok()) {
+                return Some(v);
+            }
+        }
+    }
+    for marker in ["var ytInitialData = ", "window[\"ytInitialData\"] = ", "window['ytInitialData'] = "] {
+        if let Some(i) = html.find(marker) {
+            let rest = &html[i + marker.len()..];
+            if let Some(js) = rest.strip_prefix("JSON.parse('") {
+                let end = js.find("');")?;
+                return serde_json::from_str(&js_unescape(&js[..end])?).ok();
+            }
+            if let Some(v) = rest.find(";</script>").and_then(|e| serde_json::from_str(&rest[..e]).ok()) {
+                return Some(v);
+            }
+            // `…};` followed by more script on the same tag.
+            let mut de = serde_json::Deserializer::from_str(rest).into_iter::<Value>();
+            if let Some(Ok(v)) = de.next() {
+                return Some(v);
+            }
+        }
+    }
+    None
 }
 
 pub(crate) fn walk<'a>(v: &'a Value, f: &mut dyn FnMut(&'a str, &'a Value) -> bool) {
@@ -330,10 +409,7 @@ pub fn split_video_title(title: &str, channel: &str) -> (String, String) {
 }
 
 pub fn parse_youtube(html: &str) -> AppResult<RemoteList> {
-    let start = html.find("var ytInitialData = ").map(|i| i + "var ytInitialData = ".len()).or_else(|| html.find("ytInitialData\"] = ").map(|i| i + "ytInitialData\"] = ".len()));
-    let v: Value = start
-        .and_then(|s| html[s..].find(";</script>").map(|e| &html[s..s + e]))
-        .and_then(|j| serde_json::from_str(j).ok())
+    let v: Value = yt_initial_data(html)
         .ok_or_else(|| AppError::msg("YouTube's page has changed or asked for sign-in; NOCTURN couldn't read the playlist. Paste the song list instead"))?;
     let mut tracks = Vec::new();
     let mut name: Option<String> = None;
@@ -346,7 +422,8 @@ pub fn parse_youtube(html: &str) -> AppResult<RemoteList> {
                 let dur = x.get("lengthSeconds").and_then(Value::as_str).and_then(|s| s.parse::<i64>().ok()).map(|s| s * 1000);
                 if !title.is_empty() {
                     let (artist, title) = split_video_title(title, channel);
-                    tracks.push(RemoteTrack { title, artist, album: String::new(), duration_ms: dur, path: None });
+                    let video_id = x.get("videoId").and_then(Value::as_str).filter(|v| crate::music_stream::valid_video_id(v)).map(String::from);
+                    tracks.push(RemoteTrack { title, artist, album: String::new(), duration_ms: dur, path: None, video_id });
                 }
                 true
             }
@@ -371,7 +448,8 @@ pub fn parse_youtube(html: &str) -> AppResult<RemoteList> {
                     });
                     if !title.is_empty() {
                         let (artist, title) = split_video_title(title, channel);
-                        tracks.push(RemoteTrack { title, artist, album: String::new(), duration_ms: dur, path: None });
+                        let video_id = x.get("contentId").and_then(Value::as_str).filter(|v| crate::music_stream::valid_video_id(v)).map(String::from);
+                        tracks.push(RemoteTrack { title, artist, album: String::new(), duration_ms: dur, path: None, video_id });
                     }
                 }
                 true
@@ -443,13 +521,13 @@ pub fn parse_text(text: &str) -> AppResult<RemoteList> {
                 let (dur, label) = info.split_once(',').unwrap_or((info, ""));
                 let dur = dur.split_whitespace().next().and_then(|d| d.parse::<i64>().ok()).filter(|d| *d > 0).map(|d| d * 1000);
                 let (artist, title) = label.split_once(" - ").map(|(a, t)| (a.trim().to_string(), t.trim().to_string())).unwrap_or((String::new(), label.trim().to_string()));
-                pending = Some(RemoteTrack { title, artist, album: String::new(), duration_ms: dur, path: None });
+                pending = Some(RemoteTrack { title, artist, album: String::new(), duration_ms: dur, path: None, video_id: None });
             } else if !l.starts_with('#') {
                 let mut t = pending.take().unwrap_or_else(|| {
                     let stem = l.rsplit(['\\', '/']).next().unwrap_or(l);
                     let stem = stem.rsplit_once('.').map(|(a, _)| a).unwrap_or(stem);
                     let (artist, title) = stem.split_once(" - ").map(|(a, t)| (a.trim().to_string(), t.trim().to_string())).unwrap_or((String::new(), stem.to_string()));
-                    RemoteTrack { title, artist, album: String::new(), duration_ms: None, path: None }
+                    RemoteTrack { title, artist, album: String::new(), duration_ms: None, path: None, video_id: None }
                 });
                 t.path = Some(l.to_string());
                 tracks.push(t);
@@ -467,7 +545,7 @@ pub fn parse_text(text: &str) -> AppResult<RemoteList> {
             }
             let dur = get(cd);
             let duration_ms = dur.parse::<i64>().ok().map(|n| if n < 10_000 { n * 1000 } else { n }).or_else(|| parse_len(&dur));
-            tracks.push(RemoteTrack { title, artist: get(ca), album: get(cal), duration_ms, path: None });
+            tracks.push(RemoteTrack { title, artist: get(ca), album: get(cal), duration_ms, path: None, video_id: None });
         }
     } else {
         for l in &lines {
@@ -484,7 +562,7 @@ pub fn parse_text(text: &str) -> AppResult<RemoteList> {
                 (String::new(), l.to_string())
             };
             if !title.is_empty() {
-                tracks.push(RemoteTrack { title, artist, album: String::new(), duration_ms: None, path: None });
+                tracks.push(RemoteTrack { title, artist, album: String::new(), duration_ms: None, path: None, video_id: None });
             }
         }
     }
@@ -607,6 +685,7 @@ pub(crate) fn title_sim(a: &str, b: &str) -> f64 {
 
 struct Local {
     id: i64,
+    local: bool,
     title: String,
     artists: HashSet<String>,
     duration_ms: i64,
@@ -626,7 +705,7 @@ impl Matcher {
             .map(|t| {
                 let mut artists = artist_set(&t.artist);
                 artists.extend(artist_set(&t.album_artist));
-                Local { id: t.id, title: clean_title(&t.title), artists, duration_ms: t.duration_ms }
+                Local { id: t.id, local: t.source == "local", title: clean_title(&t.title), artists, duration_ms: t.duration_ms }
             })
             .collect();
         let mut by_title: HashMap<String, Vec<usize>> = HashMap::new();
@@ -669,7 +748,7 @@ impl Matcher {
             let dur_bad = dur.is_some_and(|d| d > 20_000);
             // Need the artist to agree, or (no artist given) the title and length to.
             let accept = if ra.is_empty() { sim >= 0.99 && !dur_bad } else { artist_ok && (sim >= 0.99 || (sim >= 0.8 && !dur_bad)) || (sim >= 0.99 && dur_ok && dur.is_some_and(|d| d <= 1500)) };
-            accept.then(|| sim + if artist_ok { 0.5 } else { 0.0 } + if dur_ok { 0.3 } else if dur_bad { -0.3 } else { 0.0 })
+            accept.then(|| sim + if artist_ok { 0.5 } else { 0.0 } + if dur_ok { 0.3 } else if dur_bad { -0.3 } else { 0.0 } + if l.local { 0.25 } else { 0.0 })
         };
         let consider = |best: &mut Option<(f64, i64, bool)>, l: &Local, sim: f64| {
             if let Some(s) = score(l, sim) {
@@ -925,7 +1004,7 @@ mod tests {
         }
     }
     fn remote(title: &str, artist: &str, secs: Option<i64>) -> RemoteTrack {
-        RemoteTrack { title: title.into(), artist: artist.into(), album: String::new(), duration_ms: secs.map(|s| s * 1000), path: None }
+        RemoteTrack { title: title.into(), artist: artist.into(), album: String::new(), duration_ms: secs.map(|s| s * 1000), path: None, video_id: None }
     }
 
     #[test]
@@ -958,7 +1037,7 @@ mod tests {
         let sp = r#"<html><script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"type":"playlist","name":"Mix","trackList":[{"title":"Stop The Wedding!","subtitle":"Ashe","duration":198840},{"title":"","subtitle":"x"}]}}}}}}</script></html>"#;
         let l = parse_spotify_embed(sp).unwrap();
         assert_eq!(l.name, "Mix");
-        assert_eq!(l.tracks, vec![RemoteTrack { title: "Stop The Wedding!".into(), artist: "Ashe".into(), album: String::new(), duration_ms: Some(198_840), path: None }]);
+        assert_eq!(l.tracks, vec![RemoteTrack { title: "Stop The Wedding!".into(), artist: "Ashe".into(), album: String::new(), duration_ms: Some(198_840), path: None, video_id: None }]);
 
         let yt = r#"<script>var ytInitialData = {"header":{"pageHeaderViewModel":{"title":{"dynamicTextViewModel":{"text":{"content":"Top 100"}}}}},"items":[{"lockupViewModel":{"contentType":"LOCKUP_CONTENT_TYPE_VIDEO","contentImage":{"thumbnailViewModel":{"overlays":[{"thumbnailBottomOverlayViewModel":{"badges":[{"thumbnailBadgeViewModel":{"text":"3:37"}}]}}]}},"metadata":{"lockupMetadataViewModel":{"title":{"content":"LISA - Tarantino (Official Music Video)"},"metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{"text":{"content":"LLOUD Official"}}]}]}}}}}},{"playlistVideoRenderer":{"title":{"runs":[{"text":"Old Song"}]},"shortBylineText":{"runs":[{"text":"Band - Topic"}]},"lengthSeconds":"200"}}]};</script>"#;
         let l = parse_youtube(yt).unwrap();

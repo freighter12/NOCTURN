@@ -190,6 +190,94 @@ pub fn music_import_open(state: State<'_, Shared>, playlist_id: String) -> AppRe
     crate::music_import::open_original(&state.db, &playlist_id)
 }
 
+// ---- music streaming (unofficial, opt-in)
+
+#[tauri::command]
+pub fn music_stream_status(state: State<'_, Shared>) -> crate::music_stream_engine::Status {
+    crate::music_stream_engine::status(&state.db, &state.data_dir, crate::settings::load(&state.db).music_streaming)
+}
+
+/// Download and verify the tools if needed, then turn streaming on.
+#[tauri::command]
+pub async fn music_stream_enable(state: State<'_, Shared>, on_progress: Channel<crate::music_stream_engine::InstallProgress>) -> AppResult<crate::music_stream_engine::Status> {
+    let st = state.inner().clone();
+    crate::music_stream_engine::install(&st.db, &st.data_dir, &|p| {
+        let _ = on_progress.send(p);
+    })
+    .await?;
+    let mut s = crate::settings::load(&st.db);
+    s.music_streaming = true;
+    crate::settings::save(&st.db, &s)?;
+    Ok(crate::music_stream_engine::status(&st.db, &st.data_dir, true))
+}
+
+#[tauri::command]
+pub fn music_stream_disable(state: State<'_, Shared>, remove_tools: bool) -> AppResult<crate::music_stream_engine::Status> {
+    let mut s = crate::settings::load(&state.db);
+    s.music_streaming = false;
+    crate::settings::save(&state.db, &s)?;
+    if remove_tools {
+        crate::music_stream_engine::remove(&state.db, &state.data_dir)?;
+    }
+    state.db.audit("info", "user", "music.stream.disable", Some(serde_json::json!({ "removed_tools": remove_tools })));
+    Ok(crate::music_stream_engine::status(&state.db, &state.data_dir, false))
+}
+
+#[tauri::command]
+pub async fn music_stream_update(state: State<'_, Shared>) -> AppResult<bool> {
+    let st = state.inner().clone();
+    crate::music_stream_engine::update(&st.db, &st.data_dir).await
+}
+
+/// Find YouTube uploads for songs (e.g. the missing part of an import) and add them as streaming tracks.
+#[tauri::command]
+pub async fn music_stream_resolve(
+    state: State<'_, Shared>,
+    items: Vec<crate::music_import::RemoteTrack>,
+    on_progress: Channel<crate::music_stream_engine::ResolveProgress>,
+) -> AppResult<Vec<crate::music_stream_engine::Resolved>> {
+    let st = state.inner().clone();
+    if !crate::settings::load(&st.db).music_streaming {
+        return Err(AppError::Invalid("turn on streaming in Music › Sources first".into()));
+    }
+    if items.len() > 2000 {
+        return Err(AppError::Invalid("too many songs at once (2,000 max)".into()));
+    }
+    Ok(crate::music_stream_engine::resolve_many(&st.db, items, &|p| {
+        let _ = on_progress.send(p);
+    })
+    .await)
+}
+
+/// Get the next song's stream link ready (runs in the background).
+#[tauri::command]
+pub fn music_stream_prepare(state: State<'_, Shared>, id: i64) {
+    let st = state.inner().clone();
+    if !crate::settings::load(&st.db).music_streaming {
+        return;
+    }
+    std::thread::spawn(move || crate::music_stream_engine::prepare(&st.db, &st.data_dir, id));
+}
+
+/// "Wrong song": find a different upload for a streaming song.
+#[tauri::command]
+pub async fn music_stream_rematch(state: State<'_, Shared>, id: i64) -> AppResult<Option<String>> {
+    let st = state.inner().clone();
+    blocking(move || crate::music_stream_engine::rematch(&st.db, id)).await
+}
+
+/// Remove streaming songs that no playlist uses and that aren't liked.
+#[tauri::command]
+pub fn music_stream_prune(state: State<'_, Shared>) -> AppResult<usize> {
+    // The user asked: no grace period (the automatic cleanup keeps its hour).
+    crate::music::prune_streams(&state.db, chrono::Duration::zero())
+}
+
+#[tauri::command]
+pub fn music_stream_error(id: i64) -> Option<String> {
+    crate::music_stream_engine::last_error(id)
+}
+
 #[tauri::command]
 pub fn music_delete_playlist(state: State<'_, Shared>, id: String) -> AppResult<()> {
     crate::music::delete_playlist(&state.db, &id)

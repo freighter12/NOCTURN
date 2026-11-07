@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { I } from "../components/Icons";
+import { Spinner } from "../components/ui";
 import { artUrl, errorMessage, music, type Lyrics as LyricsData, type Track } from "../lib/api";
 import { useApp } from "../lib/app";
 import { usePrefs } from "../shell/PrefsProvider";
@@ -42,7 +43,7 @@ function Controls({ big = false }: { big?: boolean }) {
     <div className={`controls ${big ? "big" : ""}`}>
       <button className={`btn ghost icon ${m.shuffle ? "on" : ""}`} aria-label={m.shuffle ? "Shuffle on" : "Shuffle off"} aria-pressed={m.shuffle} onClick={() => m.setShuffle(!m.shuffle)}><I.shuffle /></button>
       <button className="btn ghost icon" aria-label="Previous" onClick={m.prev}><I.prev /></button>
-      <button className="btn primary icon play" aria-label={m.playing ? "Pause" : "Play"} onClick={m.toggle}>{m.playing ? <I.pause /> : <I.play />}</button>
+      <button className="btn primary icon play" aria-label={m.playing ? "Pause" : "Play"} onClick={m.toggle}>{m.buffering && m.playing ? <Spinner /> : m.playing ? <I.pause /> : <I.play />}</button>
       <button className="btn ghost icon" aria-label="Next" onClick={m.next}><I.next /></button>
       <button className={`btn ghost icon ${m.repeat !== "off" ? "on" : ""}`} aria-label={`Repeat ${m.repeat}`} onClick={() => m.setRepeat(nextRepeat[m.repeat])}>
         <I.repeat />
@@ -253,7 +254,7 @@ export function Player() {
           <Seek compact />
           <div className="row" style={{ gap: 2 }}>
             <button className="btn ghost sm icon" aria-label="Previous" onClick={m.prev}><I.prev /></button>
-            <button className="btn primary sm icon" aria-label={m.playing ? "Pause" : "Play"} onClick={m.toggle}>{m.playing ? <I.pause /> : <I.play />}</button>
+            <button className="btn primary sm icon" aria-label={m.playing ? "Pause" : "Play"} onClick={m.toggle}>{m.buffering && m.playing ? <Spinner /> : m.playing ? <I.pause /> : <I.play />}</button>
             <button className="btn ghost sm icon" aria-label="Next" onClick={m.next}><I.next /></button>
             <Like track={t} />
             <button className="btn ghost sm icon" aria-label="Expand player" style={{ marginLeft: "auto" }} onClick={() => setMode("standard")}>⤢</button>
@@ -266,7 +267,7 @@ export function Player() {
   if (mode === "minimal") {
     return (
       <div className="player-minimal" role="region" aria-label="Now playing">
-        <button className="btn primary sm icon" aria-label={m.playing ? "Pause" : "Play"} onClick={m.toggle}>{m.playing ? <I.pause /> : <I.play />}</button>
+        <button className="btn primary sm icon" aria-label={m.playing ? "Pause" : "Play"} onClick={m.toggle}>{m.buffering && m.playing ? <Spinner /> : m.playing ? <I.pause /> : <I.play />}</button>
         <span className="truncate small" style={{ maxWidth: 180 }} title={`${t.title} — ${t.artist}`}>{t.title}</span>
         <button className="btn ghost sm icon" aria-label="Next" onClick={m.next}><I.next /></button>
         <button className="btn ghost sm icon" aria-label="Expand player" onClick={() => setMode("standard")}>⤢</button>

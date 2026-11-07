@@ -18,6 +18,7 @@ mod library_icons;
 mod music;
 mod music_import;
 mod music_stream;
+mod music_stream_engine;
 mod privacy;
 mod error;
 mod logging;
@@ -58,7 +59,7 @@ pub fn run() {
             std::thread::spawn(move || {
                 let range = request.headers().get("range").and_then(|v| v.to_str().ok()).map(String::from);
                 let served = match app.try_state::<Arc<state::AppState>>() {
-                    Some(st) => music::serve(&st.db, request.uri().path(), range.as_deref()),
+                    Some(st) => music::serve(&st.db, &st.data_dir, settings::load(&st.db).music_streaming, request.uri().path(), range.as_deref()),
                     None => music::Served { status: 503, mime: "text/plain".into(), body: b"starting".to_vec(), range: None },
                 };
                 let mut b = tauri::http::Response::builder()
@@ -97,6 +98,14 @@ pub fn run() {
             system::scheduler::start(app.handle().clone(), state.clone());
             system::app_profiles::start(app.handle().clone(), state.clone());
             updates::start(app.handle().clone());
+            // Keep yt-dlp current if streaming is set up (YouTube breaks old versions).
+            let upd = state.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(90)).await;
+                if settings::load(&upd.db).music_streaming {
+                    music_stream_engine::update_if_due(&upd.db, &upd.data_dir).await;
+                }
+            });
 
             // Warm the hardware inventory in the background.
             let warm = state.clone();
@@ -138,6 +147,15 @@ pub fn run() {
             commands::music_import_info,
             commands::music_import_forget,
             commands::music_import_open,
+            commands::music_stream_status,
+            commands::music_stream_enable,
+            commands::music_stream_disable,
+            commands::music_stream_update,
+            commands::music_stream_resolve,
+            commands::music_stream_prepare,
+            commands::music_stream_error,
+            commands::music_stream_rematch,
+            commands::music_stream_prune,
             commands::music_lyrics,
             commands::music_session,
             commands::music_save_session,

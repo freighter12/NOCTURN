@@ -64,6 +64,7 @@ pub fn overview(db: &Db, data_dir: &std::path::Path, ai_endpoint: Option<String>
     let mut outbound = vec![
         Outbound { what: "Network tests", when: "Only when you (or a maintenance task you turned on) run one", to: "Your router, Cloudflare (1.1.1.1) and Google (8.8.8.8) — pings and DNS lookups only".into() },
         Outbound { what: "Playlist imports", when: "Only when you paste a playlist link and click Find songs (or Update from link)", to: "Spotify, YouTube or Deezer — a request for that playlist's page; nothing about your PC or library".into() },
+        Outbound { what: "Music streaming (if you turn it on)", when: "When you play a song that isn't in your library, find songs for an imported playlist, or once a day to keep yt-dlp current", to: "YouTube — searches for song titles and the audio stream; GitHub — yt-dlp and Deno downloads. Nothing about your PC".into() },
         Outbound { what: "Update checks", when: "A minute after start-up and once a day (Settings › Updates), or when you click Check", to: "github.com — a request for the latest version number; nothing about your PC. Downloads only when you click Install".into() },
         Outbound { what: "Support pages and websites", when: "Only when you click them", to: "Opened in your browser; Nocturn sends nothing itself".into() },
     ];

@@ -3,7 +3,7 @@
 // counting, Windows media-key integration and session restore.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { artUrl, errorMessage, mediaUrl, music, type Playlist, type Track } from "../lib/api";
+import { artUrl, errorMessage, mediaUrl, music, musicStream, type Playlist, type Track } from "../lib/api";
 import { useApp } from "../lib/app";
 import { usePrefs } from "../shell/PrefsProvider";
 
@@ -42,6 +42,8 @@ interface MusicCtx {
   setLiked: (id: number, liked: boolean) => void;
   /** Frequency data for the visualiser (null until playback starts). */
   analyser: AnalyserNode | null;
+  /** Waiting for audio (a streamed song can take ~8 s to start). */
+  buffering: boolean;
 }
 
 const Ctx = createContext<MusicCtx | null>(null);
@@ -70,6 +72,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [queue, setQueue] = useState<number[]>([]);
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [buffering, setBuffering] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [shuffle, setShuffleState] = useState(false);
@@ -164,6 +167,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       audio.src = mediaUrl(id);
       setPosition(0);
       if (autoplay) {
+        setBuffering(true);
         ensureAnalyser();
         audio.play().catch(() => {});
       }
@@ -211,7 +215,12 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     };
     const onMeta = () => setDuration((Number.isFinite(audio.duration) ? audio.duration : 0) * 1000);
     const onPlay = () => setPlaying(true);
-    const onPause = () => setPlaying(false);
+    const onPause = () => {
+      setPlaying(false);
+      setBuffering(false);
+    };
+    const onWaiting = () => setBuffering(true);
+    const onPlaying = () => setBuffering(false);
     const onEnded = () => {
       if (repeat === "one") {
         audio.currentTime = 0;
@@ -220,10 +229,25 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       } else next();
     };
     const onError = () => {
+      setBuffering(false);
       const t = byId.get(queue[index]);
       if (!t) return;
+      const skip = () => {
+        if (index + 1 < queue.length) goto(index + 1);
+      };
+      if (t.source === "youtube") {
+        // The relay knows why (removed video, bot check, streaming off…).
+        musicStream
+          .error(t.id)
+          .catch(() => null)
+          .then((why) => {
+            toast({ tone: "warning", title: `Couldn't stream ${t.title}`, detail: why ?? "YouTube didn't send the audio. Check your connection and try again." });
+            skip();
+          });
+        return;
+      }
       toast({ tone: "warning", title: `Couldn't play ${t.title}`, detail: "The file may have moved or been deleted. Rescan your music folders in Music › Sources." });
-      if (index + 1 < queue.length) goto(index + 1);
+      skip();
     };
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("loadedmetadata", onMeta);
@@ -231,7 +255,13 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     audio.addEventListener("pause", onPause);
     audio.addEventListener("ended", onEnded);
     audio.addEventListener("error", onError);
+    audio.addEventListener("waiting", onWaiting);
+    audio.addEventListener("playing", onPlaying);
+    audio.addEventListener("canplay", onPlaying);
     return () => {
+      audio.removeEventListener("waiting", onWaiting);
+      audio.removeEventListener("playing", onPlaying);
+      audio.removeEventListener("canplay", onPlaying);
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("loadedmetadata", onMeta);
       audio.removeEventListener("play", onPlay);
@@ -240,6 +270,14 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       audio.removeEventListener("error", onError);
     };
   }, [audio, byId, queue, index, repeat, next, goto, toast]);
+
+  // Streamed songs take a few seconds to start: get the next two ready early.
+  useEffect(() => {
+    for (const k of [index + 1, index + 2]) {
+      const id = queue[k];
+      if (id != null && byId.get(id)?.source === "youtube") musicStream.prepare(id).catch(() => {});
+    }
+  }, [queue, index, byId]);
 
   // Windows media keys, the volume flyout and the lock screen.
   useEffect(() => {
@@ -337,7 +375,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider
       value={{
         tracks, byId, playlists, loaded, reload, reloadPlaylists, queue, index, current, playing, position, duration, shuffle, repeat, volume,
-        play, playNext, addToQueue, removeAt, moveInQueue, clearUpcoming, jumpTo: goto, toggle, next, prev, seek, setVolume, setShuffle, setRepeat, setLiked, analyser,
+        play, playNext, addToQueue, removeAt, moveInQueue, clearUpcoming, jumpTo: goto, toggle, next, prev, seek, setVolume, setShuffle, setRepeat, setLiked, analyser, buffering,
       }}
     >
       {children}
