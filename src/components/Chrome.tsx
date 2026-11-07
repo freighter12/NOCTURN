@@ -10,6 +10,7 @@ import { usePrefs } from "../shell/PrefsProvider";
 import { useWorkspaces } from "../shell/WorkspaceProvider";
 import { pct } from "../lib/format";
 import { useTelemetry } from "../lib/telemetry";
+import { openPalette } from "../shell/CommandPalette";
 import { I } from "./Icons";
 
 /** Title-bar menu for switching workspaces quickly. */
@@ -65,6 +66,11 @@ export function TitleBar() {
       <div className="center" data-tauri-drag-region onDoubleClick={() => win.toggleMaximize()}>
         <WorkspaceSwitcher />
       </div>
+      <button className="tb-search" onClick={openPalette} title="Search and run commands (Ctrl+K)">
+        <I.search />
+        Search
+        <kbd>Ctrl K</kbd>
+      </button>
       {latest && (
         <div className="meta" data-tauri-drag-region>
           <span>CPU {pct(latest.cpu_usage)}</span>
