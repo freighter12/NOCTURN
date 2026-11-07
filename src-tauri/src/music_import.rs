@@ -168,7 +168,7 @@ fn client(redirects: bool) -> AppResult<reqwest::Client> {
         .map_err(|e| AppError::msg(format!("network setup failed: {e}")))
 }
 
-async fn get_text(url: &str, headers: &[(&str, &str)]) -> AppResult<(u16, String)> {
+pub(crate) async fn get_text(url: &str, headers: &[(&str, &str)]) -> AppResult<(u16, String)> {
     let mut req = client(true)?.get(url).header("Accept-Language", "en-GB,en;q=0.9");
     for (k, v) in headers {
         req = req.header(*k, *v);
@@ -218,7 +218,7 @@ pub async fn fetch(link: &Link) -> AppResult<RemoteList> {
     Ok(RemoteList { url: Some(link.page_url()), source: link.source().into(), ..list })
 }
 
-fn str_at<'a>(v: &'a Value, path: &[&str]) -> Option<&'a str> {
+pub(crate) fn str_at<'a>(v: &'a Value, path: &[&str]) -> Option<&'a str> {
     let mut cur = v;
     for p in path {
         cur = match p.parse::<usize>() {
@@ -291,7 +291,7 @@ async fn fetch_deezer(kind: &str, id: &str) -> AppResult<RemoteList> {
     Ok(RemoteList { source: "Deezer".into(), name, url: None, tracks, truncated: false })
 }
 
-fn walk<'a>(v: &'a Value, f: &mut dyn FnMut(&'a str, &'a Value) -> bool) {
+pub(crate) fn walk<'a>(v: &'a Value, f: &mut dyn FnMut(&'a str, &'a Value) -> bool) {
     match v {
         Value::Object(m) => {
             for (k, x) in m {
@@ -305,7 +305,7 @@ fn walk<'a>(v: &'a Value, f: &mut dyn FnMut(&'a str, &'a Value) -> bool) {
     }
 }
 
-fn parse_len(s: &str) -> Option<i64> {
+pub(crate) fn parse_len(s: &str) -> Option<i64> {
     let mut total = 0i64;
     for part in s.trim().split(':') {
         total = total * 60 + part.trim().parse::<i64>().ok()?;
@@ -574,7 +574,7 @@ pub fn clean_title(t: &str) -> String {
     s.chars().map(|c| if c.is_alphanumeric() { c } else { ' ' }).collect::<String>().split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn artist_set(a: &str) -> HashSet<String> {
+pub(crate) fn artist_set(a: &str) -> HashSet<String> {
     let lower: String = a.to_lowercase().chars().map(fold).collect();
     let mut s = lower;
     for sep in [" feat. ", " feat ", " ft. ", " ft ", " featuring ", " & ", " and ", " x ", " with ", ";", "/", ",", "、"] {
@@ -593,7 +593,7 @@ fn words(s: &str) -> HashSet<&str> {
 }
 
 /// Dice similarity of word sets (1.0 = same words).
-fn title_sim(a: &str, b: &str) -> f64 {
+pub(crate) fn title_sim(a: &str, b: &str) -> f64 {
     if a == b {
         return 1.0;
     }

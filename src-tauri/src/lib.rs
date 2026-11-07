@@ -17,6 +17,7 @@ mod library;
 mod library_icons;
 mod music;
 mod music_import;
+mod music_stream;
 mod privacy;
 mod error;
 mod logging;
