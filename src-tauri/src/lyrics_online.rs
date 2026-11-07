@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use crate::db::{now, Db};
 use crate::error::{AppError, AppResult};
-use crate::music::{parse_lrc, Lyrics};
+use crate::music::{parse_lrc, stretch_lrc, Lyrics};
 use crate::music_import::{artist_set, clean_title, title_sim};
 
 const API: &str = "https://lrclib.net/api";
@@ -40,6 +40,9 @@ struct Hit {
     plain: Option<String>,
     #[serde(rename = "syncedLyrics", default)]
     synced: Option<String>,
+    /// Timings stretched from another version (set by NOCTURN, not LRCLIB).
+    #[serde(skip, default)]
+    approx: bool,
 }
 
 impl Hit {
@@ -116,6 +119,9 @@ fn without_variants(title: &str) -> String {
 enum Use {
     /// Same version, same length (±3 s): timings fit.
     Synced,
+    /// A slowed / sped-up version of this exact recording: the original's
+    /// timings × (our length / its length) fit closely.
+    Stretched,
     /// Same words, but a different version (slowed, sped up, an edit…) or a
     /// few seconds off: show the words without timings.
     PlainOnly,
@@ -134,7 +140,7 @@ fn usable(q: &Query, h: &Hit) -> Option<Use> {
     wv.sort_unstable();
     hv.sort_unstable();
     if wv != hv {
-        return Some(Use::PlainOnly);
+        return Some(if stretch_ratio(q, h, &wv, &hv).is_some() { Use::Stretched } else { Use::PlainOnly });
     }
     match (q.duration_ms, h.duration) {
         (d, Some(hd)) if d > 0 => {
@@ -151,6 +157,32 @@ fn usable(q: &Query, h: &Hit) -> Option<Use> {
     }
 }
 
+/// Speed-only edits: same recording played slower or faster (or with effects
+/// that don't change timing).
+const TEMPO_SLOWER: &[&str] = &["slowed", "super slowed", "daycore"];
+const TEMPO_FASTER: &[&str] = &["sped up", "speed up", "nightcore"];
+const TIMING_SAFE: &[&str] = &["reverb", "8d", "bass boosted"];
+
+/// If our song is a speed-only edit of the hit (and the lengths agree with
+/// that), the factor to stretch the hit's timings by.
+fn stretch_ratio(q: &Query, h: &Hit, want_v: &[&str], hit_v: &[&str]) -> Option<f64> {
+    let hd = h.duration.filter(|d| *d > 20.0)? * 1000.0;
+    if q.duration_ms <= 20_000 || !hit_v.is_empty() || want_v.is_empty() {
+        return None;
+    }
+    let all = |list: &[&str]| want_v.iter().all(|w| list.contains(w) || TIMING_SAFE.contains(w));
+    let ratio = q.duration_ms as f64 / hd;
+    let slower = want_v.iter().any(|w| TEMPO_SLOWER.contains(w));
+    let faster = want_v.iter().any(|w| TEMPO_FASTER.contains(w));
+    let ok = match (slower, faster) {
+        (true, false) => all(TEMPO_SLOWER) && (1.03..=1.8).contains(&ratio),
+        (false, true) => all(TEMPO_FASTER) && (0.55..=0.97).contains(&ratio),
+        (false, false) => (0.98..=1.02).contains(&ratio), // reverb/8D only: same timing
+        _ => false,
+    };
+    ok.then_some(ratio)
+}
+
 /// The best search hit, adjusted to how it can be used: synced lyrics for the
 /// same version and length, otherwise the plain words.
 fn best(q: &Query, hits: Vec<Hit>) -> Option<Hit> {
@@ -161,7 +193,18 @@ fn best(q: &Query, hits: Vec<Hit>) -> Option<Hit> {
         (*u, !synced, diff)
     });
     let (u, mut h) = ok.into_iter().next()?;
-    if u == Use::PlainOnly {
+    if u == Use::Stretched {
+        let mut wv = variants(&q.title);
+        let mut hv = variants(&h.track_name);
+        wv.sort_unstable();
+        hv.sort_unstable();
+        if let (Some(r), Some(s)) = (stretch_ratio(q, &h, &wv, &hv), h.synced.as_deref().filter(|s| !s.trim().is_empty())) {
+            h.synced = Some(stretch_lrc(s, r));
+            h.approx = true;
+            return Some(h);
+        }
+    }
+    if u != Use::Synced {
         // Keep the words, drop timings that wouldn't line up.
         if h.plain.as_deref().is_none_or(|p| p.trim().is_empty()) {
             h.plain = h.synced.as_deref().map(|s| parse_lrc(s).into_iter().map(|x| x.1).collect::<Vec<_>>().join("\n"));
@@ -223,40 +266,38 @@ async fn fetch(q: &Query) -> AppResult<Option<Hit>> {
 
 fn to_lyrics(h: &Hit) -> Option<Lyrics> {
     if h.instrumental {
-        return Some(Lyrics { text: "♪ Instrumental".into(), synced: Vec::new(), source: "LRCLIB" });
+        return Some(Lyrics::plain("♪ Instrumental".into(), "LRCLIB"));
     }
     if let Some(s) = h.synced.as_deref().filter(|s| !s.trim().is_empty()) {
-        let synced = parse_lrc(s);
-        let text = synced.iter().map(|x| x.1.as_str()).collect::<Vec<_>>().join("\n");
-        return Some(Lyrics { text, synced, source: "LRCLIB" });
+        return Some(Lyrics::from_lrc(s, "LRCLIB", h.approx));
     }
-    h.plain.as_deref().filter(|s| !s.trim().is_empty()).map(|p| Lyrics { text: p.to_string(), synced: Vec::new(), source: "LRCLIB" })
+    h.plain.as_deref().filter(|s| !s.trim().is_empty()).map(|p| Lyrics::plain(p.to_string(), "LRCLIB"))
 }
 
-/// found, synced, plain, instrumental, fetched_at
-type CacheRow = (i64, Option<String>, Option<String>, i64, String);
+/// found, synced, plain, instrumental, fetched_at, approx
+type CacheRow = (i64, Option<String>, Option<String>, i64, String, i64);
 
 /// Cached answer: Some(Some) found, Some(None) recently not found, None = ask.
 fn cached(db: &Db, k: &str) -> Option<Option<Lyrics>> {
     let row: Option<CacheRow> = db
         .conn()
-        .query_row("SELECT found, synced, plain, instrumental, fetched_at FROM music_lyrics_cache WHERE key = ?1", [k], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))
+        .query_row("SELECT found, synced, plain, instrumental, fetched_at, approx FROM music_lyrics_cache WHERE key = ?1", [k], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)))
         .optional()
         .ok()
         .flatten();
-    let (found, synced, plain, instrumental, at) = row?;
+    let (found, synced, plain, instrumental, at, approx) = row?;
     if found == 0 {
         let fresh = chrono::DateTime::parse_from_rfc3339(&at).map(|t| chrono::Utc::now().signed_duration_since(t) < chrono::Duration::days(RETRY_MISSES_DAYS)).unwrap_or(false);
         return fresh.then_some(None);
     }
-    Some(to_lyrics(&Hit { track_name: String::new(), artist_name: String::new(), duration: None, instrumental: instrumental != 0, plain, synced }))
+    Some(to_lyrics(&Hit { track_name: String::new(), artist_name: String::new(), duration: None, instrumental: instrumental != 0, plain, synced, approx: approx != 0 }))
 }
 
 fn store(db: &Db, k: &str, h: Option<&Hit>) -> AppResult<()> {
     db.conn().execute(
-        "INSERT INTO music_lyrics_cache(key, found, synced, plain, instrumental, fetched_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT(key) DO UPDATE SET found = excluded.found, synced = excluded.synced, plain = excluded.plain, instrumental = excluded.instrumental, fetched_at = excluded.fetched_at",
-        params![k, h.is_some() as i64, h.and_then(|h| h.synced.clone()), h.and_then(|h| h.plain.clone()), h.map(|h| h.instrumental as i64).unwrap_or(0), now()],
+        "INSERT INTO music_lyrics_cache(key, found, synced, plain, instrumental, fetched_at, approx) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(key) DO UPDATE SET found = excluded.found, synced = excluded.synced, plain = excluded.plain, instrumental = excluded.instrumental, fetched_at = excluded.fetched_at, approx = excluded.approx",
+        params![k, h.is_some() as i64, h.and_then(|h| h.synced.clone()), h.and_then(|h| h.plain.clone()), h.map(|h| h.instrumental as i64).unwrap_or(0), now(), h.map(|h| h.approx as i64).unwrap_or(0)],
     )?;
     Ok(())
 }
@@ -293,7 +334,7 @@ mod tests {
         Query { title: title.into(), artist: artist.into(), album: String::new(), duration_ms: secs * 1000 }
     }
     fn hit(t: &str, a: &str, d: f64, synced: bool) -> Hit {
-        Hit { track_name: t.into(), artist_name: a.into(), duration: Some(d), instrumental: false, plain: Some("words".into()), synced: synced.then(|| "[00:01.00] words".into()) }
+        Hit { track_name: t.into(), artist_name: a.into(), duration: Some(d), instrumental: false, plain: Some("words".into()), synced: synced.then(|| "[00:01.00] words".into()), approx: false }
     }
 
     #[test]
@@ -320,10 +361,10 @@ mod tests {
 
     #[test]
     fn other_versions_and_small_differences_get_plain_words() {
-        // Slowed edit of a song LRCLIB has in its original form (different length).
-        let want = q("they don't love you more than i love you - slowed", "Remika", 128);
+        // A hardstyle edit of a song LRCLIB has in its original form: same words, different structure.
+        let want = q("they don't love you more than i love you - hardstyle", "Remika", 128);
         let b = best(&want, vec![hit("they don't love you more than i love you", "Remika", 104.0, true)]).unwrap();
-        assert!(b.synced.is_none(), "timings of the original wouldn't fit a slowed version");
+        assert!(b.synced.is_none(), "timings of the original wouldn't fit an edit");
         assert_eq!(b.plain.as_deref(), Some("words"));
         // 5 s off: words, no timings.
         let b = best(&q("Monster", "Xylaris", 196), vec![hit("Monster", "Xylaris", 201.0, true)]).unwrap();
@@ -335,6 +376,29 @@ mod tests {
         assert!(best(&q("Monster", "Xylaris", 201), vec![hit("Monster", "Xylaris", 201.0, true)]).unwrap().synced.is_some());
         // A different artist's "Monster" is never used.
         assert!(best(&q("Monster", "Xylaris", 201), vec![hit("Monster", "Kanye West", 201.0, true)]).is_none());
+    }
+
+    #[test]
+    fn slowed_and_sped_up_versions_get_stretched_timings() {
+        let orig = |d: f64| Hit { synced: Some("[00:10.00]first\n[00:40.00]second".into()), ..hit("they don't love you more than i love you", "Remika", d, true) };
+        // Slowed: 128 s vs the original 104 s → ×1.2308.
+        let b = best(&q("they don't love you more than i love you - slowed", "Remika", 128), vec![orig(104.0)]).unwrap();
+        assert!(b.approx);
+        let times: Vec<i64> = parse_lrc(b.synced.as_deref().unwrap()).iter().map(|x| x.0).collect();
+        // LRC keeps hundredths of a second: 12.3077 s → 12.30 s.
+        assert_eq!(times, vec![12_300, 49_230]);
+        // Sped up: shorter, ×0.8.
+        let b = best(&q("they don't love you more than i love you (sped up)", "Remika", 83), vec![orig(104.0)]).unwrap();
+        assert!(b.approx && parse_lrc(b.synced.as_deref().unwrap())[0].0 < 10_000);
+        // "Slowed" but longer original? Lengths contradict the label → plain words only.
+        let b = best(&q("they don't love you more than i love you - slowed", "Remika", 90), vec![orig(104.0)]).unwrap();
+        assert!(b.synced.is_none() && !b.approx);
+        // A hardstyle edit changes the structure, not just the speed → plain words.
+        let b = best(&q("they don't love you more than i love you - hardstyle", "Remika", 128), vec![orig(104.0)]).unwrap();
+        assert!(b.synced.is_none());
+        // Reverb only: same timing, kept synced (marked approximate).
+        let b = best(&q("they don't love you more than i love you (reverb)", "Remika", 104), vec![orig(104.0)]).unwrap();
+        assert!(b.approx && parse_lrc(b.synced.as_deref().unwrap())[0].0 == 10_000);
     }
 
     #[test]

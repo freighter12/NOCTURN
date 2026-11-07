@@ -1387,7 +1387,13 @@ export interface MusicScanReport {
 export interface Lyrics {
   text: string;
   synced: [number, string][];
+  /** Per-word timings for each synced line (empty when the source has none). */
+  words: [number, string][][];
   source: string;
+  /** Timings stretched from another version (slowed / sped up). */
+  approx: boolean;
+  /** The user's timing nudge for this song (ms, positive = lyrics earlier). */
+  offset_ms: number;
 }
 export interface MusicSession {
   queue: number[];
@@ -1426,6 +1432,7 @@ export const music = {
   importOpen: (playlistId: string) => invoke<void>("music_import_open", { playlistId }),
   /** `online`: also look on LRCLIB when the song has no lyrics of its own. */
   lyrics: (id: number, online = false) => invoke<Lyrics | null>("music_lyrics", { id, online }),
+  setLyricsOffset: (id: number, offsetMs: number) => invoke<number>("music_set_lyrics_offset", { id, offsetMs }),
   session: () => invoke<MusicSession>("music_session"),
   saveSession: (session: MusicSession) => invoke<void>("music_save_session", { session }),
 };

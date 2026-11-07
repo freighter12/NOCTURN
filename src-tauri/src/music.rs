@@ -475,45 +475,168 @@ pub struct Lyrics {
     pub text: String,
     /// Synced lines (ms, text) from an .lrc file.
     pub synced: Vec<(i64, String)>,
+    /// Per-word timings for each synced line (empty when the source has none).
+    pub words: Vec<Vec<(i64, String)>>,
     pub source: &'static str,
+    /// Timings stretched from another version of the song (slowed/sped up).
+    pub approx: bool,
+    /// The user's timing nudge for this song (ms; positive = lyrics earlier).
+    pub offset_ms: i64,
 }
 
-/// Parse LRC `[mm:ss.xx] text` lines.
-pub fn parse_lrc(s: &str) -> Vec<(i64, String)> {
-    let mut out = Vec::new();
+impl Lyrics {
+    /// From LRC text (or plain text when it has no timestamps).
+    pub fn from_lrc(raw: &str, source: &'static str, approx: bool) -> Lyrics {
+        let p = parse_lrc_full(raw);
+        let text = if p.lines.is_empty() { raw.to_string() } else { p.lines.iter().map(|x| x.1.as_str()).collect::<Vec<_>>().join("\n") };
+        let words = if p.words.iter().any(|w| !w.is_empty()) { p.words } else { Vec::new() };
+        Lyrics { text, synced: p.lines, words, source, approx, offset_ms: 0 }
+    }
+    pub fn plain(text: String, source: &'static str) -> Lyrics {
+        Lyrics { text, synced: Vec::new(), words: Vec::new(), source, approx: false, offset_ms: 0 }
+    }
+}
+
+/// A parsed LRC: lines, optional per-word timings, and the file's [offset:].
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ParsedLrc {
+    pub lines: Vec<(i64, String)>,
+    pub words: Vec<Vec<(i64, String)>>,
+}
+
+fn stamp_ms(tag: &str) -> Option<i64> {
+    let (m, sec) = tag.split_once(':')?;
+    let (m, sec) = (m.trim().parse::<i64>().ok()?, sec.trim().parse::<f64>().ok()?);
+    (m >= 0 && sec >= 0.0).then(|| m * 60_000 + (sec * 1000.0).round() as i64)
+}
+
+/// Parse LRC, including enhanced LRC word timings (`<mm:ss.xx>word`) and the
+/// `[offset:±ms]` tag (positive = lyrics earlier, as the format defines).
+pub fn parse_lrc_full(s: &str) -> ParsedLrc {
+    let mut offset = 0i64;
+    // (line time, text, word timings)
+    type Row = (i64, String, Vec<(i64, String)>);
+    let mut rows: Vec<Row> = Vec::new();
     for line in s.lines() {
         let mut rest = line.trim();
         let mut stamps = Vec::new();
-        while let Some(end) = rest.strip_prefix('[').and_then(|r| r.find(']').map(|i| (i, r))) {
-            let (i, r) = end;
+        while let Some(r) = rest.strip_prefix('[') {
+            let Some(i) = r.find(']') else { break };
             let tag = &r[..i];
-            if let Some((m, sec)) = tag.split_once(':') {
-                if let (Ok(m), Ok(sec)) = (m.parse::<i64>(), sec.parse::<f64>()) {
-                    stamps.push(m * 60_000 + (sec * 1000.0) as i64);
-                }
+            if let Some(v) = tag.strip_prefix("offset:") {
+                offset = v.trim().trim_start_matches('+').parse().unwrap_or(0);
+            } else if let Some(t) = stamp_ms(tag) {
+                stamps.push(t);
             }
             rest = r[i + 1..].trim_start();
         }
+        if stamps.is_empty() {
+            continue;
+        }
+        // Word timings: "<00:12.00>Hey <00:12.50>Jude".
+        let mut words = Vec::new();
+        let mut text = String::new();
+        let mut cur = rest;
+        let mut pending: Option<i64> = None;
+        while !cur.is_empty() {
+            if let Some(r) = cur.strip_prefix('<') {
+                if let Some(i) = r.find('>') {
+                    if let Some(t) = stamp_ms(&r[..i]) {
+                        pending = Some(t);
+                        cur = &r[i + 1..];
+                        continue;
+                    }
+                }
+            }
+            let next = cur.find('<').filter(|&i| i > 0).unwrap_or(cur.len());
+            let seg = &cur[..next];
+            text.push_str(seg);
+            if let Some(t) = pending.take() {
+                if !seg.trim().is_empty() {
+                    words.push((t, seg.to_string()));
+                }
+            } else if let Some(last) = words.last_mut() {
+                last.1.push_str(seg);
+            }
+            cur = &cur[next..];
+        }
+        let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
         for t in stamps {
-            out.push((t, rest.to_string()));
+            rows.push((t, text.clone(), words.clone()));
         }
     }
-    out.sort_by_key(|x| x.0);
-    out
+    rows.sort_by_key(|x| x.0);
+    let shift = |t: i64| (t - offset).max(0);
+    ParsedLrc {
+        lines: rows.iter().map(|r| (shift(r.0), r.1.clone())).collect(),
+        words: rows.iter().map(|r| r.2.iter().map(|(t, w)| (shift(*t), w.clone())).collect()).collect(),
+    }
+}
+
+/// Write lines (and word timings) back out as LRC.
+pub fn to_lrc(p: &ParsedLrc) -> String {
+    let st = |t: i64| format!("{:02}:{:02}.{:02}", t / 60_000, (t / 1000) % 60, (t % 1000) / 10);
+    p.lines
+        .iter()
+        .enumerate()
+        .map(|(i, (t, text))| match p.words.get(i).filter(|w| !w.is_empty()) {
+            Some(ws) => format!("[{}]{}", st(*t), ws.iter().map(|(wt, w)| format!("<{}>{}", st(*wt), w)).collect::<String>()),
+            None => format!("[{}]{}", st(*t), text),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Every timestamp × `ratio` (a slowed version is the original played slower).
+pub fn stretch_lrc(raw: &str, ratio: f64) -> String {
+    let mut p = parse_lrc_full(raw);
+    let k = |t: i64| (t as f64 * ratio).round() as i64;
+    for l in &mut p.lines {
+        l.0 = k(l.0);
+    }
+    for ws in &mut p.words {
+        for w in ws {
+            w.0 = k(w.0);
+        }
+    }
+    to_lrc(&p)
+}
+
+/// Parse LRC `[mm:ss.xx] text` lines.
+pub fn lyrics_offset(db: &Db, id: i64) -> i64 {
+    db.conn().query_row("SELECT offset_ms FROM music_lyrics_offsets WHERE track_id = ?1", [id], |r| r.get(0)).unwrap_or(0)
+}
+
+pub fn set_lyrics_offset(db: &Db, id: i64, ms: i64) -> AppResult<i64> {
+    let ms = ms.clamp(-15_000, 15_000);
+    let conn = db.conn();
+    if ms == 0 {
+        conn.execute("DELETE FROM music_lyrics_offsets WHERE track_id = ?1", [id])?;
+    } else {
+        conn.execute(
+            "INSERT INTO music_lyrics_offsets(track_id, offset_ms) SELECT id, ?2 FROM music_tracks WHERE id = ?1
+             ON CONFLICT(track_id) DO UPDATE SET offset_ms = excluded.offset_ms",
+            params![id, ms],
+        )?;
+    }
+    Ok(ms)
+}
+
+/// Synced lines only (word timings stripped, [offset:] applied).
+pub fn parse_lrc(s: &str) -> Vec<(i64, String)> {
+    parse_lrc_full(s).lines
 }
 
 pub fn lyrics(db: &Db, id: i64) -> AppResult<Option<Lyrics>> {
     let Some(p) = track_path(db, id)? else { return Ok(None) };
     let lrc = p.with_extension("lrc");
     if let Ok(s) = std::fs::read_to_string(&lrc) {
-        let synced = parse_lrc(&s);
-        let text = if synced.is_empty() { s.clone() } else { synced.iter().map(|x| x.1.as_str()).collect::<Vec<_>>().join("\n") };
-        return Ok(Some(Lyrics { text, synced, source: "lrc file" }));
+        return Ok(Some(Lyrics::from_lrc(&s, "lrc file", false)));
     }
     let f = lofty::read_from_path(&p).ok();
     let tag = f.as_ref().and_then(|f| f.primary_tag().or_else(|| f.first_tag()));
     let text = tag.and_then(|t| t.get_string(ItemKey::Lyrics).or_else(|| t.get_string(ItemKey::UnsyncLyrics)).map(String::from));
-    Ok(text.filter(|t| !t.trim().is_empty()).map(|text| Lyrics { synced: parse_lrc(&text), text, source: "embedded" }))
+    Ok(text.filter(|t| !t.trim().is_empty()).map(|text| Lyrics::from_lrc(&text, "embedded", false)))
 }
 
 // --------------------------------------------------------- playback session
@@ -671,6 +794,39 @@ mod tests {
     fn lrc() {
         let l = parse_lrc("[ti:Song]\n[00:01.50]Hello\n[00:00.00][00:03.00]Twice\n");
         assert_eq!(l, vec![(0, "Twice".into()), (1500, "Hello".into()), (3000, "Twice".into())]);
+    }
+
+    #[test]
+    fn enhanced_lrc_words_offset_and_round_trip() {
+        // Word timings, and [offset:+500] (positive = lyrics 0.5 s earlier).
+        let p = parse_lrc_full("[offset:+500]\n[00:12.00]<00:12.00>Hey <00:12.50>Jude, <00:13.20>don't\n[00:20.00]Plain line\n");
+        assert_eq!(p.lines, vec![(11_500, "Hey Jude, don't".into()), (19_500, "Plain line".into())]);
+        assert_eq!(p.words[0], vec![(11_500, "Hey ".into()), (12_000, "Jude, ".into()), (12_700, "don't".into())]);
+        assert!(p.words[1].is_empty());
+        // Unknown tags and "<" in text don't break it.
+        assert_eq!(parse_lrc("[00:01.00]a <3 b\n").first().map(|x| x.1.as_str()), Some("a <3 b"));
+        // Written back out and read again: same.
+        assert_eq!(parse_lrc_full(&to_lrc(&p)), p);
+        // Stretch ×1.25 (a slowed version).
+        let s = parse_lrc_full(&stretch_lrc("[00:10.00]<00:10.00>a <00:12.00>b\n[01:00.00]c", 1.25));
+        assert_eq!(s.lines.iter().map(|x| x.0).collect::<Vec<_>>(), vec![12_500, 75_000]);
+        assert_eq!(s.words[0].iter().map(|x| x.0).collect::<Vec<_>>(), vec![12_500, 15_000]);
+        let l = Lyrics::from_lrc("[00:01.00]<00:01.00>x <00:01.50>y", "test", true);
+        assert_eq!((l.text.as_str(), l.words.len(), l.approx), ("x y", 1, true));
+        assert!(Lyrics::from_lrc("[00:01.00]no words", "test", false).words.is_empty());
+    }
+
+    #[test]
+    fn lyrics_offsets_are_clamped_and_cleared() {
+        let db = Db::open_in_memory().unwrap();
+        db.conn().execute("INSERT INTO music_tracks(id, path, folder, title, artist, album, album_artist, duration_ms, size, mtime, added_at) VALUES (1, 'a', 'f', 't', 'a', '', '', 1, 0, 0, 'x')", []).unwrap();
+        assert_eq!(set_lyrics_offset(&db, 1, 400).unwrap(), 400);
+        assert_eq!(lyrics_offset(&db, 1), 400);
+        assert_eq!(set_lyrics_offset(&db, 1, 99_999).unwrap(), 15_000);
+        set_lyrics_offset(&db, 1, 0).unwrap();
+        assert_eq!(lyrics_offset(&db, 1), 0);
+        set_lyrics_offset(&db, 42, 300).unwrap(); // unknown track: nothing stored
+        assert_eq!(lyrics_offset(&db, 42), 0);
     }
 
     #[test]

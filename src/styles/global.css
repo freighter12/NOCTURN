@@ -649,6 +649,33 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--line-2)
 .lyrics { overflow-y: auto; padding: 10px 4px 40px; display: grid; gap: 10px; font-size: calc(19px * var(--fs, 1)); line-height: 1.35; }
 .lyric { color: var(--ink-3); transition: color var(--t); }
 .lyric.on { color: var(--ink-0); font-weight: 600; }
+.lyrics.plain .lyric { color: var(--ink-1); }
+
+/* synced lyrics: eased focus, karaoke fill, gap dots */
+.lyrics-wrap { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.lyrics.synced { flex: 1; min-height: 0; display: block; padding: 34% 6px 0; -webkit-mask-image: linear-gradient(transparent 0, #000 14%, #000 78%, transparent 100%); mask-image: linear-gradient(transparent 0, #000 14%, #000 78%, transparent 100%); }
+.lyrics-tail { height: 60%; }
+.lyrics.synced .lyric { --p: 0; padding: 7px 10px; margin: 2px 0; border-radius: 10px; cursor: pointer; font-weight: 650; color: var(--ink-2); opacity: 0.4; transform: scale(0.965); transform-origin: left center; transition: opacity 420ms var(--ease), transform 520ms var(--ease), background 160ms; }
+.lyrics.synced .lyric.near { opacity: 0.6; }
+.lyrics.synced .lyric.near2 { opacity: 0.48; }
+.lyrics.synced .lyric.past { opacity: 0.3; }
+.lyrics.synced .lyric:hover { opacity: 0.85; background: var(--bg-3); }
+.lyrics.synced .lyric.on { opacity: 1; transform: scale(1); }
+.lyric .fill, .lyric .w { color: inherit; }
+.lyric.on .fill, .lyric.on .w {
+  color: transparent;
+  background: linear-gradient(90deg, var(--ink-0) calc(var(--p, 0) * 100% - 3%), rgba(var(--overlay-rgb), 0.38) calc(var(--p, 0) * 100% + 3%));
+  -webkit-background-clip: text; background-clip: text;
+}
+.lyric.past .w, .lyric.past .fill { color: var(--ink-2); }
+.lyric.gap { padding: 12px 10px; cursor: default; }
+.dots { display: inline-flex; gap: 9px; vertical-align: middle; }
+.dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-3); transition: background 300ms, transform 300ms; }
+.lyric.gap.on .dots i { background: var(--ink-0); opacity: calc(0.3 + 0.7 * clamp(0, var(--p) * 3 - var(--k), 1)); transform: scale(calc(0.8 + 0.35 * clamp(0, var(--p) * 3 - var(--k), 1))); }
+.lyrics-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 4px 0; border-top: 1px solid var(--line); }
+.lyrics-nudge { display: inline-flex; align-items: center; gap: 2px; }
+.lyrics-nudge .num { min-width: 64px; }
+.lyrics.still .lyric { transition: none !important; transform: none !important; }
 
 .queue-drawer { position: fixed; right: 0; top: 36px; bottom: 73px; z-index: 32; width: 360px; display: flex; flex-direction: column; background: var(--bg-1); border-left: 1px solid var(--line-2); box-shadow: -12px 0 30px rgba(0, 0, 0, 0.3); }
 .queue-list { overflow-y: auto; padding: 0 8px 12px; display: grid; gap: 2px; align-content: start; }

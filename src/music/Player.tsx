@@ -5,11 +5,12 @@
 import { useEffect, useRef, useState } from "react";
 import { I } from "../components/Icons";
 import { Spinner } from "../components/ui";
-import { artUrl, errorMessage, music, type Lyrics as LyricsData, type Track } from "../lib/api";
+import { artUrl, errorMessage, music, type Track } from "../lib/api";
 import { useApp } from "../lib/app";
 import { usePrefs } from "../shell/PrefsProvider";
 import type { PlayerMode } from "../shell/prefs";
 import { fmtTime, useMusic, type Repeat } from "./MusicProvider";
+import { LyricsView } from "./Lyrics";
 
 export function Art({ track, size, className = "" }: { track: Track | null | undefined; size: number; className?: string }) {
   const [broken, setBroken] = useState(false);
@@ -114,41 +115,6 @@ export function Visualiser({ height = 80 }: { height?: number }) {
   }, [analyser, playing, reduce, height, prefs.music.visualiser]);
   if (!prefs.music.visualiser) return null;
   return <canvas ref={ref} className="visualiser" style={{ height }} aria-hidden />;
-}
-
-export function LyricsView({ track }: { track: Track }) {
-  const { position } = useMusic();
-  const { prefs } = usePrefs();
-  const online = prefs.music.onlineLyrics;
-  const [data, setData] = useState<LyricsData | null | undefined>(undefined);
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    setData(undefined);
-    music.lyrics(track.id, online).then(setData).catch(() => setData(null));
-  }, [track.id, online]);
-  // Last line whose timestamp has passed.
-  let active = -1;
-  if (data?.synced.length) for (let i = 0; i < data.synced.length && data.synced[i][0] <= position; i++) active = i;
-  useEffect(() => {
-    box.current?.querySelector(".lyric.on")?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [active]);
-  if (data === undefined) return <div className="small dim">Looking for lyrics…</div>;
-  if (!data)
-    return (
-      <div className="small dim">
-        {online
-          ? "No lyrics found for this song — it has none of its own and LRCLIB doesn't have it (or couldn't be reached). A matching .lrc file next to the song always works."
-          : 'No lyrics in this song. Turn on "Find lyrics online" in Customise › Music, or put a matching .lrc file next to it.'}
-      </div>
-    );
-  return (
-    <div className="lyrics" ref={box}>
-      {data.synced.length
-        ? data.synced.map(([t, line], i) => <div key={`${t}-${i}`} className={`lyric ${i === active ? "on" : ""}`}>{line || "♪"}</div>)
-        : data.text.split("\n").map((l, i) => <div key={i} className="lyric">{l}</div>)}
-      {data.source === "LRCLIB" && <div className="small dim lyric-credit">Lyrics from LRCLIB{data.synced.length ? "" : " (not synced)"}</div>}
-    </div>
-  );
 }
 
 export function QueueDrawer({ onClose }: { onClose: () => void }) {

@@ -266,6 +266,16 @@ const MIGRATIONS: &[&str] = &[
         fetched_at   TEXT NOT NULL
     );
     "#,
+    // Lyrics timing: stretched (approximate) answers, and the user's per-song
+    // nudge. Cached answers are cleared so songs are re-checked with the new rules.
+    r#"
+    ALTER TABLE music_lyrics_cache ADD COLUMN approx INTEGER NOT NULL DEFAULT 0;
+    DELETE FROM music_lyrics_cache;
+    CREATE TABLE music_lyrics_offsets (
+        track_id  INTEGER PRIMARY KEY,
+        offset_ms INTEGER NOT NULL
+    );
+    "#,
 ];
 
 #[derive(Clone)]

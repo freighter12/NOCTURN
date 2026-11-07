@@ -156,6 +156,7 @@ pub fn run() {
             commands::music_stream_prepare,
             commands::music_stream_error,
             commands::music_stream_rematch,
+            commands::music_set_lyrics_offset,
             commands::music_stream_prune,
             commands::music_lyrics,
             commands::music_session,

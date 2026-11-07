@@ -289,19 +289,26 @@ pub fn music_delete_playlist(state: State<'_, Shared>, id: String) -> AppResult<
 pub async fn music_lyrics(state: State<'_, Shared>, id: i64, online: Option<bool>) -> AppResult<Option<crate::music::Lyrics>> {
     let st = state.inner().clone();
     let db = st.db.clone();
-    if let Some(l) = blocking(move || crate::music::lyrics(&db, id)).await? {
-        return Ok(Some(l));
+    let mut found = blocking(move || crate::music::lyrics(&db, id)).await?;
+    if found.is_none() && online.unwrap_or(false) {
+        found = match crate::lyrics_online::lyrics(&st.db, id).await {
+            Ok(l) => l,
+            Err(e) => {
+                tracing::info!("online lyrics: {e}");
+                None
+            }
+        };
     }
-    if !online.unwrap_or(false) {
-        return Ok(None);
+    if let Some(l) = found.as_mut() {
+        l.offset_ms = crate::music::lyrics_offset(&st.db, id);
     }
-    match crate::lyrics_online::lyrics(&st.db, id).await {
-        Ok(l) => Ok(l),
-        Err(e) => {
-            tracing::info!("online lyrics: {e}");
-            Ok(None)
-        }
-    }
+    Ok(found)
+}
+
+/// The user's timing nudge for a song's lyrics (ms, positive = earlier; ±15 s).
+#[tauri::command]
+pub fn music_set_lyrics_offset(state: State<'_, Shared>, id: i64, offset_ms: i64) -> AppResult<i64> {
+    crate::music::set_lyrics_offset(&state.db, id, offset_ms)
 }
 
 #[tauri::command]

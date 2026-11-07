@@ -44,6 +44,10 @@ interface MusicCtx {
   analyser: AnalyserNode | null;
   /** Waiting for audio (a streamed song can take ~8 s to start). */
   buffering: boolean;
+  /** Exact playback position right now (ms) — for per-frame lyrics. */
+  timeMs: () => number;
+  /** How far behind the speakers are (ms), when the browser knows (e.g. Bluetooth). */
+  latencyMs: () => number;
 }
 
 const Ctx = createContext<MusicCtx | null>(null);
@@ -344,6 +348,13 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     } else audio.pause();
   }, [audio, current, ensureAnalyser]);
   const seek = useCallback((ms: number) => (audio.currentTime = Math.max(0, ms / 1000)), [audio]);
+  const timeMs = useCallback(() => audio.currentTime * 1000, [audio]);
+  const latencyMs = useCallback(() => {
+    const c = audioCtx.current as (AudioContext & { outputLatency?: number }) | null;
+    if (!c) return 0;
+    const s = (c.outputLatency ?? 0) + (c.baseLatency ?? 0);
+    return Number.isFinite(s) ? Math.min(500, Math.max(0, s * 1000)) : 0;
+  }, []);
   const setVolume = useCallback((v: number) => update((p) => ({ ...p, music: { ...p.music, volume: v } })), [update]);
   const setShuffle = useCallback(
     (on: boolean) => {
@@ -375,7 +386,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider
       value={{
         tracks, byId, playlists, loaded, reload, reloadPlaylists, queue, index, current, playing, position, duration, shuffle, repeat, volume,
-        play, playNext, addToQueue, removeAt, moveInQueue, clearUpcoming, jumpTo: goto, toggle, next, prev, seek, setVolume, setShuffle, setRepeat, setLiked, analyser, buffering,
+        play, playNext, addToQueue, removeAt, moveInQueue, clearUpcoming, jumpTo: goto, toggle, next, prev, seek, setVolume, setShuffle, setRepeat, setLiked, analyser, buffering, timeMs, latencyMs,
       }}
     >
       {children}
