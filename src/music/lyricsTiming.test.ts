@@ -71,3 +71,42 @@ describe("timing", () => {
     expect(lyricTime(10000, 0, 300)).toBe(10300); // "earlier" nudge
   });
 });
+
+describe("estimated word timing", () => {
+  it("counts syllables well enough", async () => {
+    const { syllables } = await import("./lyricsTiming");
+    expect(["I", "love", "medication", "little", "loved", "wanted", "time", "you're", "1999", "café"].map(syllables)).toEqual([1, 1, 4, 2, 1, 2, 1, 1, 2, 2]);
+  });
+
+  it("shares a line out by syllables, pauses at punctuation, and doesn't drag over silence", async () => {
+    const { estimateWords } = await import("./lyricsTiming");
+    // "I love you even more" = 1+1+1+2+1 = 6 syllables ≈ 1.9 s, though 10 s are available.
+    const a = estimateWords("I love you even more", 1000, 10000);
+    expect(a.words.map((w) => w[1])).toEqual(["I ", "love ", "you ", "even ", "more"]);
+    expect(a.words[0][0]).toBe(1000);
+    expect(a.sungEnd).toBe(1000 + 6 * 320);
+    const gaps = a.words.slice(1).map((w, i) => w[0] - a.words[i][0]);
+    expect(gaps[3]).toBe(2 * 320 - 320 + 320); // "even" (2 syllables) takes twice as long as "you"
+    // A short line is squeezed into 92% of its time, in order.
+    const b = estimateWords("Take me down into your paradise", 0, 1500);
+    expect(b.sungEnd).toBe(1380);
+    expect(b.words.every((w, i) => i === 0 || w[0] > b.words[i - 1][0])).toBe(true);
+    // A comma adds a pause: the word after it starts later than without.
+    const c = estimateWords("Hey, Jude", 0, 5000);
+    const d = estimateWords("Hey Jude", 0, 5000);
+    expect(c.words[1][0]).toBeGreaterThan(d.words[1][0]);
+  });
+
+  it("lines without word timings get estimated words; real ones are kept", async () => {
+    const { buildItems, wordProgress } = await import("./lyricsTiming");
+    const items = buildItems([[1000, "One two"], [4000, "Three"]], [[], [[4000, "Three"]]], 10000);
+    expect(items[0].estimated).toBe(true);
+    expect(items[0].words.length).toBe(2);
+    expect(items[1].estimated).toBeUndefined();
+    // The last estimated word finishes when the singing does, not at the next line.
+    const p = wordProgress(items[0], items[0].sungEnd!);
+    expect(p).toEqual([1, 1]);
+    // Off: plain lines.
+    expect(buildItems([[1000, "One two"]], [], 5000, false)[0].words).toEqual([]);
+  });
+});

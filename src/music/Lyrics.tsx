@@ -15,8 +15,9 @@ const STEP = 100; // nudge step (ms)
 
 export function LyricsView({ track }: { track: Track }) {
   const m = useMusic();
-  const { prefs } = usePrefs();
+  const { prefs, update } = usePrefs();
   const online = prefs.music.onlineLyrics;
+  const wordSync = prefs.music.wordSync;
   const reduce = prefs.accessibility.reduceMotion || document.body.classList.contains("reduce-motion");
   const [data, setData] = useState<LyricsData | null | undefined>(undefined);
   const [offset, setOffset] = useState(0);
@@ -43,7 +44,7 @@ export function LyricsView({ track }: { track: Track }) {
     };
   }, [track.id, online]);
 
-  const items: LyricItem[] = useMemo(() => (data?.synced.length ? buildItems(data.synced, data.words ?? [], track.duration_ms) : []), [data, track.duration_ms]);
+  const items: LyricItem[] = useMemo(() => (data?.synced.length ? buildItems(data.synced, data.words ?? [], track.duration_ms, wordSync) : []), [data, track.duration_ms, wordSync]);
 
   // The per-frame clock.
   const clock = useRef({ items, offset, active: -1 });
@@ -150,6 +151,14 @@ export function LyricsView({ track }: { track: Track }) {
           {data.approx ? "≈ Approximately synced" : data.source === "LRCLIB" ? "Lyrics from LRCLIB" : data.source === "lrc file" ? "From the .lrc file" : "From the file"}
         </span>
         <span className="lyrics-nudge">
+          <button
+            className="btn ghost sm"
+            onClick={() => update((p) => ({ ...p, music: { ...p.music, wordSync: !p.music.wordSync } }))}
+            title={wordSync ? "Highlighting word by word (timed from the lyrics, or estimated from syllables). Click for whole lines." : "Highlighting whole lines. Click for word by word."}
+          >
+            {wordSync ? "Words" : "Lines"}
+          </button>
+          <span className="lyrics-sep" aria-hidden />
           <button className="btn ghost sm" onClick={() => nudge(-STEP)} title="Lyrics are early — show them later">Later</button>
           <button className="btn ghost sm num" onClick={() => nudge(null)} disabled={!offset} title="Reset timing">
             {offset ? `${offset > 0 ? "+" : "−"}${(Math.abs(offset) / 1000).toFixed(1)} s` : "In time"}

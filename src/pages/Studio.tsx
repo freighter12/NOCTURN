@@ -438,7 +438,7 @@ export function Studio() {
     themes: () => update((p) => ({ ...p, appearance: { ...p.appearance, theme: "nocturn" } })),
     layout: () => reset("navigation"),
     dashboard: () => reset("home"),
-    music: () => update((p) => ({ ...p, music: { ...p.music, playerMode: "standard", visualiser: true, showLyrics: true, onlineLyrics: true } })),
+    music: () => update((p) => ({ ...p, music: { ...p.music, playerMode: "standard", visualiser: true, showLyrics: true, onlineLyrics: true, wordSync: true } })),
     accessibility: () => reset("accessibility"),
   };
   return (

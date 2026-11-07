@@ -90,6 +90,8 @@ export interface Prefs {
     showLyrics: boolean;
     /** Look up lyrics on LRCLIB for songs that have none of their own. */
     onlineLyrics: boolean;
+    /** Highlight word by word (estimated when the lyrics only time whole lines). */
+    wordSync: boolean;
   };
   workspaces: {
     /** ID of the active workspace; null = none (plain Nocturn). */
@@ -133,7 +135,7 @@ export const DEFAULT_PREFS: Prefs = {
     compact: false,
   },
   home: { widgets: DEFAULT_WIDGETS },
-  music: { playerMode: "standard", volume: 0.8, visualiser: true, showLyrics: true, onlineLyrics: true },
+  music: { playerMode: "standard", volume: 0.8, visualiser: true, showLyrics: true, onlineLyrics: true, wordSync: true },
   workspaces: { active: null, list: [], startWith: null, confirmLaunch: true },
   accessibility: { reduceMotion: false, fontScale: 1, uiScale: 1 },
 };
@@ -273,6 +275,7 @@ export function sanitize(raw: unknown, pages: readonly string[], sections: reado
       visualiser: bool(m.visualiser, d.music.visualiser),
       showLyrics: bool(m.showLyrics, d.music.showLyrics),
       onlineLyrics: bool(m.onlineLyrics, d.music.onlineLyrics),
+      wordSync: bool(m.wordSync, d.music.wordSync),
     },
     workspaces: {
       active: typeof w.active === "string" && workspaces.some((x) => x.id === w.active) ? w.active : null,
