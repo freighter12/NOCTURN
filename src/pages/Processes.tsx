@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { I } from "../components/Icons";
-import { Empty, ErrorNote, Loading, Note, PageHead, Panel, Seg, Spinner, Toggle } from "../components/ui";
+import { Empty, ErrorNote, Loading, Note, PageHead, Panel, Seg, Spinner, Toggle, CountUp } from "../components/ui";
 import { api, errorMessage, type Priority, type ProcDetails, type ProcGroup, type ProcOverview, type ProcessRule } from "../lib/api";
 import { useApp, useLoad } from "../lib/app";
 import { maskBits, PRIORITIES, toMask } from "../lib/cpu";
@@ -148,7 +148,7 @@ function Stat({ label, value, foot }: { label: string; value: number | undefined
   return (
     <div className="panel stat">
       <div className="label">{label}</div>
-      <div className="value num">{value ?? "—"}</div>
+      <div className="value num">{value === undefined ? "—" : <CountUp value={value} />}</div>
       <div className="foot">{foot}</div>
     </div>
   );

@@ -4,7 +4,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { I } from "../components/Icons";
-import { Empty, ErrorNote, Loading, Note, PageHead, Panel, Seg, Spinner, StatusTag } from "../components/ui";
+import { Empty, ErrorNote, Loading, Note, PageHead, Panel, Seg, Spinner, StatusTag, CountUp } from "../components/ui";
 import { api, errorMessage, type ServicePreviewItem, type ServiceTier, type ServiceView, type StartType } from "../lib/api";
 import { useApp, useLoad } from "../lib/app";
 import { relative } from "../lib/format";
@@ -119,22 +119,22 @@ export function Services() {
       <div className="grid cols-4">
         <div className="panel stat">
           <div className="label">Services</div>
-          <div className="value num">{services.data ? all.length : "—"}</div>
+          <div className="value num">{services.data ? <CountUp value={all.length} /> : "—"}</div>
           <div className="foot">{services.data ? `${all.filter((s) => s.state === "running").length} running now` : ""}</div>
         </div>
         <div className="panel stat">
           <div className="label">Optional Windows features</div>
-          <div className="value num">{services.data ? count("optional") : "—"}</div>
+          <div className="value num">{services.data ? <CountUp value={count("optional")} /> : "—"}</div>
           <div className="foot">Reviewed, with what you'd lose</div>
         </div>
         <div className="panel stat">
           <div className="label">Third-party</div>
-          <div className="value num">{services.data ? count("third_party") : "—"}</div>
+          <div className="value num">{services.data ? <CountUp value={count("third_party")} /> : "—"}</div>
           <div className="foot">Installed by apps and drivers</div>
         </div>
         <div className="panel stat">
           <div className="label">Protected</div>
-          <div className="value num">{services.data ? count("protected") : "—"}</div>
+          <div className="value num">{services.data ? <CountUp value={count("protected")} /> : "—"}</div>
           <div className="foot">{services.data ? `plus ${count("windows")} other Windows services, read-only` : ""}</div>
         </div>
       </div>

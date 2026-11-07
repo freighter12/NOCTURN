@@ -813,3 +813,22 @@ html[data-backdrop="mica"], html[data-backdrop="acrylic"] { --panel-bg: var(--pa
 .sky .sky-btn:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
 .sky.still .sky-stars i, .sky.still .shooting { animation: none; }
 @media (max-width: 1250px) { .sky-moon { right: 40px; opacity: 0.85; } }
+
+/* motion: sections and cards rise in with a short stagger; tab bars slide their highlight */
+@keyframes rise-in { from { opacity: 0; transform: translateY(8px); } }
+.page { animation: fade 220ms var(--ease); }
+.page > * { animation: rise-in 380ms var(--ease) both; }
+.page > *:nth-child(2) { animation-delay: 40ms; } .page > *:nth-child(3) { animation-delay: 80ms; } .page > *:nth-child(4) { animation-delay: 120ms; }
+.page > *:nth-child(5) { animation-delay: 160ms; } .page > *:nth-child(6) { animation-delay: 200ms; } .page > *:nth-child(n + 7) { animation-delay: 240ms; }
+.widgets > *, .app-grid > *, .game-grid > *, .music-grid > *, .grid > .panel { animation: rise-in 360ms var(--ease) both; }
+.widgets > *:nth-child(2), .app-grid > *:nth-child(2), .game-grid > *:nth-child(2), .music-grid > *:nth-child(2), .grid > .panel:nth-child(2) { animation-delay: 30ms; }
+.widgets > *:nth-child(3), .app-grid > *:nth-child(3), .game-grid > *:nth-child(3), .music-grid > *:nth-child(3), .grid > .panel:nth-child(3) { animation-delay: 60ms; }
+.widgets > *:nth-child(4), .app-grid > *:nth-child(4), .game-grid > *:nth-child(4), .music-grid > *:nth-child(4), .grid > .panel:nth-child(4) { animation-delay: 90ms; }
+.widgets > *:nth-child(5), .app-grid > *:nth-child(5), .game-grid > *:nth-child(5), .music-grid > *:nth-child(5), .grid > .panel:nth-child(5) { animation-delay: 120ms; }
+.widgets > *:nth-child(6), .app-grid > *:nth-child(6), .game-grid > *:nth-child(6), .music-grid > *:nth-child(6), .grid > .panel:nth-child(6) { animation-delay: 150ms; }
+.widgets > *:nth-child(7), .app-grid > *:nth-child(7), .game-grid > *:nth-child(7), .music-grid > *:nth-child(7), .grid > .panel:nth-child(7) { animation-delay: 180ms; }
+.widgets > *:nth-child(n + 8), .app-grid > *:nth-child(n + 8), .game-grid > *:nth-child(n + 8), .music-grid > *:nth-child(n + 8), .grid > .panel:nth-child(n + 8) { animation-delay: 210ms; }
+.seg { position: relative; }
+.seg button { position: relative; z-index: 1; }
+.seg.has-pill button.on { background: transparent; box-shadow: none; }
+.seg-pill { position: absolute; left: 0; top: 0; z-index: 0; border-radius: 4px; background: var(--bg-3); box-shadow: inset 0 0 0 1px var(--line-2); transition: transform 280ms var(--ease), width 280ms var(--ease); pointer-events: none; }

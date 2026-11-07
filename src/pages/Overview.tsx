@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { LineChart } from "../components/LineChart";
 import { I } from "../components/Icons";
-import { Empty, ErrorNote, Meter, PageHead, Panel, Spinner, StatusTag } from "../components/ui";
+import { Empty, ErrorNote, Meter, PageHead, Panel, Spinner, StatusTag, CountUp } from "../components/ui";
 import { api, type Finding, type HealthReport } from "../lib/api";
 import { ToneIcon, useApp, useLoad } from "../lib/app";
 import { bytes, bytesParts, duration, pct, relative } from "../lib/format";
@@ -273,7 +273,7 @@ function ConditionRing({ report, loading }: { report: HealthReport | null; loadi
       </svg>
       <div className="center">
         <div>
-          {loading ? <Spinner lg /> : <b>{report ? score : "—"}</b>}
+          {loading ? <Spinner lg /> : <b>{report ? <CountUp value={score} /> : "—"}</b>}
           <span>of 100</span>
         </div>
       </div>
