@@ -1170,6 +1170,26 @@ pub async fn list_games(state: State<'_, Shared>, refresh: Option<bool>) -> AppR
     .await
 }
 
+/// Windows 11 window material behind the app: "mica", "acrylic" or "solid".
+/// Fails on systems without it (e.g. Windows 10) — the page then stays solid.
+#[tauri::command]
+pub fn set_window_backdrop(app: tauri::AppHandle, kind: String, dark: bool) -> AppResult<()> {
+    use tauri::window::{Effect, EffectsBuilder};
+    use tauri::Manager;
+    let w = app.get_webview_window("main").ok_or_else(|| AppError::msg("no main window"))?;
+    let effect = match kind.as_str() {
+        "mica" => Some(if dark { Effect::MicaDark } else { Effect::MicaLight }),
+        "acrylic" => Some(Effect::Acrylic),
+        "solid" => None,
+        _ => return Err(AppError::Invalid("unknown backdrop".into())),
+    };
+    match effect {
+        Some(e) => w.set_effects(EffectsBuilder::new().effect(e).build()),
+        None => w.set_effects(None),
+    }
+    .map_err(|e| AppError::msg(format!("Windows didn't apply the effect: {e}")))
+}
+
 /// Detected games (cached), refreshing once if nothing is known yet.
 fn known_games(st: &Shared) -> Vec<crate::games::detect::Game> {
     let cached = st.games.games.read().map(|g| g.clone()).unwrap_or_default();

@@ -5,7 +5,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { api } from "../lib/api";
 import { PAGE_IDS, SECTION_IDS } from "./nav";
 import { DEFAULT_PREFS, sanitize, type Prefs } from "./prefs";
-import { applyAppearance } from "./theme";
+import { invoke } from "@tauri-apps/api/core";
+import { applyAppearance, findTheme } from "./theme";
 
 interface PrefsCtx {
   prefs: Prefs;
@@ -31,6 +32,20 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       .catch(() => {})
       .finally(() => setLoaded(true));
   }, []);
+
+  // Windows 11 Mica / Acrylic behind the window. The page only turns see-through
+  // once Windows has applied it (on Windows 10 the call fails and it stays solid).
+  const dark = findTheme(prefs.appearance.theme, prefs.appearance.customThemes).kind !== "light";
+  useEffect(() => {
+    if (!loaded) return;
+    const kind = prefs.appearance.backdrop;
+    invoke("set_window_backdrop", { kind, dark })
+      .then(() => document.documentElement.setAttribute("data-backdrop", kind))
+      .catch((e) => {
+        console.info("backdrop unavailable:", e);
+        document.documentElement.setAttribute("data-backdrop", "solid");
+      });
+  }, [loaded, prefs.appearance.backdrop, dark]);
 
   // Apply appearance and accessibility whenever they change.
   useEffect(() => applyAppearance(prefs), [prefs.appearance, prefs.accessibility, prefs.workspaces.active, prefs.workspaces.list]);

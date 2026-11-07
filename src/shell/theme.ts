@@ -146,6 +146,18 @@ export function applyAppearance(prefs: Prefs, el: HTMLElement = document.documen
   set("--radius-s", `${Math.round(5 * a.radius)}px`);
   set("--radius", `${Math.round(8 * a.radius)}px`);
   set("--radius-l", `${Math.round(12 * a.radius)}px`);
+  // See-through window and chrome colours, used only while Windows shows Mica/Acrylic behind the app.
+  const [w0r, w0g, w0b] = hexToRgb(t.bg0);
+  const [w1r, w1g, w1b] = hexToRgb(t.bg1);
+  const glass = a.backdrop === "acrylic" ? [0.62, 0.5] : [0.5, 0.32];
+  set("--window-bg-glass", `rgba(${w0r}, ${w0g}, ${w0b}, ${glass[0]})`);
+  set("--chrome-bg-glass", `rgba(${w1r}, ${w1g}, ${w1b}, ${glass[1]})`);
+  // Cards sit on the material as lighter layers (as in Windows 11 Settings); firmer on Acrylic, which shows more through.
+  const [c2r, c2g, c2b] = hexToRgb(t.bg2);
+  set(
+    "--panel-bg-glass",
+    a.backdrop === "acrylic" ? `rgba(${c2r}, ${c2g}, ${c2b}, ${light ? 0.86 : 0.8})` : light ? "rgba(255, 255, 255, 0.7)" : "rgba(255, 255, 255, 0.045)",
+  );
   const [pr, pg, pb] = hexToRgb(t.bg2);
   set("--panel-bg", a.transparency > 0 ? `rgba(${pr}, ${pg}, ${pb}, ${1 - a.transparency})` : t.bg2);
   set("--panel-blur", a.blur > 0 && a.transparency > 0 ? `blur(${a.blur}px)` : "none");

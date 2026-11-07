@@ -7,7 +7,7 @@ import { Note, PageHead, Panel, Seg, Toggle } from "../components/ui";
 import { useApp, type PageId } from "../lib/app";
 import { ALL_PAGES, SECTIONS } from "../shell/nav";
 import { usePrefs } from "../shell/PrefsProvider";
-import { BACKGROUNDS, LOCKED_SECTIONS, sanitizeTheme, type BackgroundStyle, type IntroMode, type Prefs } from "../shell/prefs";
+import { BACKGROUNDS, LOCKED_SECTIONS, sanitizeTheme, type Backdrop, type BackgroundStyle, type IntroMode, type Prefs } from "../shell/prefs";
 import { previewIntro } from "../shell/splash";
 import { OFFICIAL_THEMES, accentProblem, findTheme, readabilityProblem, type Theme, type ThemeTokens } from "../shell/theme";
 import { DashboardEditor, move } from "../shell/DashboardEditor";
@@ -135,6 +135,9 @@ function Appearance({ prefs, set }: { prefs: Prefs; set: (fn: (a: Prefs["appeara
         </Row>
         <Row label="Page background">
           <Seg<BackgroundStyle> value={a.background} onChange={(v) => set((x) => ({ ...x, background: v }))} options={BACKGROUNDS.map((b) => ({ value: b, label: BG_LABEL[b] }))} />
+        </Row>
+        <Row label="Window material" hint="Windows 11 only. Mica softly tints the window with your desktop wallpaper, like Settings and File Explorer; Acrylic is frostier and more see-through. Panels stay solid so text stays sharp.">
+          <Seg<Backdrop> value={a.backdrop} onChange={(v) => set((x) => ({ ...x, backdrop: v }))} options={[{ value: "solid", label: "Solid" }, { value: "mica", label: "Mica" }, { value: "acrylic", label: "Acrylic" }]} />
         </Row>
       </Panel>
       <StartupPanel prefs={prefs} set={set} />
@@ -434,7 +437,7 @@ export function Studio() {
   const [confirmAll, setConfirmAll] = useState(false);
   const theme = useMemo(() => findTheme(prefs.appearance.theme, prefs.appearance.customThemes), [prefs.appearance.theme, prefs.appearance.customThemes]);
   const resetFor: Record<Tab, () => void> = {
-    appearance: () => update((p) => ({ ...p, appearance: { ...p.appearance, accent: null, radius: 1, transparency: 0, blur: 0, shadows: true, borders: true, highContrast: false, background: "plain", intro: "full" } })),
+    appearance: () => update((p) => ({ ...p, appearance: { ...p.appearance, accent: null, radius: 1, transparency: 0, blur: 0, shadows: true, borders: true, highContrast: false, background: "plain", intro: "full", backdrop: "solid" } })),
     themes: () => update((p) => ({ ...p, appearance: { ...p.appearance, theme: "nocturn" } })),
     layout: () => reset("navigation"),
     dashboard: () => reset("home"),

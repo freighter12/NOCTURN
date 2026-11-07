@@ -41,6 +41,7 @@ export interface WidgetSlot {
 export type PlayerMode = "full" | "standard" | "mini" | "minimal";
 export type SidebarSide = "left" | "right";
 export type IntroMode = "full" | "short" | "off";
+export type Backdrop = "solid" | "mica" | "acrylic";
 
 export interface Prefs {
   version: number;
@@ -66,6 +67,8 @@ export interface Prefs {
     customThemes: Theme[];
     /** Startup animation. */
     intro: IntroMode;
+    /** Windows 11 material behind the window (solid = none). */
+    backdrop: Backdrop;
   };
   navigation: {
     /** Section order (section IDs). Unknown IDs are dropped, missing ones appended. */
@@ -124,7 +127,7 @@ export const DEFAULT_WIDGETS: WidgetSlot[] = [
 
 export const DEFAULT_PREFS: Prefs = {
   version: PREFS_VERSION,
-  appearance: { theme: "nocturn", accent: null, radius: 1, transparency: 0, blur: 0, shadows: true, borders: true, highContrast: false, background: "plain", customThemes: [], intro: "full" },
+  appearance: { theme: "nocturn", accent: null, radius: 1, transparency: 0, blur: 0, shadows: true, borders: true, highContrast: false, background: "plain", customThemes: [], intro: "full", backdrop: "solid" },
   navigation: {
     order: ["home", "library", "music", "workspaces", "ai", "gaming", "system", "studio", "settings"],
     hidden: [],
@@ -258,6 +261,7 @@ export function sanitize(raw: unknown, pages: readonly string[], sections: reado
       background: oneOf<BackgroundStyle>(a.background, BACKGROUNDS, "plain"),
       customThemes,
       intro: oneOf<IntroMode>(a.intro, ["full", "short", "off"], d.appearance.intro),
+      backdrop: oneOf<Backdrop>(a.backdrop, ["solid", "mica", "acrylic"], d.appearance.backdrop),
     },
     navigation: {
       order,

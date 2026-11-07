@@ -64,7 +64,7 @@
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body {
-  background: var(--bg-0);
+  background: var(--window-bg, var(--bg-0));
   color: var(--ink-0);
   font: calc(13.5px * var(--fs, 1))/1.5 var(--font);
   -webkit-font-smoothing: antialiased;
@@ -96,7 +96,7 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after 
 .shell { display: grid; grid-template-rows: 36px minmax(0, 1fr) auto; height: 100%; }
 .titlebar {
   display: flex; align-items: center; justify-content: space-between;
-  background: var(--bg-1); border-bottom: 1px solid var(--line);
+  background: var(--chrome-bg, var(--bg-1)); border-bottom: 1px solid var(--line);
   padding-left: 14px;
 }
 .titlebar .brand { display: flex; align-items: center; gap: 9px; letter-spacing: 0.32em; font-size: calc(11px * var(--fs, 1)); font-weight: 600; color: var(--ink-1); pointer-events: none; }
@@ -114,7 +114,7 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after 
 .body { display: grid; grid-template-columns: 228px 1fr; min-height: 0; }
 
 .sidebar {
-  background: var(--bg-1); border-right: 1px solid var(--line);
+  background: var(--chrome-bg, var(--bg-1)); border-right: 1px solid var(--line);
   display: flex; flex-direction: column; padding: 14px 10px 12px; gap: 2px; min-height: 0;
 }
 .sidebar .group-label { font-size: calc(10.5px * var(--fs, 1)); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); padding: 14px 10px 6px; }
@@ -611,7 +611,7 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--line-2)
 .art-btn { all: unset; cursor: default; display: inline-flex; border-radius: var(--radius); }
 .art-btn:focus-visible { outline: 2px solid var(--moon); }
 
-.player-bar { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(320px, 1.4fr) minmax(220px, 1fr); align-items: center; gap: 16px; padding: 8px 16px; border-top: 1px solid var(--line); background: var(--bg-1); min-height: 72px; }
+.player-bar { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(320px, 1.4fr) minmax(220px, 1fr); align-items: center; gap: 16px; padding: 8px 16px; border-top: 1px solid var(--line); background: var(--chrome-bg, var(--bg-1)); min-height: 72px; }
 .pb-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .pb-center { display: grid; gap: 2px; justify-items: center; }
 .pb-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
@@ -778,3 +778,8 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--line-2)
 .game-cover.mini.icon img { width: 70%; }
 .reduce-motion .game-art, .reduce-motion .game-play svg { transition: none; }
 .reduce-motion .game-card:hover .game-art { transform: none; }
+
+/* Windows 11 Mica / Acrylic: window, title bar, sidebar and player bar let the material through; panels stay solid */
+html[data-backdrop="mica"], html[data-backdrop="acrylic"] { --window-bg: var(--window-bg-glass); --chrome-bg: var(--chrome-bg-glass); background: transparent !important; }
+html[data-backdrop="mica"] body, html[data-backdrop="acrylic"] body { background: var(--window-bg) !important; }
+html[data-backdrop="mica"], html[data-backdrop="acrylic"] { --panel-bg: var(--panel-bg-glass) !important; }

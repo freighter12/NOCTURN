@@ -248,6 +248,7 @@ pub fn run() {
             commands::gaming_now,
             commands::list_game_sessions,
             commands::games_covers,
+            commands::set_window_backdrop,
             commands::games_launch,
             commands::preview_game_profile,
             commands::apply_game_profile,
