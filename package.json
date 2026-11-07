@@ -1,7 +1,7 @@
 {
   "name": "nocturn",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "NOCTURN — Windows optimisation engine and AI desktop assistant",
   "type": "module",
   "scripts": {
