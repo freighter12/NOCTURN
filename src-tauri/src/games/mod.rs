@@ -1,5 +1,6 @@
 //! Gaming optimiser: game detection, per-game profiles and session monitoring.
 
+pub mod art;
 pub mod detect;
 pub mod profile;
 pub mod session;
@@ -116,7 +117,7 @@ mod tests {
     use super::*;
 
     fn game(id: &str) -> Game {
-        Game { id: id.into(), name: id.into(), launcher: "Steam", install_dir: None, exes: vec![] }
+        Game { id: id.into(), name: id.into(), launcher: "Steam", install_dir: None, exes: vec![], launch: Default::default(), launch_via: None, package_dir: None }
     }
 
     #[test]

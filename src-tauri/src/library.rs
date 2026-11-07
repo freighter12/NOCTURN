@@ -352,6 +352,30 @@ pub struct Launched {
     pub detail: String,
 }
 
+/// Open a program, link or shell item with optional fixed parameters and working folder.
+pub(crate) fn shell_run(target: &str, params: Option<&str>, dir: Option<&str>) -> AppResult<()> {
+    #[cfg(windows)]
+    unsafe {
+        use windows::core::{w, HSTRING, PCWSTR};
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        let p = params.map(HSTRING::from);
+        let d = dir.map(HSTRING::from);
+        let r = ShellExecuteW(
+            None,
+            w!("open"),
+            &HSTRING::from(target),
+            p.as_ref().map(|s| PCWSTR(s.as_ptr())).unwrap_or(PCWSTR::null()),
+            d.as_ref().map(|s| PCWSTR(s.as_ptr())).unwrap_or(PCWSTR::null()),
+            SW_SHOWNORMAL,
+        );
+        if r.0 as isize <= 32 {
+            return Err(AppError::msg("Windows couldn't start it"));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn shell_open(target: &str) -> AppResult<()> {
     #[cfg(windows)]
     unsafe {

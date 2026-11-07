@@ -11,6 +11,7 @@ import { Empty, ErrorNote, Loading, Meter, Note, PageHead, Panel, Spinner } from
 import { api, errorMessage, type GamingNow, type GameView, type SessionSummary, type TweakView } from "../lib/api";
 import { useApp, useLoad } from "../lib/app";
 import { bytes, date, duration } from "../lib/format";
+import { GameCover, launchGame } from "../library/games";
 import { primaryGpu, useTelemetry } from "../lib/telemetry";
 
 const READINESS: { id: string; label: string; good: string; bad: string }[] = [
@@ -359,6 +360,7 @@ function GameLibrary() {
                 onClick={() => setSelected(selected === g.id ? null : g.id)}
               >
                 <span className="status-dot" style={{ background: g.running ? "var(--good)" : "var(--bg-4)", boxShadow: g.running ? "0 0 8px rgba(12,163,12,.6)" : undefined }} />
+                <GameCover game={g} className="mini" />
                 <div className="body">
                   <div className="title">{g.name}</div>
                   <div className="desc">
@@ -369,6 +371,18 @@ function GameLibrary() {
                 </div>
                 {g.running && <span className="tag good">Running</span>}
                 {g.profile && <span className="tag solid">Profile</span>}
+                {g.launch_via && !g.running && (
+                  <button
+                    className="btn sm"
+                    title={`Opens through ${g.launch_via}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      launchGame(g, toast);
+                    }}
+                  >
+                    <I.play /> Play
+                  </button>
+                )}
                 {!g.id.startsWith("custom:") && (
                   <button
                     className="btn ghost sm"

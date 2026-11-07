@@ -124,12 +124,35 @@ fn extract_all(ids: &[String]) -> Vec<(String, Option<Vec<u8>>)> {
 
 #[cfg(windows)]
 fn extract(app_id: &str) -> windows::core::Result<Option<Vec<u8>>> {
+    extract_named(&format!(r"shell:AppsFolder\{app_id}"))
+}
+
+/// The icon of a file (e.g. a game's .exe) as PNG, from the shell. Runs on its own COM thread.
+#[cfg(windows)]
+pub fn file_icon_png(path: &str) -> Option<Vec<u8>> {
+    let p = path.to_string();
+    std::thread::spawn(move || {
+        use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
+        let init = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+        let r = extract_named(&p).ok().flatten();
+        if init.is_ok() {
+            unsafe { CoUninitialize() };
+        }
+        r
+    })
+    .join()
+    .ok()
+    .flatten()
+}
+
+#[cfg(windows)]
+fn extract_named(name: &str) -> windows::core::Result<Option<Vec<u8>>> {
     use windows::core::HSTRING;
     use windows::Win32::Foundation::SIZE;
     use windows::Win32::Graphics::Gdi::{CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HGDIOBJ};
     use windows::Win32::UI::Shell::{IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK, SIIGBF_ICONONLY};
 
-    let path = HSTRING::from(format!(r"shell:AppsFolder\{app_id}"));
+    let path = HSTRING::from(name);
     let factory: IShellItemImageFactory = unsafe { SHCreateItemFromParsingName(&path, None)? };
     let hbmp = unsafe { factory.GetImage(SIZE { cx: ICON_PX, cy: ICON_PX }, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK)? };
 

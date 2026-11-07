@@ -279,7 +279,7 @@ mod tests {
     use crate::system::monitor::GpuSample;
 
     fn game() -> Game {
-        Game { id: "steam:1".into(), name: "Test".into(), launcher: "Steam", install_dir: Some(r"D:\Games\Test".into()), exes: vec![] }
+        Game { id: "steam:1".into(), name: "Test".into(), launcher: "Steam", install_dir: Some(r"D:\Games\Test".into()), exes: vec![], launch: Default::default(), launch_via: None, package_dir: None }
     }
     fn proc_(exe: &str, mem: u64) -> ProcessInfo {
         ProcessInfo { pid: 1, parent: None, name: "x.exe".into(), exe: Some(exe.into()), cpu: 10.0, memory: mem, disk_read_bps: 0, disk_write_bps: 0, run_time_secs: 1, has_window: true }

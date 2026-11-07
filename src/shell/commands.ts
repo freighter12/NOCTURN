@@ -1,7 +1,7 @@
 // Command palette model: what a command is, how a query matches it, and
 // how results are ordered. Kept free of React so it can be unit-tested.
 
-export type CommandGroup = "Recent" | "Suggested" | "Pages" | "Actions" | "Apps" | "Workspaces" | "Music" | "Themes" | "Settings" | "Ask";
+export type CommandGroup = "Recent" | "Suggested" | "Pages" | "Actions" | "Games" | "Apps" | "Workspaces" | "Music" | "Themes" | "Settings" | "Ask";
 
 export interface Command {
   /** Stable ID, used to remember recent commands. */
@@ -63,7 +63,7 @@ export function commandScore(query: string, c: Command): number {
   return best;
 }
 
-const GROUP_ORDER: CommandGroup[] = ["Recent", "Suggested", "Pages", "Actions", "Apps", "Workspaces", "Music", "Themes", "Settings", "Ask"];
+const GROUP_ORDER: CommandGroup[] = ["Recent", "Suggested", "Pages", "Actions", "Games", "Apps", "Workspaces", "Music", "Themes", "Settings", "Ask"];
 
 /**
  * Rank commands for a query. With no query: recent commands first, then the

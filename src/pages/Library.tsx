@@ -4,12 +4,13 @@
 import { useMemo, useState } from "react";
 import { I } from "../components/Icons";
 import { Empty, ErrorNote, Loading, Note, PageHead, Panel, Seg, Spinner } from "../components/ui";
-import { errorMessage, library, type LibraryItem, type LibraryService, type StartApp } from "../lib/api";
+import { api, errorMessage, library, type LibraryItem, type LibraryService, type StartApp } from "../lib/api";
 import { useApp, useLoad } from "../lib/app";
 import { relative } from "../lib/format";
 import { AppIcon, NOCTURN_APPS, NocturnIcon, launchItem, whereItOpens } from "../library/tiles";
+import { GameCard } from "../library/games";
 
-type Filter = "all" | "favourites" | "recent" | "nocturn" | "installed" | "connected" | "website";
+type Filter = "all" | "games" | "favourites" | "recent" | "nocturn" | "installed" | "connected" | "website";
 type AddTab = "installed" | "services" | "website";
 
 function AddPanel({ items, onAdded, onClose }: { items: LibraryItem[]; onAdded: () => void; onClose: () => void }) {
@@ -171,6 +172,8 @@ function EditPanel({ item, categories, onSaved, onClose }: { item: LibraryItem; 
 export function Library() {
   const { toast, navigate } = useApp();
   const items = useLoad(() => library.list(), []);
+  // Games come from the launchers on this PC (Steam, Epic, Xbox, Battle.net, Riot…), nothing to add by hand.
+  const gamesList = useLoad(() => api.games(false), []);
   const [filter, setFilter] = useState<Filter>("all");
   const [category, setCategory] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -189,7 +192,7 @@ export function Library() {
         case "favourites": return i.favourite;
         case "recent": return !!i.last_opened_at;
         case "installed": case "connected": case "website": return i.kind === filter;
-        case "nocturn": return false;
+        case "nocturn": case "games": return false;
         default: return true;
       }
     })
@@ -197,6 +200,8 @@ export function Library() {
   const pinned = all.filter((i) => i.pinned);
   const nocturn = NOCTURN_APPS.filter((a) => match(a.name));
   const showNocturn = (filter === "all" || filter === "nocturn") && !category;
+  const games = (gamesList.data ?? []).filter((g) => !g.not_game && match(g.name));
+  const showGames = (filter === "all" || filter === "games") && !category;
 
   const toggle = async (i: LibraryItem, field: "favourite" | "pinned") => {
     try {
@@ -232,8 +237,8 @@ export function Library() {
     <div className="page">
       <PageHead
         eyebrow="Library"
-        title="Your apps and services"
-        desc="Everything you use, organised your way. Apps open in their own windows; services open through their official app or website."
+        title="Your games, apps and services"
+        desc="Everything you use, in one place. Games are found in your launchers and open through them; apps open in their own windows; services through their official app or website."
         actions={<button className="btn primary" onClick={() => { setAdding((v) => !v); setEditing(null); }}><I.plus /> Add apps</button>}
       />
       {adding && <AddPanel items={all} onAdded={items.reload} onClose={() => setAdding(false)} />}
@@ -245,6 +250,7 @@ export function Library() {
           onChange={setFilter}
           options={[
             { value: "all", label: "All" },
+            { value: "games", label: "Games" },
             { value: "favourites", label: "Favourites" },
             { value: "recent", label: "Recent" },
             { value: "nocturn", label: "Nocturn" },
@@ -269,6 +275,20 @@ export function Library() {
           <div className="app-grid">{pinned.map(tile)}</div>
         </>
       )}
+      {showGames && (games.length > 0 || filter === "games") && (
+        <>
+          <div className="section-title row between">
+            <span>Games</span>
+            <span className="small dim" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>Found in your launchers · opens through each game's own launcher</span>
+          </div>
+          {gamesList.loading && !gamesList.data && <Loading label="Looking through your game launchers…" />}
+          {gamesList.data && games.length === 0 && (
+            <Empty title={q ? "No games match" : "No games found"}>NOCTURN looks in Steam, Epic Games, GOG, Battle.net, Riot, EA app, Ubisoft Connect, Rockstar and Xbox / Microsoft Store. Games from anywhere else can be added on the Gaming page.</Empty>
+          )}
+          <div className="game-grid">{(filter === "games" ? games : games.slice(0, 12)).map((g) => <GameCard key={g.id} game={g} toast={toast} />)}</div>
+          {filter === "all" && games.length > 12 && <button className="btn ghost sm mt-1" onClick={() => setFilter("games")}>All {games.length} games</button>}
+        </>
+      )}
       {showNocturn && nocturn.length > 0 && (
         <>
           <div className="section-title">Nocturn</div>
@@ -286,7 +306,7 @@ export function Library() {
           </div>
         </>
       )}
-      {filter !== "nocturn" && (
+      {filter !== "nocturn" && filter !== "games" && (
         <>
           <div className="section-title">{filter === "recent" ? "Recently opened" : filter === "favourites" ? "Favourites" : "Your library"}</div>
           {items.loading && !items.data && <Loading />}

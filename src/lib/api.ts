@@ -809,6 +809,8 @@ export interface Game {
   install_dir: string | null;
   /** Likely game executables, most relevant first. */
   exes: string[];
+  /** What NOCTURN starts it through ("Steam", "the Riot Client"…); null = open it from its launcher. */
+  launch_via: string | null;
 }
 export type GpuPreference = "default" | "power_saving" | "high_performance";
 export interface GameProfile {
@@ -1176,6 +1178,8 @@ export const api = {
     invoke<ApplyReport>("set_startup_enabled", { ids, enabled, source, onProgress: progressChannel(onProgress) }),
 
   games: (refresh = false) => invoke<GameView[]>("list_games", { refresh }),
+  gameCovers: (ids: string[]) => invoke<Record<string, string | null>>("games_covers", { ids }),
+  launchGame: (id: string) => invoke<void>("games_launch", { id }),
   addCustomGame: (exe: string) => invoke<void>("add_custom_game", { exe }),
   removeCustomGame: (exe: string) => invoke<void>("remove_custom_game", { exe }),
   setNotGame: (id: string, notGame: boolean) => invoke<void>("set_not_game", { id, notGame }),

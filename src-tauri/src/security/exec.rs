@@ -78,6 +78,8 @@ pub enum PsScript {
     BootTimes,
     /// Every app in the Start menu (desktop and Store) with its AppUserModelID. Read-only.
     StartApps,
+    /// Store / Xbox packages that are games (they ship a MicrosoftGame.config). Read-only.
+    GamePackages,
 }
 
 impl PsScript {
@@ -175,6 +177,9 @@ $out = foreach ($s in $starts) {
 @($out) | ConvertTo-Json -Depth 3 -Compress"#,
             PsScript::StartApps => r#"
 Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Depth 2 -Compress"#,
+            PsScript::GamePackages => r#"
+@(Get-AppxPackage | Where-Object { -not $_.IsFramework -and $_.InstallLocation -and (Test-Path -LiteralPath (Join-Path $_.InstallLocation 'MicrosoftGame.config')) } |
+  ForEach-Object { [pscustomobject]@{ Family = $_.PackageFamilyName; Location = $_.InstallLocation } }) | ConvertTo-Json -Depth 2 -Compress"#,
             PsScript::PendingReboot => r#"
 $r = @{
   cbs = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'

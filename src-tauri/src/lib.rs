@@ -247,6 +247,8 @@ pub fn run() {
             commands::set_not_game,
             commands::gaming_now,
             commands::list_game_sessions,
+            commands::games_covers,
+            commands::games_launch,
             commands::preview_game_profile,
             commands::apply_game_profile,
             commands::ai_key_status,

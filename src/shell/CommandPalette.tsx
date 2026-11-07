@@ -4,7 +4,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { I } from "../components/Icons";
-import { library, type LibraryItem } from "../lib/api";
+import { api, library, type GameView, type LibraryItem } from "../lib/api";
+import { launchGame } from "../library/games";
 import { useApp, type PageId } from "../lib/app";
 import { launchItem, useAppIcon } from "../library/tiles";
 import { useMusic } from "../music/MusicProvider";
@@ -82,6 +83,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [apps, setApps] = useState<LibraryItem[]>([]);
+  const [games, setGames] = useState<GameView[]>([]);
   const [recent, setRecent] = useState<string[]>(readRecent);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -99,6 +101,7 @@ export function CommandPalette() {
     setRecent(readRecent());
     setOpen(true);
     library.list().then(setApps).catch(() => setApps([]));
+    api.games(false).then(setGames).catch(() => setGames([]));
   }, []);
   const close = useCallback(() => {
     setOpen(false);
@@ -175,6 +178,19 @@ export function CommandPalette() {
       });
     }
 
+    for (const g of games) {
+      if (g.not_game || !g.launch_via) continue;
+      out.push({
+        id: `game:${g.id}`,
+        group: "Games",
+        label: `Play ${g.name}`,
+        hint: g.launcher,
+        keywords: [g.name, "game", "launch", g.launcher],
+        icon: "gaming",
+        run: () => void launchGame(g, toast),
+      });
+    }
+
     for (const w of prefs.workspaces.list) {
       out.push({
         id: `ws:${w.id}`,
@@ -235,7 +251,7 @@ export function CommandPalette() {
       },
     );
     return out;
-  }, [open, apps, prefs, settings?.reduce_motion, ws, m, navigate, requestApply, toast, switchTo, update]);
+  }, [open, apps, games, prefs, settings?.reduce_motion, ws, m, navigate, requestApply, toast, switchTo, update]);
 
   const results = useMemo(() => {
     const r = rank(query, commands, recent, { suggestions: SUGGESTED });

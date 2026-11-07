@@ -1170,6 +1170,37 @@ pub async fn list_games(state: State<'_, Shared>, refresh: Option<bool>) -> AppR
     .await
 }
 
+/// Detected games (cached), refreshing once if nothing is known yet.
+fn known_games(st: &Shared) -> Vec<crate::games::detect::Game> {
+    let cached = st.games.games.read().map(|g| g.clone()).unwrap_or_default();
+    if cached.is_empty() {
+        crate::games::refresh(&st.db, &st.games)
+    } else {
+        cached
+    }
+}
+
+/// Cover art for detected games (data URLs; None = use a placeholder).
+#[tauri::command]
+pub async fn games_covers(state: State<'_, Shared>, ids: Vec<String>) -> AppResult<std::collections::HashMap<String, Option<String>>> {
+    let st = state.inner().clone();
+    blocking(move || Ok(crate::games::art::covers(&st.data_dir, &known_games(&st), &ids))).await
+}
+
+/// Start a detected game through its own launcher.
+#[tauri::command]
+pub async fn games_launch(state: State<'_, Shared>, id: String) -> AppResult<()> {
+    let st = state.inner().clone();
+    blocking(move || {
+        let games = known_games(&st);
+        let g = games.iter().find(|g| g.id == id).ok_or_else(|| AppError::NotFound("game".into()))?;
+        crate::games::art::launch(g)?;
+        st.db.audit("info", "user", "game.launch", Some(serde_json::json!({ "game": g.id, "via": g.launch_via })));
+        Ok(())
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn add_custom_game(state: State<'_, Shared>, exe: String) -> AppResult<()> {
     let st = state.inner().clone();
