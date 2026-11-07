@@ -131,6 +131,8 @@ export function applyAppearance(prefs: Prefs, el: HTMLElement = document.documen
   set("--line-3", `rgba(${over}, ${hc ? 0.45 : light ? 0.22 : 0.16})`);
   set("--accent-rgb", `${ar}, ${ag}, ${ab}`);
   set("--moon", accent);
+  // Text on accent-coloured fills (primary buttons, ticked boxes): whichever reads better.
+  set("--on-accent", contrast(accent, "#0b0c0f") >= contrast(accent, "#ffffff") ? "#0b0c0f" : "#ffffff");
   set("--moon-2", accent2);
   set("--moon-glow", `rgba(${ar}, ${ag}, ${ab}, ${light ? 0.1 : 0.07})`);
   set("--moon-wash", `rgba(${ar}, ${ag}, ${ab}, ${light ? 0.06 : 0.04})`);
