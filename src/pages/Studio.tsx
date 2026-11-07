@@ -395,8 +395,11 @@ function MusicPrefs({ prefs, set }: { prefs: Prefs; set: (fn: (m: Prefs["music"]
       <Row label="Visualiser" hint="Animated bars in the full player. Static when reduce motion is on.">
         <Toggle on={mm.visualiser} label="Visualiser" onChange={(v) => set((x) => ({ ...x, visualiser: v }))} />
       </Row>
-      <Row label="Lyrics" hint="Show lyrics from the file or a matching .lrc file in the full player.">
+      <Row label="Lyrics" hint="Show lyrics in the full player, synced when the source has timings.">
         <Toggle on={mm.showLyrics} label="Lyrics" onChange={(v) => set((x) => ({ ...x, showLyrics: v }))} />
+      </Row>
+      <Row label="Find lyrics online" hint="For songs without lyrics of their own (an .lrc file or lyrics stored in the file), look them up on LRCLIB, a free lyrics database. Sends only the artist, title, album and length; each song is looked up once.">
+        <Toggle on={mm.onlineLyrics} label="Find lyrics online" disabled={!mm.showLyrics} onChange={(v) => set((x) => ({ ...x, onlineLyrics: v }))} />
       </Row>
     </Panel>
   );
@@ -435,7 +438,7 @@ export function Studio() {
     themes: () => update((p) => ({ ...p, appearance: { ...p.appearance, theme: "nocturn" } })),
     layout: () => reset("navigation"),
     dashboard: () => reset("home"),
-    music: () => update((p) => ({ ...p, music: { ...p.music, playerMode: "standard", visualiser: true, showLyrics: true } })),
+    music: () => update((p) => ({ ...p, music: { ...p.music, playerMode: "standard", visualiser: true, showLyrics: true, onlineLyrics: true } })),
     accessibility: () => reset("accessibility"),
   };
   return (

@@ -14,6 +14,7 @@ mod customise;
 mod db;
 mod games;
 mod library;
+mod lyrics_online;
 mod library_icons;
 mod music;
 mod music_import;

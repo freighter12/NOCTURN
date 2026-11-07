@@ -284,9 +284,24 @@ pub fn music_delete_playlist(state: State<'_, Shared>, id: String) -> AppResult<
 }
 
 #[tauri::command]
-pub async fn music_lyrics(state: State<'_, Shared>, id: i64) -> AppResult<Option<crate::music::Lyrics>> {
+/// Lyrics: an .lrc file next to the song or lyrics stored in it first; then,
+/// if `online` (the user's setting), LRCLIB. Network trouble shows as "none".
+pub async fn music_lyrics(state: State<'_, Shared>, id: i64, online: Option<bool>) -> AppResult<Option<crate::music::Lyrics>> {
     let st = state.inner().clone();
-    blocking(move || crate::music::lyrics(&st.db, id)).await
+    let db = st.db.clone();
+    if let Some(l) = blocking(move || crate::music::lyrics(&db, id)).await? {
+        return Ok(Some(l));
+    }
+    if !online.unwrap_or(false) {
+        return Ok(None);
+    }
+    match crate::lyrics_online::lyrics(&st.db, id).await {
+        Ok(l) => Ok(l),
+        Err(e) => {
+            tracing::info!("online lyrics: {e}");
+            Ok(None)
+        }
+    }
 }
 
 #[tauri::command]

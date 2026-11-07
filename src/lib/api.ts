@@ -1424,7 +1424,8 @@ export const music = {
   importInfo: (playlistId: string) => invoke<ImportInfo | null>("music_import_info", { playlistId }),
   importForget: (playlistId: string) => invoke<void>("music_import_forget", { playlistId }),
   importOpen: (playlistId: string) => invoke<void>("music_import_open", { playlistId }),
-  lyrics: (id: number) => invoke<Lyrics | null>("music_lyrics", { id }),
+  /** `online`: also look on LRCLIB when the song has no lyrics of its own. */
+  lyrics: (id: number, online = false) => invoke<Lyrics | null>("music_lyrics", { id, online }),
   session: () => invoke<MusicSession>("music_session"),
   saveSession: (session: MusicSession) => invoke<void>("music_save_session", { session }),
 };

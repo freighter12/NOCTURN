@@ -255,6 +255,17 @@ const MIGRATIONS: &[&str] = &[
         imported_at TEXT NOT NULL
     );
     "#,
+    // Lyrics found online (LRCLIB), and "not found" answers, so each song is asked once.
+    r#"
+    CREATE TABLE music_lyrics_cache (
+        key          TEXT PRIMARY KEY,
+        found        INTEGER NOT NULL,
+        synced       TEXT,
+        plain        TEXT,
+        instrumental INTEGER NOT NULL DEFAULT 0,
+        fetched_at   TEXT NOT NULL
+    );
+    "#,
 ];
 
 #[derive(Clone)]

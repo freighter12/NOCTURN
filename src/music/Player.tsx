@@ -118,12 +118,14 @@ export function Visualiser({ height = 80 }: { height?: number }) {
 
 export function LyricsView({ track }: { track: Track }) {
   const { position } = useMusic();
+  const { prefs } = usePrefs();
+  const online = prefs.music.onlineLyrics;
   const [data, setData] = useState<LyricsData | null | undefined>(undefined);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     setData(undefined);
-    music.lyrics(track.id).then(setData).catch(() => setData(null));
-  }, [track.id]);
+    music.lyrics(track.id, online).then(setData).catch(() => setData(null));
+  }, [track.id, online]);
   // Last line whose timestamp has passed.
   let active = -1;
   if (data?.synced.length) for (let i = 0; i < data.synced.length && data.synced[i][0] <= position; i++) active = i;
@@ -131,12 +133,20 @@ export function LyricsView({ track }: { track: Track }) {
     box.current?.querySelector(".lyric.on")?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [active]);
   if (data === undefined) return <div className="small dim">Looking for lyrics…</div>;
-  if (!data) return <div className="small dim">No lyrics in this file. Nocturn reads lyrics embedded in the file or a matching .lrc file next to it.</div>;
+  if (!data)
+    return (
+      <div className="small dim">
+        {online
+          ? "No lyrics found for this song — it has none of its own and LRCLIB doesn't have it (or couldn't be reached). A matching .lrc file next to the song always works."
+          : 'No lyrics in this song. Turn on "Find lyrics online" in Customise › Music, or put a matching .lrc file next to it.'}
+      </div>
+    );
   return (
     <div className="lyrics" ref={box}>
       {data.synced.length
         ? data.synced.map(([t, line], i) => <div key={`${t}-${i}`} className={`lyric ${i === active ? "on" : ""}`}>{line || "♪"}</div>)
         : data.text.split("\n").map((l, i) => <div key={i} className="lyric">{l}</div>)}
+      {data.source === "LRCLIB" && <div className="small dim lyric-credit">Lyrics from LRCLIB{data.synced.length ? "" : " (not synced)"}</div>}
     </div>
   );
 }

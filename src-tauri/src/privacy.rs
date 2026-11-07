@@ -44,6 +44,7 @@ const CATEGORIES: &[(&str, &str, &str, &str, Option<&str>)] = &[
     ("library", "App Library", "Apps, services and websites you added, and when you last opened them.", "SELECT COUNT(*) FROM library_items", Some("UPDATE library_items SET last_opened_at = NULL, open_count = 0;")),
     ("music_index", "Music index", "Titles, artists and albums read from your music folders (the files themselves stay where they are).", "SELECT COUNT(*) FROM music_tracks", None),
     ("music_imports", "Imported playlist lists", "The song lists of playlists you imported, kept so missing songs can be matched when you add them.", "SELECT COUNT(*) FROM music_playlist_imports", None),
+    ("music_lyrics", "Lyrics found online", "Lyrics NOCTURN looked up for songs that had none, so each song is asked only once.", "SELECT COUNT(*) FROM music_lyrics_cache", Some("DELETE FROM music_lyrics_cache;")),
     ("music_history", "Listening history", "What you played and when; used for Recently played and recommendations.", "SELECT COUNT(*) FROM music_plays", Some("DELETE FROM music_plays;")),
 ];
 
@@ -65,6 +66,7 @@ pub fn overview(db: &Db, data_dir: &std::path::Path, ai_endpoint: Option<String>
         Outbound { what: "Network tests", when: "Only when you (or a maintenance task you turned on) run one", to: "Your router, Cloudflare (1.1.1.1) and Google (8.8.8.8) — pings and DNS lookups only".into() },
         Outbound { what: "Playlist imports", when: "Only when you paste a playlist link and click Find songs (or Update from link)", to: "Spotify, YouTube or Deezer — a request for that playlist's page; nothing about your PC or library".into() },
         Outbound { what: "Music streaming (if you turn it on)", when: "When you play a song that isn't in your library, find songs for an imported playlist, or once a day to keep yt-dlp current", to: "YouTube — searches for song titles and the audio stream; GitHub — yt-dlp and Deno downloads. Nothing about your PC".into() },
+        Outbound { what: "Lyrics lookups (if on)", when: "When you open lyrics for a song that has none of its own — once per song", to: "lrclib.net — the song's artist, title, album and length; nothing about your PC (Customise › Music to turn off)".into() },
         Outbound { what: "Update checks", when: "A minute after start-up and once a day (Settings › Updates), or when you click Check", to: "github.com — a request for the latest version number; nothing about your PC. Downloads only when you click Install".into() },
         Outbound { what: "Support pages and websites", when: "Only when you click them", to: "Opened in your browser; Nocturn sends nothing itself".into() },
     ];
