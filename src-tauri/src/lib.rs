@@ -27,6 +27,7 @@ mod startup_insight;
 mod state;
 mod system;
 mod tray;
+mod updates;
 mod tweaks;
 mod util;
 
@@ -46,6 +47,7 @@ pub fn run() {
             tray::show_main(app);
         }))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(tray::on_window_event)
         // Nocturn Music playback and artwork: serves only indexed tracks,
         // with byte ranges so seeking works (http://media.localhost/...).
@@ -92,6 +94,7 @@ pub fn run() {
             system::monitor::start(app.handle().clone(), state.clone());
             system::scheduler::start(app.handle().clone(), state.clone());
             system::app_profiles::start(app.handle().clone(), state.clone());
+            updates::start(app.handle().clone());
 
             // Warm the hardware inventory in the background.
             let warm = state.clone();
@@ -230,6 +233,8 @@ pub fn run() {
             commands::ai_delete_conversation,
             tray::tray_update,
             commands::library_icons,
+            updates::update_check,
+            updates::update_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NOCTURN");

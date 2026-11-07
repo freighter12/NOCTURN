@@ -965,8 +965,22 @@ export interface AppSettings {
   reduce_motion: boolean;
   close_to_tray: boolean;
   desktop_notifications: boolean;
+  auto_update_check: boolean;
   ai: AiSettings;
   monitor: MonitorSettings;
+}
+export interface UpdateInfo {
+  current: string;
+  available: boolean;
+  version: string | null;
+  notes: string | null;
+  date: string | null;
+  problem: string | null;
+}
+export interface UpdateProgress {
+  downloaded: number;
+  total: number | null;
+  done: boolean;
 }
 export interface AppInfo {
   version: string;
@@ -1068,6 +1082,8 @@ function progressChannel(onProgress?: (p: Progress) => void): Channel<Progress> 
 export const api = {
   appInfo: () => invoke<AppInfo>("app_info"),
   getSettings: () => invoke<AppSettings>("get_settings"),
+  updateCheck: () => invoke<UpdateInfo>("update_check"),
+  updateInstall: () => invoke<void>("update_install"),
   getPrefs: () => invoke<unknown>("get_prefs"),
   savePrefs: (prefs: object) => invoke<void>("save_prefs", { prefs }),
   saveSettings: (value: AppSettings) => invoke<AppSettings>("save_settings", { value }),

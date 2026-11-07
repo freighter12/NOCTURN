@@ -31,7 +31,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": [
+      "nsis",
+      "msi"
+    ],
     "category": "Utility",
     "shortDescription": "Windows optimisation engine and AI desktop assistant",
     "longDescription": "NOCTURN inspects, explains and optimises Windows with reversible, journaled changes, and includes an AI technician that understands your PC.",
@@ -44,8 +47,23 @@
       "icons/icon.ico"
     ],
     "windows": {
-      "webviewInstallMode": { "type": "downloadBootstrapper" },
-      "nsis": { "installMode": "currentUser" }
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc2Nzg3MkNENTFCMDY3QzcKUldUSFo3QlJ6WEo0ZGlhRkpmbmpqbTJRYkZlQ1l1c0lkTTlobnNOR3cvNzRDTmo5ZnlJRm41R0sK",
+      "endpoints": [
+        "https://github.com/freighter12/NOCTURN/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

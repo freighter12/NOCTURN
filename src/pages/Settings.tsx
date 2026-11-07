@@ -2,11 +2,12 @@
 // the backend and are never readable from the UI), safety defaults, and
 // app information.
 
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState, type ReactNode } from "react";
 import { I } from "../components/Icons";
 import { PrivacyPanel } from "../components/Privacy";
 import { ErrorNote, Loading, Note, PageHead, Panel, Spinner, Toggle } from "../components/ui";
-import { api, errorMessage, type AiSettings, type AppInfo, type AppSettings, type ConnectionTest } from "../lib/api";
+import { api, errorMessage, type AiSettings, type AppInfo, type AppSettings, type ConnectionTest, type UpdateInfo, type UpdateProgress } from "../lib/api";
 import { useApp } from "../lib/app";
 
 const CLAUDE_MODELS = [
@@ -90,6 +91,8 @@ export function Settings() {
             </div>
           </Panel>
 
+          <UpdatesPanel auto={draft.auto_update_check} onAuto={(v) => setFlag({ auto_update_check: v })} disabled={saving} />
+
           <Panel title="About NOCTURN">
             <dl className="kv">
               <dt>Version</dt>
@@ -108,6 +111,74 @@ export function Settings() {
         </div>
       </div>
     </div>
+  );
+}
+
+function UpdatesPanel({ auto, onAuto, disabled }: { auto: boolean; onAuto: (v: boolean) => void; disabled: boolean }) {
+  const { toast } = useApp();
+  const [info, setInfo] = useState<UpdateInfo | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [progress, setProgress] = useState<UpdateProgress | null>(null);
+
+  useEffect(() => {
+    const un = listen<UpdateProgress>("update-progress", (e) => setProgress(e.payload));
+    return () => {
+      un.then((f) => f());
+    };
+  }, []);
+
+  async function check() {
+    setChecking(true);
+    try {
+      setInfo(await api.updateCheck());
+    } catch (e) {
+      toast({ tone: "critical", title: "Couldn't check for updates", detail: errorMessage(e) });
+    } finally {
+      setChecking(false);
+    }
+  }
+  async function install() {
+    setInstalling(true);
+    setProgress(null);
+    try {
+      await api.updateInstall();
+    } catch (e) {
+      toast({ tone: "critical", title: "Update didn't install", detail: errorMessage(e) });
+      setInstalling(false);
+    }
+  }
+
+  const pct = progress?.total ? Math.min(100, Math.round((progress.downloaded / progress.total) * 100)) : null;
+  return (
+    <Panel title="Updates">
+      <div className="list">
+        <Row title="Check for updates automatically" desc="A minute after start-up and once a day. You're told when a new version is out; nothing installs until you click Install.">
+          <Toggle on={auto} onChange={onAuto} label="Check for updates automatically" disabled={disabled} />
+        </Row>
+      </div>
+      <div className="row mt-2" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <button className="btn sm" onClick={check} disabled={checking || installing}>
+          {checking ? <Spinner /> : <I.refresh />} Check now
+        </button>
+        {info && !info.available && !info.problem && <span className="small dim">You're on the latest version ({info.current}).</span>}
+        {info?.problem && <span className="small dim">{info.problem}</span>}
+      </div>
+      {info?.available && (
+        <div className="mt-2">
+          <Note tone="good">
+            <b>NOCTURN {info.version}</b> is available (you have {info.current}). It's checked against NOCTURN's signing key before it runs, then the installer replaces this version and reopens it. Your settings and data are kept.
+          </Note>
+          {info.notes && <div className="small mt-2 selectable" style={{ whiteSpace: "pre-wrap", maxHeight: 160, overflow: "auto" }}>{info.notes}</div>}
+          <div className="row mt-2" style={{ gap: 10, alignItems: "center" }}>
+            <button className="btn primary sm" onClick={install} disabled={installing}>
+              {installing ? <Spinner /> : null} {installing ? (progress?.done ? "Starting the installer…" : "Downloading…") : `Install ${info.version} and restart`}
+            </button>
+            {installing && pct !== null && <span className="small dim">{pct}%</span>}
+          </div>
+        </div>
+      )}
+    </Panel>
   );
 }
 

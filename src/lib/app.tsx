@@ -3,7 +3,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePrefs } from "../shell/PrefsProvider";
-import { api, errorMessage, type Alert, type AppSettings } from "./api";
+import { api, errorMessage, type Alert, type AppSettings, type UpdateInfo } from "./api";
 
 export type PageId =
   | "home"
@@ -123,6 +123,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const un = listen<Alert>("alert", (e) =>
       toast({ tone: e.payload.kind.startsWith("profile.") ? "info" : "warning", title: e.payload.title, detail: e.payload.detail, action: alertAction(e.payload.kind, setPage) }),
+    );
+    return () => {
+      un.then((f) => f());
+    };
+  }, [toast]);
+
+  // A newer version was found by the background check (never installed without the user).
+  useEffect(() => {
+    const un = listen<UpdateInfo>("update-available", (e) =>
+      toast({ tone: "info", title: "NOCTURN " + (e.payload.version ?? "") + " is available", detail: "See what's new and install it from Settings.", action: { label: "View", run: () => setPage("settings") } }),
     );
     return () => {
       un.then((f) => f());

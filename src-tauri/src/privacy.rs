@@ -62,6 +62,7 @@ pub fn overview(db: &Db, data_dir: &std::path::Path, ai_endpoint: Option<String>
     let database_bytes = std::fs::metadata(data_dir.join("nocturn.db")).map(|m| m.len()).unwrap_or(0);
     let mut outbound = vec![
         Outbound { what: "Network tests", when: "Only when you (or a maintenance task you turned on) run one", to: "Your router, Cloudflare (1.1.1.1) and Google (8.8.8.8) — pings and DNS lookups only".into() },
+        Outbound { what: "Update checks", when: "A minute after start-up and once a day (Settings › Updates), or when you click Check", to: "github.com — a request for the latest version number; nothing about your PC. Downloads only when you click Install".into() },
         Outbound { what: "Support pages and websites", when: "Only when you click them", to: "Opened in your browser; Nocturn sends nothing itself".into() },
     ];
     if let Some(ep) = ai_endpoint {
