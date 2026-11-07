@@ -121,3 +121,12 @@ describe("workspaces", () => {
     expect(ws?.widgets).toBeNull();
   });
 });
+
+describe("intro", () => {
+  it("defaults to the full animation and accepts only known modes", () => {
+    expect(clean({}).appearance.intro).toBe("full");
+    expect(clean({ appearance: { intro: "short" } }).appearance.intro).toBe("short");
+    expect(clean({ appearance: { intro: "off" } }).appearance.intro).toBe("off");
+    expect(clean({ appearance: { intro: "fireworks" } }).appearance.intro).toBe("full");
+  });
+});

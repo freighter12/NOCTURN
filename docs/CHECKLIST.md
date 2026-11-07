@@ -91,6 +91,14 @@ Last updated: 2026-11-06
 - ✅ Phase 7 — AI ecosystem integration: read-only get_library, get_workspaces, get_music; propose_plan gains open_apps (Library IDs only), switch_workspace (by ID or name) and play_music (playlist, liked, artist or album), validated against the real data with correctable errors; the approval dialog shows an "In Nocturn" section with per-item ticks and carries them out (workspace via an approved-activation path, no double prompt); results reported back to the AI. Verified live: Study workspace + Notepad + Focus playlist plan approved and executed, summary correct; test data removed. 14 AI tests
 - ✅ Phase 8 — Polish and testing: Settings › Privacy (what leaves the PC, what's kept with counts, clearing for history data; journal and audit log protected); pages load on demand (main bundle 789 → 290 KB); error boundary per page; failure handling verified (deleted music file reported and skipped, unknown Library items and workspaces refused, missing Start-menu apps refused); full regression: 22 pages and 43 tabs with zero console errors; 154 backend + 2 kernel + 22 frontend tests
 
+## Polish (agreed 2026-11-06)
+
+- ✅ Startup animation: the logo's crescent waxes out of a faint full moon (mask circle animated), halo and twinkling sky, star with a glint, "NOCTURN" wordmark settles; pure CSS/SVG in index.html with `public/splash.js` (CSP blocks inline scripts) choosing the mode before first paint. Leaves once preferences are loaded and the shell has painted, after a minimum (Full 2.4 s, Short 0.9 s); click or any key skips; 15 s failsafe. New preference `appearance.intro` (Full / Short / Off) in Studio › Appearance › Startup with Preview, mirrored with reduce motion to localStorage for the next launch; reduce motion (app or Windows) shows the still logo. Verified live over CDP: all three modes, reduce motion, key skip, Studio control and preview, production build ships the script
+- ⬜ Command palette (Ctrl+K)
+- ⬜ Tray icon, quick actions and notifications
+- ⬜ Real app icons
+- ⬜ Auto-updates (Tauri updater)
+
 ## Phase 6 — Testing and release
 
 - ✅ Rust unit/integration tests: 138 passing + 2 benchmark-kernel tests (4 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin, storage benchmark)

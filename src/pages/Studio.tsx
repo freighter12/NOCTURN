@@ -7,7 +7,8 @@ import { Note, PageHead, Panel, Seg, Toggle } from "../components/ui";
 import { useApp, type PageId } from "../lib/app";
 import { ALL_PAGES, SECTIONS } from "../shell/nav";
 import { usePrefs } from "../shell/PrefsProvider";
-import { BACKGROUNDS, LOCKED_SECTIONS, sanitizeTheme, type BackgroundStyle, type Prefs, } from "../shell/prefs";
+import { BACKGROUNDS, LOCKED_SECTIONS, sanitizeTheme, type BackgroundStyle, type IntroMode, type Prefs } from "../shell/prefs";
+import { previewIntro } from "../shell/splash";
 import { OFFICIAL_THEMES, accentProblem, findTheme, readabilityProblem, type Theme, type ThemeTokens } from "../shell/theme";
 import { DashboardEditor, move } from "../shell/DashboardEditor";
 
@@ -68,6 +69,22 @@ function ThemePreview({ t }: { t: ThemeTokens }) {
 
 // ------------------------------------------------------------- appearance
 
+function StartupPanel({ prefs, set }: { prefs: Prefs; set: (fn: (a: Prefs["appearance"]) => Prefs["appearance"]) => void }) {
+  const { settings } = useApp();
+  const intro = prefs.appearance.intro;
+  const reduce = prefs.accessibility.reduceMotion || !!settings?.reduce_motion;
+  return (
+    <Panel title="Startup">
+      <Row label="Startup animation" hint={reduce ? "Reduce motion is on, so the logo shows without movement." : "The moonrise while Nocturn loads. Click or press a key to skip it."}>
+        <div className="row" style={{ gap: 8 }}>
+          <Seg<IntroMode> value={intro} onChange={(v) => set((x) => ({ ...x, intro: v }))} options={[{ value: "full", label: "Full" }, { value: "short", label: "Short" }, { value: "off", label: "Off" }]} />
+          <button className="btn ghost sm" disabled={intro === "off"} onClick={() => previewIntro(intro, reduce)}>Preview</button>
+        </div>
+      </Row>
+    </Panel>
+  );
+}
+
 function Appearance({ prefs, set }: { prefs: Prefs; set: (fn: (a: Prefs["appearance"]) => Prefs["appearance"]) => void }) {
   const a = prefs.appearance;
   const theme = findTheme(a.theme, a.customThemes);
@@ -120,6 +137,7 @@ function Appearance({ prefs, set }: { prefs: Prefs; set: (fn: (a: Prefs["appeara
           <Seg<BackgroundStyle> value={a.background} onChange={(v) => set((x) => ({ ...x, background: v }))} options={BACKGROUNDS.map((b) => ({ value: b, label: BG_LABEL[b] }))} />
         </Row>
       </Panel>
+      <StartupPanel prefs={prefs} set={set} />
     </div>
   );
 }
@@ -413,7 +431,7 @@ export function Studio() {
   const [confirmAll, setConfirmAll] = useState(false);
   const theme = useMemo(() => findTheme(prefs.appearance.theme, prefs.appearance.customThemes), [prefs.appearance.theme, prefs.appearance.customThemes]);
   const resetFor: Record<Tab, () => void> = {
-    appearance: () => update((p) => ({ ...p, appearance: { ...p.appearance, accent: null, radius: 1, transparency: 0, blur: 0, shadows: true, borders: true, highContrast: false, background: "plain" } })),
+    appearance: () => update((p) => ({ ...p, appearance: { ...p.appearance, accent: null, radius: 1, transparency: 0, blur: 0, shadows: true, borders: true, highContrast: false, background: "plain", intro: "full" } })),
     themes: () => update((p) => ({ ...p, appearance: { ...p.appearance, theme: "nocturn" } })),
     layout: () => reset("navigation"),
     dashboard: () => reset("home"),

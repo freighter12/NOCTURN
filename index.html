@@ -5,9 +5,145 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <title>NOCTURN</title>
+    <!-- Picks the intro mode before first paint (inline scripts are blocked by the CSP). -->
+    <script src="/splash.js"></script>
+    <style>
+      html, body { background: #08080a; }
+      #splash {
+        --s: 1;
+        position: fixed; inset: 0; z-index: 2147483000;
+        display: grid; place-items: center; overflow: hidden;
+        background: radial-gradient(circle at 50% 44%, #15161b 0%, #0d0e11 38%, #08080a 75%);
+        color: #eceef2; cursor: default; user-select: none;
+        font-family: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+      }
+      html[data-intro="short"] #splash { --s: 0.4; }
+      html[data-intro="off"] #splash { display: none; }
+      #splash .sp-stage { display: grid; justify-items: center; gap: 26px; margin-top: -30px; }
+      #splash svg { width: 300px; height: 300px; overflow: visible; margin-bottom: -40px; }
+      #splash .sp-sky { position: absolute; inset: 0; pointer-events: none; }
+
+      /* soft moonlight around the mark */
+      #splash .sp-halo { transform-box: fill-box; transform-origin: center; opacity: 0;
+        animation: sp-halo calc(1.6s * var(--s)) cubic-bezier(.2,.7,.2,1) calc(.15s * var(--s)) both; }
+      @keyframes sp-halo { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
+
+      /* the unlit part of the moon, faintly visible */
+      #splash .sp-earth { opacity: 0; --o: .7; animation: sp-fade calc(1s * var(--s)) ease-out calc(.1s * var(--s)) both; }
+      @keyframes sp-fade { to { opacity: var(--o, 1); } }
+
+      /* waxing crescent: the shadow disc slides off the moon */
+      #splash #sp-cut { animation: sp-cut calc(1.5s * var(--s)) cubic-bezier(.33,.0,.15,1) calc(.2s * var(--s)) both; }
+      @keyframes sp-cut { from { cx: 512px; cy: 512px; r: 312px; } to { cx: 628px; cy: 430px; r: 262px; } }
+      #splash .sp-moon { transform-box: view-box; transform-origin: 512px 512px;
+        animation: sp-rise calc(1.7s * var(--s)) cubic-bezier(.2,.75,.2,1) calc(.1s * var(--s)) both; }
+      @keyframes sp-rise { from { transform: translateY(18px) scale(.96); } to { transform: none; } }
+
+      /* the star, with a brief glint */
+      #splash .sp-star { transform-box: fill-box; transform-origin: center;
+        animation: sp-star calc(.6s * var(--s)) cubic-bezier(.3,1.6,.5,1) calc(1.3s * var(--s)) both; }
+      @keyframes sp-star { from { opacity: 0; transform: scale(0); } to { opacity: .9; transform: scale(1); } }
+      #splash .sp-glint { transform-box: fill-box; transform-origin: center; opacity: 0;
+        animation: sp-glint calc(.9s * var(--s)) ease-out calc(1.4s * var(--s)) both; }
+      @keyframes sp-glint {
+        0% { opacity: 0; transform: scale(.2) rotate(-20deg); }
+        35% { opacity: .95; transform: scale(1) rotate(0deg); }
+        100% { opacity: 0; transform: scale(.6) rotate(12deg); }
+      }
+
+      /* wordmark settles into place */
+      #splash .sp-word {
+        font-size: 22px; font-weight: 600; letter-spacing: .42em; padding-left: .42em;
+        background: linear-gradient(180deg, #f4f5f8, #a8acb6); -webkit-background-clip: text; background-clip: text; color: transparent;
+        animation: sp-word calc(1.1s * var(--s)) cubic-bezier(.2,.7,.2,1) calc(1s * var(--s)) both;
+      }
+      @keyframes sp-word {
+        from { opacity: 0; letter-spacing: .9em; padding-left: .9em; filter: blur(6px); }
+        to { opacity: 1; letter-spacing: .42em; padding-left: .42em; filter: blur(0); }
+      }
+      #splash .sp-rule { width: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(223,226,232,.45), transparent);
+        animation: sp-rule calc(1s * var(--s)) cubic-bezier(.2,.7,.2,1) calc(1.35s * var(--s)) both; margin-top: -14px; }
+      @keyframes sp-rule { to { width: 160px; } }
+
+      /* background stars */
+      #splash .sp-sky i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #dfe2e8; opacity: 0;
+        animation: sp-twinkle 3.2s ease-in-out infinite both; }
+      #splash .sp-sky i.b { width: 3px; height: 3px; }
+      @keyframes sp-twinkle { 0%, 100% { opacity: 0; } 40% { opacity: .55; } 60% { opacity: .35; } }
+
+      /* leaving */
+      #splash.out { animation: sp-out .5s cubic-bezier(.4,0,.2,1) both; pointer-events: none; }
+      #splash.out .sp-stage { animation: sp-lift .5s cubic-bezier(.4,0,.2,1) both; }
+      #splash.out-fast { animation: sp-out .18s linear both; pointer-events: none; }
+      @keyframes sp-out { to { opacity: 0; } }
+      @keyframes sp-lift { to { transform: translateY(-22px) scale(1.04); } }
+
+      /* reduce motion: the finished logo, no movement */
+      html[data-intro-still] #splash *, html[data-intro-still] #splash .sp-sky i { animation: none !important; }
+      html[data-intro-still] #splash .sp-halo { opacity: 1; }
+      html[data-intro-still] #splash .sp-earth { opacity: .7; }
+      html[data-intro-still] #splash .sp-star { opacity: .9; }
+      html[data-intro-still] #splash .sp-rule { width: 160px; }
+      html[data-intro-still] #splash.out { animation: sp-out .25s linear both; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="splash" role="img" aria-label="NOCTURN is starting">
+      <div class="sp-sky" aria-hidden="true">
+        <i style="left:12%;top:18%;animation-delay:.2s"></i>
+        <i class="b" style="left:22%;top:72%;animation-delay:1.1s"></i>
+        <i style="left:31%;top:34%;animation-delay:2.0s"></i>
+        <i style="left:8%;top:48%;animation-delay:.7s"></i>
+        <i style="left:44%;top:12%;animation-delay:1.6s"></i>
+        <i class="b" style="left:63%;top:22%;animation-delay:.4s"></i>
+        <i style="left:78%;top:14%;animation-delay:2.4s"></i>
+        <i style="left:88%;top:38%;animation-delay:1.3s"></i>
+        <i style="left:71%;top:66%;animation-delay:.9s"></i>
+        <i class="b" style="left:84%;top:80%;animation-delay:1.9s"></i>
+        <i style="left:52%;top:86%;animation-delay:.1s"></i>
+        <i style="left:16%;top:88%;animation-delay:2.7s"></i>
+        <i style="left:93%;top:58%;animation-delay:.5s"></i>
+        <i style="left:38%;top:62%;animation-delay:2.2s"></i>
+      </div>
+      <div class="sp-stage">
+        <svg viewBox="0 0 1024 1024" aria-hidden="true">
+          <defs>
+            <linearGradient id="sp-moon" x1="0.2" y1="0.1" x2="0.8" y2="0.95">
+              <stop offset="0" stop-color="#F4F5F8" />
+              <stop offset="0.55" stop-color="#C9CCD4" />
+              <stop offset="1" stop-color="#7E828E" />
+            </linearGradient>
+            <radialGradient id="sp-glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0.45" stop-color="#C9D2E6" stop-opacity="0.16" />
+              <stop offset="0.7" stop-color="#C9D2E6" stop-opacity="0.05" />
+              <stop offset="1" stop-color="#C9D2E6" stop-opacity="0" />
+            </radialGradient>
+            <radialGradient id="sp-earthshine" cx="38%" cy="62%" r="70%">
+              <stop offset="0" stop-color="#2A2D35" />
+              <stop offset="1" stop-color="#15161B" />
+            </radialGradient>
+            <mask id="sp-crescent" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+              <rect width="1024" height="1024" fill="black" />
+              <circle cx="512" cy="512" r="300" fill="white" />
+              <circle id="sp-cut" cx="628" cy="430" r="262" fill="black" />
+            </mask>
+          </defs>
+          <circle class="sp-halo" cx="512" cy="512" r="500" fill="url(#sp-glow)" />
+          <g class="sp-moon">
+            <circle class="sp-earth" cx="512" cy="512" r="299" fill="url(#sp-earthshine)" />
+            <rect width="1024" height="1024" fill="url(#sp-moon)" mask="url(#sp-crescent)" />
+          </g>
+          <g class="sp-glint" stroke="#F4F5F8" stroke-linecap="round">
+            <line x1="742" y1="248" x2="742" y2="352" stroke-width="3" />
+            <line x1="690" y1="300" x2="794" y2="300" stroke-width="3" />
+          </g>
+          <circle class="sp-star" cx="742" cy="300" r="14" fill="#E9EBF0" />
+        </svg>
+        <div class="sp-word">NOCTURN</div>
+        <div class="sp-rule"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
