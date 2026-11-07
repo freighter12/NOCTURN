@@ -1177,6 +1177,24 @@ pub async fn slow_check(state: State<'_, Shared>, seconds: Option<u64>) -> AppRe
     blocking(move || Ok(crate::system::slowcheck::run(&st, seconds.unwrap_or(5)))).await
 }
 
+/// Name of this copy's startup entry ("NOCTURN"; test builds use their own).
+fn autostart_name(app: &tauri::AppHandle) -> String {
+    app.config().product_name.clone().unwrap_or_else(|| "NOCTURN".into())
+}
+
+/// Whether NOCTURN starts with Windows (quietly, in the tray).
+#[tauri::command]
+pub fn autostart_get(app: tauri::AppHandle) -> crate::autostart::Autostart {
+    crate::autostart::get(&autostart_name(&app))
+}
+
+#[tauri::command]
+pub fn autostart_set(app: tauri::AppHandle, state: State<'_, Shared>, enabled: bool) -> AppResult<crate::autostart::Autostart> {
+    let r = crate::autostart::set(&autostart_name(&app), enabled)?;
+    state.db.audit("info", "user", if enabled { "autostart.on" } else { "autostart.off" }, None);
+    Ok(r)
+}
+
 /// "Report a problem": the report text (already scrubbed of personal details) for the user to review.
 #[tauri::command]
 pub async fn report_preview(state: State<'_, Shared>, input: crate::report::ReportInput) -> AppResult<String> {

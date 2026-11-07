@@ -211,7 +211,9 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after 
 .hero-figure { font: 600 56px/1 var(--font-display); letter-spacing: -0.03em; }
 
 .meter { height: 4px; background: var(--bg-4); border-radius: 4px; overflow: hidden; }
-.meter > span { display: block; height: 100%; border-radius: 4px; background: var(--moon-2); transition: width 600ms var(--ease); }
+/* The fill slides (transform) rather than resizing: no layout on every frame
+   while it moves, which the 1-second telemetry would otherwise cause. */
+.meter > span { display: block; width: 100%; height: 100%; border-radius: 4px; background: var(--moon-2); transition: transform 600ms var(--ease); }
 .meter.warn > span { background: var(--warning); }
 .meter.crit > span { background: var(--critical); }
 

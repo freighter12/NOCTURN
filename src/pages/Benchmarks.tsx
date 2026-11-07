@@ -176,7 +176,7 @@ export function Benchmarks() {
                   <div className="stack" style={{ gap: 6 }}>
                     <div className="small">{progress?.stage ?? "Running"}…</div>
                     <div className="meter" role="progressbar" aria-valuenow={Math.round(progress?.pct ?? 0)} aria-valuemin={0} aria-valuemax={100}>
-                      <span style={{ width: `${progress?.pct ?? 0}%` }} />
+                      <span style={{ transform: `translateX(${(progress?.pct ?? 0) - 100}%)` }} />
                     </div>
                     <button className="btn sm" onClick={() => api.cancelBenchmark()}>Cancel</button>
                   </div>

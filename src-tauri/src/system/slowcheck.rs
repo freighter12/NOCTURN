@@ -206,6 +206,7 @@ pub fn analyse(samples: &[Sample], procs: &[ProcessInfo], ctx: &Context) -> Slow
     let gpu_temp = gpu.and_then(|g| g.temperature_c);
     let uptime_days = last.map(|s| s.uptime_secs as f32 / 86_400.0).unwrap_or(0.0);
     let gaming = ctx.running_game.clone();
+    let secs = (samples.iter().map(|s| s.interval_ms as f32).sum::<f32>() / 1000.0).max(1.0);
 
     let mut gs = groups(procs);
 
@@ -215,7 +216,7 @@ pub fn analyse(samples: &[Sample], procs: &[ProcessInfo], ctx: &Context) -> Slow
     if cpu >= 60.0 {
         let severity = if gaming.is_some() { "info" } else if cpu >= 85.0 { "high" } else { "medium" };
         let who = if top_cpu.is_empty() { "many small background tasks together".to_string() } else { top_cpu.iter().map(|g| format!("{} ({:.0}%)", friendly(&g.name), g.cpu)).collect::<Vec<_>>().join(", ") };
-        let mut detail = format!("The processor averaged {cpu:.0}% over {} seconds. Using it most: {who}.", samples.len().max(1));
+        let mut detail = format!("The processor averaged {cpu:.0}% over {secs:.0} seconds. Using it most: {who}.");
         if let Some(g) = &gaming {
             detail.push_str(&format!(" {g} is running, so high use is expected while you play."));
         }
@@ -374,7 +375,7 @@ pub fn analyse(samples: &[Sample], procs: &[ProcessInfo], ctx: &Context) -> Slow
     };
     SlowReport {
         summary: Summary {
-            seconds: samples.len() as f32 * last.map(|s| s.interval_ms as f32 / 1000.0).unwrap_or(1.0),
+            seconds: secs,
             cpu_pct: cpu,
             memory_pct: mem_pct,
             disk_busy_pct: busy_pct,

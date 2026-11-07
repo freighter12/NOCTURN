@@ -9,6 +9,8 @@
 //! * `db`, `settings`, `logging`, `state`, `commands`
 
 mod ai;
+mod autostart;
+mod background;
 mod commands;
 mod customise;
 mod db;
@@ -48,8 +50,12 @@ pub fn run() {
     }
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            tray::show_main(app);
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // A second "start with Windows" launch stays in the tray; anything
+            // else (Start menu, desktop shortcut) brings the window up.
+            if !args.iter().any(|a| a == autostart::TRAY_FLAG) {
+                tray::show_main(app);
+            }
         }))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -118,8 +124,21 @@ pub fn run() {
             });
 
             app.manage(state);
-            if let Err(e) = tray::init(app.handle()) {
-                tracing::warn!("tray icon unavailable: {e}");
+            let tray_ok = match tray::init(app.handle()) {
+                Ok(()) => true,
+                Err(e) => {
+                    tracing::warn!("tray icon unavailable: {e}");
+                    false
+                }
+            };
+            // The window starts hidden (tauri.conf.json); started with Windows it
+            // stays in the tray, otherwise it opens now.
+            if autostart::started_hidden() && tray_ok {
+                tracing::info!("started with Windows: staying in the tray");
+                background::set_hidden(app.handle(), true);
+            } else if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
             }
             Ok(())
         })
@@ -252,6 +271,8 @@ pub fn run() {
             commands::set_window_backdrop,
             commands::report_preview,
             commands::slow_check,
+            commands::autostart_get,
+            commands::autostart_set,
             commands::report_save,
             commands::games_launch,
             commands::preview_game_profile,

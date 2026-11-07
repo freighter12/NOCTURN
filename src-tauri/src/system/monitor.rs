@@ -261,7 +261,13 @@ fn run(app: AppHandle, state: Shared) {
     let mut process_count = 0usize;
 
     loop {
-        std::thread::sleep(Duration::from_millis(if cfg.paused { 1000 } else { cfg.interval_ms as u64 }));
+        // In the tray with no game running nobody is watching the graphs:
+        // sample every 5 s and scan processes every 10 s. Alerts, app profiles
+        // and rules still work, just a few seconds later. A running game keeps
+        // full speed so play sessions stay accurate.
+        let quiet = crate::background::is_hidden() && state.games.live.lock().map(|l| l.is_none()).unwrap_or(true);
+        let tick_ms = if cfg.paused { 1000 } else if quiet { (cfg.interval_ms as u64).max(5000) } else { cfg.interval_ms as u64 };
+        std::thread::sleep(Duration::from_millis(tick_ms));
         if last_settings.elapsed() >= Duration::from_secs(3) {
             cfg = crate::settings::load(&state.db).monitor;
             last_settings = Instant::now();
@@ -270,8 +276,8 @@ fn run(app: AppHandle, state: Shared) {
             }
         }
 
-        // Process scan roughly every 3 s (every 10 s while paused, for rules).
-        let proc_every = if cfg.paused { Duration::from_secs(10) } else { Duration::from_millis(2900) };
+        // Process scan roughly every 3 s (every 10 s while paused or quiet).
+        let proc_every = if cfg.paused || quiet { Duration::from_secs(10) } else { Duration::from_millis(2900) };
         if procs.last.elapsed() >= proc_every || procs.known.is_empty() {
             process_count = procs.scan(&state);
         }
@@ -348,7 +354,7 @@ fn run(app: AppHandle, state: Shared) {
 
         let sample = Sample {
             ts: chrono::Utc::now().timestamp_millis(),
-            interval_ms: cfg.interval_ms,
+            interval_ms: (elapsed * 1000.0).round() as u32,
             cpu_usage: sys.global_cpu_usage(),
             cpu_per_core: sys.cpus().iter().map(|c| c.usage()).collect(),
             cpu_freq_mhz: sys.cpus().first().map(|c| c.frequency()).unwrap_or(0),

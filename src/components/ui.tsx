@@ -177,7 +177,7 @@ export function Meter({ value, max = 100, warnAt = 80, critAt = 92, label }: { v
   const cls = p >= critAt ? "crit" : p >= warnAt ? "warn" : "";
   return (
     <div className={`meter ${cls}`} role="meter" aria-label={label} aria-valuenow={Math.round(p)} aria-valuemin={0} aria-valuemax={100}>
-      <span style={{ width: `${p}%` }} />
+      <span style={{ transform: `translateX(${p - 100}%)` }} />
     </div>
   );
 }

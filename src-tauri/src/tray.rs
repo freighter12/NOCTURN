@@ -83,6 +83,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, s: &TrayState) -> tauri::Result<ta
 }
 
 pub fn show_main<R: Runtime>(app: &AppHandle<R>) {
+    crate::background::set_hidden(app, false);
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
         let _ = w.unminimize();
@@ -154,10 +155,19 @@ pub fn tray_update(app: AppHandle, state: TrayState) -> AppResult<()> {
 
 /// Close button: hide to the tray (default) or quit, per Settings.
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
-    let WindowEvent::CloseRequested { api, .. } = event else { return };
     if window.label() != "main" {
         return;
     }
+    // Minimised counts as out of view; coming back (taskbar, Alt+Tab, restore)
+    // wakes the page up again.
+    // (Windows sends focus/resize events while a hidden window is created, so
+    // only trust them when the window is really on screen.)
+    if matches!(event, WindowEvent::Resized(_) | WindowEvent::Focused(true)) && window.is_visible().unwrap_or(false) {
+        let minimised = window.is_minimized().unwrap_or(false);
+        tracing::debug!(?event, minimised, "window event");
+        crate::background::set_hidden(window.app_handle(), minimised);
+    }
+    let WindowEvent::CloseRequested { api, .. } = event else { return };
     let app = window.app_handle();
     let Some(st) = app.try_state::<Arc<AppState>>() else { return };
     if !settings::load(&st.db).close_to_tray || app.tray_by_id(TRAY_ID).is_none() {
@@ -165,6 +175,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
     }
     api.prevent_close();
     let _ = window.hide();
+    crate::background::set_hidden(app, true);
     // Say once where the window went.
     if !st.db.get_setting::<bool>(HINT_KEY).ok().flatten().unwrap_or(false) {
         let _ = st.db.set_setting(HINT_KEY, &true);

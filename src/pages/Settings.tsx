@@ -2,6 +2,7 @@
 // the backend and are never readable from the UI), safety defaults, and
 // app information.
 
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState, type ReactNode } from "react";
 import { I } from "../components/Icons";
@@ -83,6 +84,7 @@ export function Settings() {
 
           <Panel title="In the background">
             <div className="list">
+              <StartWithWindows />
               <Row title="Keep running in the tray" desc="The close button hides NOCTURN to the system tray so scheduled checks and app profiles keep working. Quit from the tray menu. Off: closing quits.">
                 <Toggle on={draft.close_to_tray} onChange={(v) => setFlag({ close_to_tray: v })} label="Keep running in the tray" disabled={saving} />
               </Row>
@@ -180,6 +182,37 @@ function UpdatesPanel({ auto, onAuto, disabled }: { auto: boolean; onAuto: (v: b
         </div>
       )}
     </Panel>
+  );
+}
+
+type Autostart = { enabled: boolean; disabled_by_windows: boolean };
+
+/** Start with Windows, quietly in the tray. Read from Windows each time, so
+ *  switching it off in Task Manager's Startup tab shows here too. */
+function StartWithWindows() {
+  const { toast } = useApp();
+  const [s, setS] = useState<Autostart | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    invoke<Autostart>("autostart_get").then(setS).catch(() => setS({ enabled: false, disabled_by_windows: false }));
+  }, []);
+  const change = async (on: boolean) => {
+    setBusy(true);
+    try {
+      setS(await invoke<Autostart>("autostart_set", { enabled: on }));
+    } catch (e) {
+      toast({ tone: "critical", title: "Couldn't change startup", detail: errorMessage(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const desc = s?.disabled_by_windows
+    ? "Turned off in Task Manager's Startup tab. Switch it on here to start with Windows again."
+    : "Opens hidden in the tray when you sign in, so scheduled checks, app profiles and alerts work from the start. While hidden it samples less often and gives memory back.";
+  return (
+    <Row title="Start with Windows" desc={desc}>
+      <Toggle on={!!s?.enabled} onChange={change} label="Start with Windows" disabled={!s || busy} />
+    </Row>
   );
 }
 
