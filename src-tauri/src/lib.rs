@@ -21,6 +21,7 @@ mod music_import;
 mod music_stream;
 mod music_stream_engine;
 mod privacy;
+mod report;
 mod error;
 mod logging;
 mod security;
@@ -249,6 +250,8 @@ pub fn run() {
             commands::list_game_sessions,
             commands::games_covers,
             commands::set_window_backdrop,
+            commands::report_preview,
+            commands::report_save,
             commands::games_launch,
             commands::preview_game_profile,
             commands::apply_game_profile,

@@ -7,6 +7,7 @@ import { useEffect, useRef } from "react";
 import { useApp } from "../lib/app";
 import { useMusic } from "../music/MusicProvider";
 import { openPalette } from "./CommandPalette";
+import { openReport } from "../components/Report";
 import { usePrefs } from "./PrefsProvider";
 import { useWorkspaces } from "./WorkspaceProvider";
 
@@ -38,6 +39,7 @@ export function TrayBridge() {
       else if (id === "music:next") m.next();
       else if (id === "music:prev") m.prev();
       else if (id === "search") openPalette();
+      else if (id === "report") openReport();
       else if (id === "clean") requestApply({ tweakIds: ["performance.clean_temp"], source: "user", label: "Clean temporary files", title: "Clean temporary files" });
       else if (id === "ws:leave") switchTo(null);
       else if (id.startsWith("ws:")) {

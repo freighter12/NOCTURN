@@ -9,6 +9,7 @@ import { PrivacyPanel } from "../components/Privacy";
 import { ErrorNote, Loading, Note, PageHead, Panel, Spinner, Toggle } from "../components/ui";
 import { api, errorMessage, type AiSettings, type AppInfo, type AppSettings, type ConnectionTest, type UpdateInfo, type UpdateProgress } from "../lib/api";
 import { useApp } from "../lib/app";
+import { openReport } from "../components/Report";
 
 const CLAUDE_MODELS = [
   { id: "claude-opus-5-5", label: "Claude Opus 5.5 — most capable" },
@@ -93,7 +94,7 @@ export function Settings() {
 
           <UpdatesPanel auto={draft.auto_update_check} onAuto={(v) => setFlag({ auto_update_check: v })} disabled={saving} />
 
-          <Panel title="About NOCTURN">
+          <Panel title="About NOCTURN" actions={<button className="btn sm" onClick={openReport}>Report a problem…</button>}>
             <dl className="kv">
               <dt>Version</dt>
               <dd>{info?.version ?? "—"}</dd>

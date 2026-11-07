@@ -1170,6 +1170,21 @@ pub async fn list_games(state: State<'_, Shared>, refresh: Option<bool>) -> AppR
     .await
 }
 
+/// "Report a problem": the report text (already scrubbed of personal details) for the user to review.
+#[tauri::command]
+pub async fn report_preview(state: State<'_, Shared>, input: crate::report::ReportInput) -> AppResult<String> {
+    let st = state.inner().clone();
+    blocking(move || Ok(crate::report::build(&st, &input))).await
+}
+
+/// Save the reviewed report to the Desktop and show it in File Explorer.
+#[tauri::command]
+pub fn report_save(state: State<'_, Shared>, text: String) -> AppResult<String> {
+    let path = crate::report::save(&state, &text)?;
+    let _ = crate::report::reveal(&path);
+    Ok(path.display().to_string())
+}
+
 /// Windows 11 window material behind the app: "mica", "acrylic" or "solid".
 /// Fails on systems without it (e.g. Windows 10) — the page then stays solid.
 #[tauri::command]

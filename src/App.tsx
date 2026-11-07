@@ -10,6 +10,7 @@ import { PrefsProvider, usePrefs } from "./shell/PrefsProvider";
 import { SplashBridge } from "./shell/splash";
 import { CommandPalette } from "./shell/CommandPalette";
 import { TrayBridge } from "./shell/TrayBridge";
+import { ReportDialog } from "./components/Report";
 import { lazy, Suspense } from "react";
 import { Loading } from "./components/ui";
 
@@ -116,6 +117,7 @@ function Shell() {
       </div>
       <ApplyFlow />
       <CommandPalette />
+      <ReportDialog />
       <TrayBridge />
       <SplashBridge />
       </WorkspaceProvider>

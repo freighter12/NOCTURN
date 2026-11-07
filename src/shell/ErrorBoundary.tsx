@@ -1,6 +1,7 @@
 // Keeps one failing page from blanking the whole app: the sidebar, player and
 // other pages keep working, and the user can retry or go Home.
 
+import { recordError } from "../lib/errors";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
 interface Props {
@@ -19,6 +20,7 @@ export class ErrorBoundary extends Component<Props, { error: Error | null }> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("page crashed", error, info.componentStack);
+    recordError(`Page crashed: ${error.message}`);
   }
 
   componentDidUpdate(prev: Props) {

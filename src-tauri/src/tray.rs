@@ -79,7 +79,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, s: &TrayState) -> tauri::Result<ta
             .text("music:prev", "Previous track")
             .separator();
     }
-    m.item(&ws).text("clean", "Clean temporary files…").separator().text("quit", "Quit NOCTURN").build()
+    m.item(&ws).text("clean", "Clean temporary files…").separator().text("report", "Report a problem…").text("quit", "Quit NOCTURN").build()
 }
 
 pub fn show_main<R: Runtime>(app: &AppHandle<R>) {
@@ -101,7 +101,7 @@ fn on_menu<R: Runtime>(app: &AppHandle<R>, id: &str) {
         "music:toggle" | "music:next" | "music:prev" => {
             let _ = app.emit("tray", id);
         }
-        _ if id == "search" || id == "clean" || id == "ws:leave" || id.starts_with("ws:") => {
+        _ if id == "search" || id == "clean" || id == "report" || id == "ws:leave" || id.starts_with("ws:") => {
             show_main(app);
             let _ = app.emit("tray", id);
         }
