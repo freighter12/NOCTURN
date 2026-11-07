@@ -83,7 +83,9 @@ pub fn parse_app_manifest(acf: &str) -> Option<(String, String, String)> {
 
 /// Steam entries that are runtimes/tools rather than games.
 fn is_steam_tool(appid: &str, name: &str) -> bool {
-    const TOOL_IDS: &[&str] = &["228980", "1070560", "1391110", "1628350", "250820", "1493710"];
+    // Runtimes, plus utilities sold on Steam: Borderless Gaming, Wallpaper Engine,
+    // Lossless Scaling, Soundpad, OBS Studio.
+    const TOOL_IDS: &[&str] = &["228980", "1070560", "1391110", "1628350", "250820", "1493710", "388080", "431960", "993090", "629520", "1905180"];
     let n = name.to_ascii_lowercase();
     TOOL_IDS.contains(&appid)
         || n.contains("redistributable")
@@ -516,6 +518,7 @@ mod tests {
         let acf = "\"AppState\"\n{\n\t\"appid\"\t\t\"730\"\n\t\"name\"\t\t\"Counter-Strike 2\"\n\t\"installdir\"\t\t\"Counter-Strike Global Offensive\"\n}";
         assert_eq!(parse_app_manifest(acf), Some(("730".into(), "Counter-Strike 2".into(), "Counter-Strike Global Offensive".into())));
         assert!(is_steam_tool("228980", "Steamworks Common Redistributables"));
+        assert!(is_steam_tool("388080", "Borderless Gaming"));
         assert!(!is_steam_tool("730", "Counter-Strike 2"));
     }
 

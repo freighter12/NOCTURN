@@ -1170,6 +1170,13 @@ pub async fn list_games(state: State<'_, Shared>, refresh: Option<bool>) -> AppR
     .await
 }
 
+/// "Why is my PC slow right now?": watch for a few seconds, then explain.
+#[tauri::command]
+pub async fn slow_check(state: State<'_, Shared>, seconds: Option<u64>) -> AppResult<crate::system::slowcheck::SlowReport> {
+    let st = state.inner().clone();
+    blocking(move || Ok(crate::system::slowcheck::run(&st, seconds.unwrap_or(5)))).await
+}
+
 /// "Report a problem": the report text (already scrubbed of personal details) for the user to review.
 #[tauri::command]
 pub async fn report_preview(state: State<'_, Shared>, input: crate::report::ReportInput) -> AppResult<String> {

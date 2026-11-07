@@ -14,6 +14,7 @@ import { primaryGpu, useTelemetry } from "../lib/telemetry";
 import { usePrefs } from "./PrefsProvider";
 import { useMusic } from "../music/MusicProvider";
 import { Art } from "../music/Player";
+import { openSlowCheck } from "../components/SlowCheck";
 import type { WidgetType } from "./prefs";
 
 export interface WidgetDef {
@@ -95,6 +96,7 @@ function Quick() {
         {profiles.data?.active && <> · profile <span style={{ color: "var(--ink-0)" }}>{profiles.data.active.label}</span> active</>}
       </div>
       <div className="chips mt-2">
+        <button className="chip" onClick={openSlowCheck}>Why is my PC slow?</button>
         <button className="chip" onClick={() => navigate("gaming")}>Gaming mode</button>
         <button
           className="chip"

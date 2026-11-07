@@ -70,7 +70,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, s: &TrayState) -> tauri::Result<ta
     }
     let ws = ws.build()?;
 
-    let mut m = MenuBuilder::new(app).text("open", "Open NOCTURN").text("search", "Search…").separator();
+    let mut m = MenuBuilder::new(app).text("open", "Open NOCTURN").text("search", "Search…").text("slow", "Why is my PC slow?").separator();
     if let Some(t) = &s.track {
         m = m
             .item(&MenuItem::with_id(app, "info:track", format!("♪ {}", label(t, 48)), false, None::<&str>)?)
@@ -101,7 +101,7 @@ fn on_menu<R: Runtime>(app: &AppHandle<R>, id: &str) {
         "music:toggle" | "music:next" | "music:prev" => {
             let _ = app.emit("tray", id);
         }
-        _ if id == "search" || id == "clean" || id == "report" || id == "ws:leave" || id.starts_with("ws:") => {
+        _ if id == "search" || id == "clean" || id == "report" || id == "slow" || id == "ws:leave" || id.starts_with("ws:") => {
             show_main(app);
             let _ = app.emit("tray", id);
         }

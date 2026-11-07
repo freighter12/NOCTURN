@@ -251,6 +251,7 @@ pub fn run() {
             commands::games_covers,
             commands::set_window_backdrop,
             commands::report_preview,
+            commands::slow_check,
             commands::report_save,
             commands::games_launch,
             commands::preview_game_profile,

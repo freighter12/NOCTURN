@@ -23,4 +23,5 @@ pub mod process_view;
 pub mod processes;
 pub mod rules;
 pub mod scheduler;
+pub mod slowcheck;
 pub mod services;

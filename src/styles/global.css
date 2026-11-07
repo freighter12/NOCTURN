@@ -833,3 +833,22 @@ html[data-backdrop="mica"], html[data-backdrop="acrylic"] { --panel-bg: var(--pa
 .seg.has-pill button.on { background: transparent; box-shadow: none; }
 .seg-pill { position: absolute; left: 0; top: 0; z-index: 0; border-radius: 4px; background: var(--bg-3); box-shadow: inset 0 0 0 1px var(--line-2); transition: transform 280ms var(--ease), width 280ms var(--ease); pointer-events: none; }
 .report-text { font-size: calc(11.5px * var(--fs, 1)); line-height: 1.45; white-space: pre; overflow: auto; user-select: text; }
+
+/* Why is my PC slow? */
+.modal.slowcheck { width: min(720px, calc(100vw - 80px)); }
+.slow-watch { display: grid; justify-items: center; gap: 14px; padding: 26px 0 18px; text-align: center; }
+.slow-ring { width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--moon) var(--k, 0%), var(--bg-4) 0); -webkit-mask: radial-gradient(circle, transparent 34px, #000 35px); mask: radial-gradient(circle, transparent 34px, #000 35px); transition: background 250ms; }
+.slow-ring .spinner { display: none; }
+.slow-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.slow-chips .chip { cursor: default; }
+.slow-chips .chip.hot { border-color: rgba(208, 59, 59, 0.5); color: var(--ink-critical); }
+.slow-ok { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: var(--radius); background: rgba(12, 163, 12, 0.08); border: 1px solid rgba(12, 163, 12, 0.25); }
+.slow-ok svg { width: 18px; height: 18px; color: var(--ink-good); flex: none; margin-top: 2px; }
+.slow-finding { display: flex; gap: 12px; padding: 12px 14px; border-radius: var(--radius); background: var(--bg-3); border: 1px solid var(--line); }
+.slow-finding .slow-body { flex: 1; min-width: 0; }
+.slow-finding .title { font-weight: 600; color: var(--ink-0); }
+.slow-finding .desc { color: var(--ink-1); font-size: calc(12.5px * var(--fs, 1)); margin-top: 3px; line-height: 1.5; }
+.slow-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; flex: none; background: var(--ink-3); }
+.slow-finding.high .slow-dot { background: var(--critical); box-shadow: 0 0 8px rgba(208, 59, 59, 0.6); }
+.slow-finding.medium .slow-dot { background: var(--warning); }
+.slow-finding.info .slow-dot { background: var(--series-1); }

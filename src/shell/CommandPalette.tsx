@@ -7,6 +7,7 @@ import { I } from "../components/Icons";
 import { api, library, type GameView, type LibraryItem } from "../lib/api";
 import { launchGame } from "../library/games";
 import { openReport } from "../components/Report";
+import { openSlowCheck } from "../components/SlowCheck";
 import { useApp, type PageId } from "../lib/app";
 import { launchItem, useAppIcon } from "../library/tiles";
 import { useMusic } from "../music/MusicProvider";
@@ -77,7 +78,7 @@ const PAGE_WORDS: Partial<Record<PageId, string[]>> = {
   settings: ["privacy", "api key", "preferences"],
 };
 
-const SUGGESTED = ["page:assistant", "action:clean-temp", "page:storage", "page:processes", "music:toggle", "page:studio"];
+const SUGGESTED = ["action:slow", "page:assistant", "action:clean-temp", "page:storage", "page:processes", "music:toggle", "page:studio"];
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
@@ -161,6 +162,7 @@ export function CommandPalette() {
       },
       { id: "action:benchmark", group: "Actions", label: "Run a benchmark", keywords: ["test speed"], icon: "bench", run: () => navigate("benchmarks") },
       { id: "action:crashes", group: "Actions", label: "Check for crashes and problems", keywords: ["diagnose", "why", "bsod"], icon: "diagnostics", run: () => navigate("diagnostics") },
+      { id: "action:slow", group: "Actions", label: "Why is my PC slow?", hint: "5-second check", keywords: ["slow", "lag", "laggy", "freezing", "stutter", "high cpu", "memory", "what is using"], icon: "processes", run: () => openSlowCheck() },
       { id: "action:report", group: "Actions", label: "Report a problem", hint: "Make a report to send", keywords: ["bug", "feedback", "help", "logs", "support", "not working"], icon: "diagnostics", run: () => openReport() },
       { id: "action:undo", group: "Actions", label: "Undo a change", hint: "History", keywords: ["rollback", "revert"], icon: "undo", run: () => navigate("history") },
       { id: "action:dashboard", group: "Actions", label: "Edit the Home dashboard", keywords: ["widgets"], icon: "grid", run: () => navigate("studio") },

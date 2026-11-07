@@ -11,6 +11,7 @@ import { SplashBridge } from "./shell/splash";
 import { CommandPalette } from "./shell/CommandPalette";
 import { TrayBridge } from "./shell/TrayBridge";
 import { ReportDialog } from "./components/Report";
+import { SlowCheck } from "./components/SlowCheck";
 import { lazy, Suspense } from "react";
 import { Loading } from "./components/ui";
 
@@ -118,6 +119,7 @@ function Shell() {
       <ApplyFlow />
       <CommandPalette />
       <ReportDialog />
+      <SlowCheck />
       <TrayBridge />
       <SplashBridge />
       </WorkspaceProvider>
