@@ -1317,6 +1317,31 @@ export interface Playlist {
   created_at: string;
   updated_at: string;
 }
+export interface ImportItem {
+  title: string;
+  artist: string;
+  album: string;
+  duration_ms: number | null;
+  path?: string | null;
+  track_id: number | null;
+  /** "exact" | "likely" | null */
+  confidence: string | null;
+}
+export interface ImportPreview {
+  source: string;
+  name: string;
+  url: string | null;
+  truncated: boolean;
+  items: ImportItem[];
+  matched: number;
+}
+export interface ImportInfo {
+  source: string;
+  url: string | null;
+  imported_at: string;
+  total: number;
+  missing: ImportItem[];
+}
 export interface MusicScanReport {
   folders: number;
   files: number;
@@ -1360,6 +1385,11 @@ export const music = {
   playlists: () => invoke<Playlist[]>("music_playlists"),
   savePlaylist: (playlist: { id?: string | null; name: string; description: string; cover: PlaylistCover; tracks: number[] }) => invoke<Playlist>("music_save_playlist", { playlist }),
   deletePlaylist: (id: string) => invoke<void>("music_delete_playlist", { id }),
+  importPreview: (input: { link?: string; text?: string }) => invoke<ImportPreview>("music_import_preview", { link: input.link ?? null, text: input.text ?? null }),
+  importSave: (data: { playlist_id?: string | null; name: string; source: string; url: string | null; items: ImportItem[] }) => invoke<Playlist>("music_import_save", { import: data }),
+  importInfo: (playlistId: string) => invoke<ImportInfo | null>("music_import_info", { playlistId }),
+  importForget: (playlistId: string) => invoke<void>("music_import_forget", { playlistId }),
+  importOpen: (playlistId: string) => invoke<void>("music_import_open", { playlistId }),
   lyrics: (id: number) => invoke<Lyrics | null>("music_lyrics", { id }),
   session: () => invoke<MusicSession>("music_session"),
   saveSession: (session: MusicSession) => invoke<void>("music_save_session", { session }),

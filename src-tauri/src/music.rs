@@ -442,6 +442,7 @@ pub fn save_playlist(db: &Db, p: PlaylistInput) -> AppResult<Playlist> {
 pub fn delete_playlist(db: &Db, id: &str) -> AppResult<()> {
     let conn = db.conn();
     conn.execute("DELETE FROM music_playlist_tracks WHERE playlist_id = ?1", [id])?;
+    conn.execute("DELETE FROM music_playlist_imports WHERE playlist_id = ?1", [id])?;
     conn.execute("DELETE FROM music_playlists WHERE id = ?1", [id])?;
     Ok(())
 }

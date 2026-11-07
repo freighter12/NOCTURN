@@ -16,6 +16,7 @@ mod games;
 mod library;
 mod library_icons;
 mod music;
+mod music_import;
 mod privacy;
 mod error;
 mod logging;
@@ -131,6 +132,11 @@ pub fn run() {
             commands::music_playlists,
             commands::music_save_playlist,
             commands::music_delete_playlist,
+            commands::music_import_preview,
+            commands::music_import_save,
+            commands::music_import_info,
+            commands::music_import_forget,
+            commands::music_import_open,
             commands::music_lyrics,
             commands::music_session,
             commands::music_save_session,

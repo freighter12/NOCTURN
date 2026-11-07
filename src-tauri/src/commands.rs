@@ -151,6 +151,45 @@ pub fn music_save_playlist(state: State<'_, Shared>, playlist: crate::music::Pla
     crate::music::save_playlist(&state.db, playlist)
 }
 
+// ---- playlist import
+
+/// Read a playlist from a link (Spotify, YouTube, Deezer) or pasted text and match it to the library.
+#[tauri::command]
+pub async fn music_import_preview(state: State<'_, Shared>, link: Option<String>, text: Option<String>) -> AppResult<crate::music_import::ImportPreview> {
+    use crate::music_import as mi;
+    let list = match (link.filter(|l| !l.trim().is_empty()), text.filter(|t| !t.trim().is_empty())) {
+        (Some(l), _) => {
+            let parsed = if mi::is_short_link(&l) { mi::resolve_short(&l).await? } else { mi::parse_link(&l)? };
+            mi::fetch(&parsed).await?
+        }
+        (None, Some(t)) => mi::parse_text(&t)?,
+        (None, None) => return Err(AppError::Invalid("paste a playlist link or a list of songs".into())),
+    };
+    let st = state.inner().clone();
+    blocking(move || mi::match_list(&st.db, list)).await
+}
+
+#[tauri::command]
+pub fn music_import_save(state: State<'_, Shared>, import: crate::music_import::SaveImport) -> AppResult<crate::music::Playlist> {
+    crate::music_import::save(&state.db, import)
+}
+
+#[tauri::command]
+pub async fn music_import_info(state: State<'_, Shared>, playlist_id: String) -> AppResult<Option<crate::music_import::ImportInfo>> {
+    let st = state.inner().clone();
+    blocking(move || crate::music_import::info(&st.db, &playlist_id)).await
+}
+
+#[tauri::command]
+pub fn music_import_forget(state: State<'_, Shared>, playlist_id: String) -> AppResult<()> {
+    crate::music_import::forget(&state.db, &playlist_id)
+}
+
+#[tauri::command]
+pub fn music_import_open(state: State<'_, Shared>, playlist_id: String) -> AppResult<()> {
+    crate::music_import::open_original(&state.db, &playlist_id)
+}
+
 #[tauri::command]
 pub fn music_delete_playlist(state: State<'_, Shared>, id: String) -> AppResult<()> {
     crate::music::delete_playlist(&state.db, &id)

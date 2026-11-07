@@ -709,3 +709,18 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--line-2)
 .tb-search svg { width: 13px; height: 13px; }
 .tb-search kbd { margin: 0; font-size: 10px; }
 .reduce-motion .palette, .reduce-motion .palette-scrim { animation: none; }
+
+/* playlist import */
+.import-summary { display: flex; align-items: center; gap: 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-3); }
+.import-summary .big { font: 600 calc(28px * var(--fs, 1)) / 1 var(--font-display); color: var(--ink-0); white-space: nowrap; }
+.import-list { max-height: 360px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.import-list.compact { max-height: 220px; }
+.import-row { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-bottom: 1px solid var(--line); min-height: 40px; }
+.import-row:last-child { border-bottom: 0; }
+.import-row .ir-body { flex: 1; min-width: 0; }
+.import-row.skipped .ir-body { opacity: 0.5; }
+.import-row.missing .ir-body { color: var(--ink-2); }
+.import-dot { width: 16px; height: 16px; flex: none; display: grid; place-items: center; }
+.import-dot::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); }
+.import-info { padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-2); color: var(--ink-1); font-size: calc(13px * var(--fs, 1)); }
+.import-info > .row > svg { width: 15px; height: 15px; color: var(--ink-2); }

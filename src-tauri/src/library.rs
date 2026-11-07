@@ -352,7 +352,7 @@ pub struct Launched {
     pub detail: String,
 }
 
-fn shell_open(target: &str) -> AppResult<()> {
+pub(crate) fn shell_open(target: &str) -> AppResult<()> {
     #[cfg(windows)]
     unsafe {
         use windows::core::{w, HSTRING};

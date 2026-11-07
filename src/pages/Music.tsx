@@ -10,10 +10,11 @@ import { useApp, useLoad } from "../lib/app";
 import { relative } from "../lib/format";
 import { fmtTime, useMusic } from "../music/MusicProvider";
 import { Art } from "../music/Player";
+import { ImportedInfo, ImportPanel } from "../music/Import";
 import { usePrefs } from "../shell/PrefsProvider";
 
 type Tab = "home" | "search" | "songs" | "albums" | "artists" | "playlists" | "liked" | "history" | "sources";
-type View = { kind: "album"; artist: string; album: string } | { kind: "artist"; name: string } | { kind: "playlist"; id: string } | null;
+type View = { kind: "album"; artist: string; album: string } | { kind: "artist"; name: string } | { kind: "playlist"; id: string } | { kind: "import" } | { kind: "refresh"; id: string; url: string } | null;
 
 // ---------------------------------------------------------------- pieces
 
@@ -120,7 +121,7 @@ function PlaylistArt({ p, size, byId }: { p: Playlist; size: number; byId: Map<n
 
 // --------------------------------------------------------------- detail views
 
-function PlaylistView({ id, onBack }: { id: string; onBack: () => void }) {
+function PlaylistView({ id, onBack, onRefresh }: { id: string; onBack: () => void; onRefresh: (url: string) => void }) {
   const m = useMusic();
   const { toast } = useApp();
   const p = m.playlists.find((x) => x.id === id);
@@ -148,7 +149,7 @@ function PlaylistView({ id, onBack }: { id: string; onBack: () => void }) {
   };
   return (
     <div className="stack" style={{ gap: 16 }}>
-      <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} onClick={onBack}>← Back</button>
+      <button className="btn ghost sm" style={{ alignSelf: "flex-start", justifySelf: "start" }} onClick={onBack}>← Back</button>
       <div className="detail-head">
         <PlaylistArt p={p} size={168} byId={m.byId} />
         <div className="stack" style={{ gap: 6, flex: 1, minWidth: 0 }}>
@@ -187,6 +188,7 @@ function PlaylistView({ id, onBack }: { id: string; onBack: () => void }) {
           )}
         </div>
       </div>
+      <ImportedInfo playlist={p} onRefresh={onRefresh} />
       <div className="small dim">Drag songs to reorder.</div>
       <div className="track-list">
         {tracks.map((t, i) => (
@@ -220,7 +222,7 @@ function AlbumView({ artist, album, onBack }: { artist: string; album: string; o
   const first = tracks[0];
   return (
     <div className="stack" style={{ gap: 16 }}>
-      <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} onClick={onBack}>← Back</button>
+      <button className="btn ghost sm" style={{ alignSelf: "flex-start", justifySelf: "start" }} onClick={onBack}>← Back</button>
       <div className="detail-head">
         <Art track={first} size={168} />
         <div className="stack" style={{ gap: 6 }}>
@@ -245,7 +247,7 @@ function ArtistView({ name, onBack, openAlbum }: { name: string; onBack: () => v
   const top = [...tracks].sort((a, b) => b.plays - a.plays).slice(0, 10);
   return (
     <div className="stack" style={{ gap: 16 }}>
-      <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} onClick={onBack}>← Back</button>
+      <button className="btn ghost sm" style={{ alignSelf: "flex-start", justifySelf: "start" }} onClick={onBack}>← Back</button>
       <div>
         <div className="eyebrow small dim">Artist</div>
         <h1 style={{ margin: "4px 0" }}>{name}</h1>
@@ -382,7 +384,12 @@ export function Music() {
   }
 
   const body = () => {
-    if (view?.kind === "playlist") return <PlaylistView id={view.id} onBack={() => setView(null)} />;
+    if (view?.kind === "playlist") { const id = view.id; return <PlaylistView id={id} onBack={() => setView(null)} onRefresh={(url) => setView({ kind: "refresh", id, url })} />; }
+    if (view?.kind === "import") return <ImportPanel onDone={(p) => setView({ kind: "playlist", id: p.id })} onCancel={() => setView(null)} />;
+    if (view?.kind === "refresh") {
+      const pl = m.playlists.find((x) => x.id === view.id);
+      if (pl) return <ImportPanel refresh={{ playlist: pl, url: view.url }} onDone={(p) => setView({ kind: "playlist", id: p.id })} onCancel={() => setView({ kind: "playlist", id: pl.id })} />;
+    }
     if (view?.kind === "album") return <AlbumView artist={view.artist} album={view.album} onBack={() => setView(null)} />;
     if (view?.kind === "artist") return <ArtistView name={view.name} onBack={() => setView(null)} openAlbum={(artist, album) => setView({ kind: "album", artist, album })} />;
     if (m.loaded && m.tracks.length === 0 && tab !== "sources") return <Onboarding go={() => setTab("sources")} />;
@@ -396,7 +403,7 @@ export function Music() {
               </Shelf>
             )}
             {m.playlists.length > 0 && (
-              <Shelf title="Your playlists" action={<button className="btn ghost sm" onClick={newPlaylist}><I.plus /> New</button>}>
+              <Shelf title="Your playlists" action={<span className="row" style={{ gap: 4 }}><button className="btn ghost sm" onClick={() => open({ kind: "import" })}>Import</button><button className="btn ghost sm" onClick={newPlaylist}><I.plus /> New</button></span>}>
                 {m.playlists.map((p) => <Card key={p.id} art={<PlaylistArt p={p} size={150} byId={m.byId} />} title={p.name} sub={songs(p.tracks.length)} onOpen={() => open({ kind: "playlist", id: p.id })} onPlay={() => m.play(p.tracks)} />)}
               </Shelf>
             )}
@@ -441,7 +448,11 @@ export function Music() {
       case "playlists":
         return (
           <div className="stack" style={{ gap: 12 }}>
-            <button className="btn primary" style={{ alignSelf: "flex-start" }} onClick={newPlaylist}><I.plus /> New playlist</button>
+            <div className="row" style={{ gap: 8 }}>
+              <button className="btn primary" onClick={newPlaylist}><I.plus /> New playlist</button>
+              <button className="btn" onClick={() => open({ kind: "import" })}><I.queue /> Import playlist</button>
+              <span className="small dim">Paste a Spotify, YouTube or Deezer link, or a list of songs.</span>
+            </div>
             {m.playlists.length === 0 ? <div className="small dim">No playlists yet. Create one, or use "New playlist with this" on any song.</div> : (
               <div className="music-grid">{m.playlists.map((p) => <Card key={p.id} art={<PlaylistArt p={p} size={150} byId={m.byId} />} title={p.name} sub={songs(p.tracks.length)} onOpen={() => open({ kind: "playlist", id: p.id })} onPlay={() => m.play(p.tracks)} />)}</div>
             )}

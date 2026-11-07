@@ -43,6 +43,7 @@ const CATEGORIES: &[(&str, &str, &str, &str, Option<&str>)] = &[
     ("maintenance", "Maintenance history", "When scheduled checks ran and what they found.", "SELECT COUNT(*) FROM maintenance_runs", Some("DELETE FROM maintenance_runs;")),
     ("library", "App Library", "Apps, services and websites you added, and when you last opened them.", "SELECT COUNT(*) FROM library_items", Some("UPDATE library_items SET last_opened_at = NULL, open_count = 0;")),
     ("music_index", "Music index", "Titles, artists and albums read from your music folders (the files themselves stay where they are).", "SELECT COUNT(*) FROM music_tracks", None),
+    ("music_imports", "Imported playlist lists", "The song lists of playlists you imported, kept so missing songs can be matched when you add them.", "SELECT COUNT(*) FROM music_playlist_imports", None),
     ("music_history", "Listening history", "What you played and when; used for Recently played and recommendations.", "SELECT COUNT(*) FROM music_plays", Some("DELETE FROM music_plays;")),
 ];
 
@@ -62,6 +63,7 @@ pub fn overview(db: &Db, data_dir: &std::path::Path, ai_endpoint: Option<String>
     let database_bytes = std::fs::metadata(data_dir.join("nocturn.db")).map(|m| m.len()).unwrap_or(0);
     let mut outbound = vec![
         Outbound { what: "Network tests", when: "Only when you (or a maintenance task you turned on) run one", to: "Your router, Cloudflare (1.1.1.1) and Google (8.8.8.8) — pings and DNS lookups only".into() },
+        Outbound { what: "Playlist imports", when: "Only when you paste a playlist link and click Find songs (or Update from link)", to: "Spotify, YouTube or Deezer — a request for that playlist's page; nothing about your PC or library".into() },
         Outbound { what: "Update checks", when: "A minute after start-up and once a day (Settings › Updates), or when you click Check", to: "github.com — a request for the latest version number; nothing about your PC. Downloads only when you click Install".into() },
         Outbound { what: "Support pages and websites", when: "Only when you click them", to: "Opened in your browser; Nocturn sends nothing itself".into() },
     ];

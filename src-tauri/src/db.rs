@@ -244,6 +244,17 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (playlist_id, position)
     );
     "#,
+    // Playlist imports: the original list from another service or a pasted list,
+    // kept so songs missing from the library can be matched later.
+    r#"
+    CREATE TABLE music_playlist_imports (
+        playlist_id TEXT PRIMARY KEY,
+        source      TEXT NOT NULL,
+        url         TEXT,
+        items_json  TEXT NOT NULL,
+        imported_at TEXT NOT NULL
+    );
+    "#,
 ];
 
 #[derive(Clone)]
