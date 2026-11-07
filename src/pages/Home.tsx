@@ -2,7 +2,7 @@
 // come from preferences (edited in Customise › Dashboard).
 
 import { I } from "../components/Icons";
-import { PageHead } from "../components/ui";
+import { SkyHeader } from "../shell/SkyHeader";
 import { useApp } from "../lib/app";
 import { usePrefs } from "../shell/PrefsProvider";
 import { widgetDef } from "../shell/widgets";
@@ -20,16 +20,17 @@ export function Home() {
   const widgets = ws?.widgets ?? prefs.home.widgets;
   return (
     <div className="page">
-      <PageHead
+      <SkyHeader
         eyebrow={ws ? `Workspace · ${ws.name}` : "Nocturn"}
         title={greeting()}
-        desc="Your PC at a glance. Choose what appears here in Customise."
         actions={
-          <button className="btn ghost" onClick={() => navigate("studio")}>
+          <button className="btn ghost sky-btn" onClick={() => navigate("studio")}>
             <I.grid /> Edit dashboard
           </button>
         }
-      />
+      >
+        Your PC at a glance. Choose what appears here in Customise.
+      </SkyHeader>
       {widgets.length === 0 ? (
         <div className="panel">
           <div className="small muted">Your dashboard is empty. Add widgets in Customise › Dashboard.</div>
