@@ -10,6 +10,7 @@ export type PageId =
   | "library"
   | "music"
   | "workspaces"
+  | "winddown"
   | "studio"
   | "overview"
   | "hardware"

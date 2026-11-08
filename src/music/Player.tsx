@@ -64,6 +64,63 @@ function Volume() {
   );
 }
 
+/** Minutes left on the sleep timer, ticking once a second while open. */
+function useSleepLeft() {
+  const { sleep } = useMusic();
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (sleep?.kind !== "time") return;
+    const iv = window.setInterval(() => tick((x) => x + 1), 1000);
+    return () => window.clearInterval(iv);
+  }, [sleep]);
+  if (sleep?.kind !== "time") return null;
+  return Math.max(0, sleep.endsAt - Date.now());
+}
+
+export function SleepTimerButton({ size = "sm" }: { size?: "sm" | "md" }) {
+  const m = useMusic();
+  const [open, setOpen] = useState(false);
+  const left = useSleepLeft();
+  const on = m.sleep != null;
+  const label = m.sleep?.kind === "track" ? "End of song" : left != null ? fmtTime(left) : null;
+  const pick = (v: number | "track" | null) => {
+    m.setSleep(v);
+    setOpen(false);
+  };
+  return (
+    <div className="track-menu" style={{ position: "relative" }}>
+      <button
+        className={`btn ghost ${size === "sm" ? "sm" : ""} ${label ? "" : "icon"} ${on ? "on" : ""}`}
+        aria-label={on ? `Sleep timer: ${label}` : "Sleep timer"}
+        title={on ? `Music stops ${m.sleep?.kind === "track" ? "after this song" : `in ${label}`}` : "Sleep timer"}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <I.moon />
+        {label && <span className="num small">{label}</span>}
+      </button>
+      {open && (
+        <>
+          <div className="ws-backdrop" onClick={() => setOpen(false)} />
+          <div className="ws-menu" style={{ left: "auto", right: 0, transform: "none", top: "auto", bottom: 36, minWidth: 180 }} role="menu" aria-label="Sleep timer">
+            <div className="small dim" style={{ padding: "4px 10px" }}>Stop the music…</div>
+            {[15, 30, 45, 60, 90].map((n) => (
+              <button key={n} role="menuitem" onClick={() => pick(n)}>In {n} minutes</button>
+            ))}
+            <button role="menuitem" className={m.sleep?.kind === "track" ? "on" : ""} onClick={() => pick("track")}>At the end of this song</button>
+            {on && (
+              <>
+                <div className="ws-sep" />
+                <button role="menuitem" onClick={() => pick(null)}>Turn off sleep timer</button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Like({ track }: { track: Track }) {
   const m = useMusic();
   return (
@@ -206,7 +263,7 @@ export function Player() {
             </div>
             <Seek />
             <Controls big />
-            <div className="row" style={{ justifyContent: "center" }}><Volume /></div>
+            <div className="row" style={{ justifyContent: "center", gap: 8 }}><Volume /><SleepTimerButton /></div>
             <Visualiser height={64} />
           </div>
           <div className="pf-right">
@@ -265,6 +322,7 @@ export function Player() {
         </div>
         <div className="pb-right">
           <Volume />
+          <SleepTimerButton />
           <button className={`btn ghost icon sm ${queueOpen ? "on" : ""}`} aria-label="Queue" aria-pressed={queueOpen} onClick={() => setQueueOpen((v) => !v)}><I.queue /></button>
           <ModeMenu mode={mode} set={setMode} />
         </div>

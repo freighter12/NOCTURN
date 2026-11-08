@@ -623,6 +623,52 @@ pub fn serve_track(db: &Db, data_dir: &Path, enabled: bool, id: i64, path: &str,
     fail(502, msg)
 }
 
+/// The whole stream in memory (for measuring its loudness), with a file
+/// extension for the format. At most 40 MB.
+pub fn fetch_all(db: &Db, data_dir: &Path, vid: &str) -> AppResult<(Vec<u8>, &'static str)> {
+    const MAX: u64 = 40 * 1024 * 1024;
+    let mut info = stream_info(db, data_dir, vid).map_err(|e| AppError::msg(e.message()))?;
+    let ext = match info.mime.as_str() {
+        "audio/webm" => "webm",
+        "audio/mpeg" => "mp3",
+        "audio/ogg" => "ogg",
+        _ => "m4a",
+    };
+    let mut out: Vec<u8> = Vec::new();
+    let mut refused = false;
+    wait_until_available(&info);
+    loop {
+        let start = out.len() as u64;
+        let total = info.total.unwrap_or(MAX).min(MAX);
+        if start >= total {
+            break;
+        }
+        let end = (start + CHUNK - 1).min(total - 1);
+        match tauri::async_runtime::block_on(fetch_range(&info, start, end))? {
+            Some((body, _, _, t)) => {
+                if body.is_empty() {
+                    break;
+                }
+                if info.total.is_none() {
+                    info.total = t;
+                }
+                out.extend_from_slice(&body);
+                if t.is_none() && (body.len() as u64) < end - start + 1 {
+                    break;
+                }
+            }
+            None if !refused => {
+                refused = true;
+                forget(vid);
+                info = stream_info(db, data_dir, vid).map_err(|e| AppError::msg(e.message()))?;
+                wait_until_available(&info);
+            }
+            None => return Err(AppError::msg("YouTube refused the stream")),
+        }
+    }
+    Ok((out, ext))
+}
+
 /// Warm the stream link for a track (called for the next song in the queue).
 pub fn prepare(db: &Db, data_dir: &Path, id: i64) {
     let path: Option<String> = db.conn().query_row("SELECT path FROM music_tracks WHERE id = ?1 AND source = 'youtube'", [id], |r| r.get(0)).optional().ok().flatten();

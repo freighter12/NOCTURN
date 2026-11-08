@@ -10,6 +10,8 @@ import { PrefsProvider, usePrefs } from "./shell/PrefsProvider";
 import { SplashBridge } from "./shell/splash";
 import { CommandPalette } from "./shell/CommandPalette";
 import { TrayBridge } from "./shell/TrayBridge";
+import { DiscordBridge } from "./shell/DiscordBridge";
+import { WindDownProvider } from "./shell/WindDownProvider";
 import { ReportDialog } from "./components/Report";
 import { SlowCheck } from "./components/SlowCheck";
 import { lazy, Suspense } from "react";
@@ -36,6 +38,7 @@ const Tweak = lazy(() => import("./pages/Tweak").then((m) => ({ default: m.Tweak
 const Studio = lazy(() => import("./pages/Studio").then((m) => ({ default: m.Studio })));
 const Library = lazy(() => import("./pages/Library").then((m) => ({ default: m.Library })));
 const Workspaces = lazy(() => import("./pages/Workspaces").then((m) => ({ default: m.Workspaces })));
+const WindDown = lazy(() => import("./pages/WindDown").then((m) => ({ default: m.WindDown })));
 const Music = lazy(() => import("./pages/Music").then((m) => ({ default: m.Music })));
 
 function GuardedPages() {
@@ -60,6 +63,8 @@ function Pages() {
       return <Music />;
     case "workspaces":
       return <Workspaces />;
+    case "winddown":
+      return <WindDown />;
     case "studio":
       return <Studio />;
     case "overview":
@@ -105,6 +110,7 @@ function Shell() {
   return (
     <AppProvider>
       <MusicProvider>
+      <WindDownProvider>
       <WorkspaceProvider>
       <div className="shell">
         <TitleBar />
@@ -121,8 +127,10 @@ function Shell() {
       <ReportDialog />
       <SlowCheck />
       <TrayBridge />
+      <DiscordBridge />
       <SplashBridge />
       </WorkspaceProvider>
+      </WindDownProvider>
       </MusicProvider>
     </AppProvider>
   );

@@ -12,10 +12,12 @@ import { fmtTime, useMusic } from "../music/MusicProvider";
 import { Art } from "../music/Player";
 import { ImportedInfo, ImportPanel } from "../music/Import";
 import { StreamingPanel } from "../music/Streaming";
+import { SmartArt, SmartEditor, useSmartLists } from "../music/SmartLists";
+import type { SmartList } from "../music/smart";
 import { usePrefs } from "../shell/PrefsProvider";
 
 type Tab = "home" | "search" | "songs" | "albums" | "artists" | "playlists" | "liked" | "history" | "sources";
-type View = { kind: "album"; artist: string; album: string } | { kind: "artist"; name: string } | { kind: "playlist"; id: string } | { kind: "import" } | { kind: "refresh"; id: string; url: string } | null;
+type View = { kind: "album"; artist: string; album: string } | { kind: "artist"; name: string } | { kind: "playlist"; id: string } | { kind: "import" } | { kind: "refresh"; id: string; url: string } | { kind: "smart"; id: string } | { kind: "smart-edit"; id: string | null } | null;
 
 // ---------------------------------------------------------------- pieces
 
@@ -245,6 +247,37 @@ function PlaylistView({ id, onBack, onRefresh }: { id: string; onBack: () => voi
   );
 }
 
+function SmartView({ list, onBack, onEdit }: { list: SmartList | null; onBack: () => void; onEdit: () => void }) {
+  const m = useMusic();
+  const { toast } = useApp();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  if (!list) return <Empty title="This mix isn't available right now">Built-in mixes appear once there's enough listening to make them.</Empty>;
+  const tracks = list.ids.map((x) => m.byId.get(x)).filter((t): t is Track => !!t);
+  const total = tracks.reduce((a, t) => a + t.duration_ms, 0);
+  return (
+    <div className="stack" style={{ gap: 16 }}>
+      <button className="btn ghost sm" style={{ alignSelf: "flex-start", justifySelf: "start" }} onClick={onBack}>← Back</button>
+      <div className="detail-head">
+        <SmartArt list={list} size={168} />
+        <div className="stack" style={{ gap: 6, flex: 1, minWidth: 0 }}>
+          <div className="eyebrow small dim">{list.rules ? "Smart playlist" : "Made for you"}</div>
+          <h1 style={{ margin: 0 }}>{list.name}</h1>
+          <div className="muted">{list.description}</div>
+          <div className="small dim">{songs(tracks.length)} · {fmtTime(total)} · updates by itself</div>
+          <div className="row" style={{ gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+            <button className="btn primary" disabled={!tracks.length} onClick={() => m.play(tracks.map((t) => t.id))}><I.play /> Play</button>
+            <button className="btn" disabled={!tracks.length} onClick={() => { m.setShuffle(true); m.play(tracks.map((t) => t.id)); }}><I.shuffle /> Shuffle</button>
+            <button className="btn ghost" disabled={!tracks.length} title="Keep these songs as an ordinary playlist that won't change" onClick={async () => { try { const p = await music.savePlaylist({ name: list.name, description: `Saved from the smart playlist on ${new Date().toLocaleDateString()}`, cover: { glyph: list.glyph, colour: list.colour }, tracks: tracks.map((t) => t.id) }); await m.reloadPlaylists(); toast({ tone: "good", title: `Saved as "${p.name}"`, detail: "An ordinary playlist with today's songs." }); } catch (e) { toast({ tone: "critical", title: "Couldn't save", detail: errorMessage(e) }); } }}>Save as playlist</button>
+            {list.rules && <button className="btn ghost" onClick={onEdit}>Edit rules</button>}
+            {list.rules && (confirmDelete ? <button className="btn" onClick={async () => { await music.smartDelete(list.id); onBack(); }}>Delete smart playlist</button> : <button className="btn ghost" onClick={() => setConfirmDelete(true)}>Delete…</button>)}
+          </div>
+        </div>
+      </div>
+      <TrackList tracks={tracks} />
+    </div>
+  );
+}
+
 function AlbumView({ artist, album, onBack }: { artist: string; album: string; onBack: () => void }) {
   const m = useMusic();
   const tracks = m.tracks.filter((t) => t.album_artist === artist && t.album === album);
@@ -373,6 +406,7 @@ export function Music() {
   const [q, setQ] = useState("");
   const history = useLoad(() => music.history(100), [m.tracks.length, m.current?.id]);
   const rec = useLoad(() => music.recommended(), [m.tracks.length]);
+  const smart = useSmartLists();
   const { toast } = useApp();
 
   const albums = useMemo(() => [...new Map(m.tracks.map((t) => [`${t.album_artist}|${t.album}`, t])).values()].sort((a, b) => a.album.localeCompare(b.album)), [m.tracks]);
@@ -420,6 +454,8 @@ export function Music() {
       const pl = m.playlists.find((x) => x.id === view.id);
       if (pl) return <ImportPanel refresh={{ playlist: pl, url: view.url }} onDone={(p) => setView({ kind: "playlist", id: p.id })} onCancel={() => setView({ kind: "playlist", id: pl.id })} />;
     }
+    if (view?.kind === "smart") { const id = view.id; return <SmartView list={smart.find(id)} onBack={() => { smart.reloadCustom(); setView(null); }} onEdit={() => setView({ kind: "smart-edit", id })} />; }
+    if (view?.kind === "smart-edit") { const ex = view.id ? smart.find(view.id) : null; return <SmartEditor existing={ex} onCancel={() => setView(view.id ? { kind: "smart", id: view.id } : null)} onDone={async (id) => { await smart.reloadCustom(); setView({ kind: "smart", id }); }} />; }
     if (view?.kind === "album") return <AlbumView artist={view.artist} album={view.album} onBack={() => setView(null)} />;
     if (view?.kind === "artist") return <ArtistView name={view.name} onBack={() => setView(null)} openAlbum={(artist, album) => setView({ kind: "album", artist, album })} />;
     if (m.loaded && m.tracks.length === 0 && tab !== "sources") return <Onboarding go={() => setTab("sources")} />;
@@ -430,6 +466,11 @@ export function Music() {
             {m.current && (
               <Shelf title="Continue listening">
                 <Card art={<Art track={m.current} size={150} />} title={m.current.title} sub={m.current.artist} onOpen={() => update((p) => ({ ...p, music: { ...p.music, playerMode: "full" } }))} onPlay={m.toggle} />
+              </Shelf>
+            )}
+            {smart.builtins.length > 0 && (
+              <Shelf title="Made for you" action={<span className="small dim">From your own listening, on this PC</span>}>
+                {smart.builtins.map((l) => <Card key={l.id} art={<SmartArt list={l} size={150} />} title={l.name} sub={songs(l.ids.length)} onOpen={() => open({ kind: "smart", id: l.id })} onPlay={() => m.play(l.ids)} />)}
               </Shelf>
             )}
             {m.playlists.length > 0 && (
@@ -483,6 +524,12 @@ export function Music() {
               <button className="btn" onClick={() => open({ kind: "import" })}><I.queue /> Import playlist</button>
               <span className="small dim">Paste a Spotify, YouTube or Deezer link, or a list of songs.</span>
             </div>
+            <div className="row between mt-1"><div className="section-title" style={{ margin: 0 }}>Smart playlists</div><button className="btn ghost sm" onClick={() => open({ kind: "smart-edit", id: null })}><I.smart /> New smart playlist</button></div>
+            <div className="small dim">They fill themselves from rules you set — "jazz I've liked", "added this month", "not played in a year" — and stay up to date.</div>
+            <div className="music-grid">
+              {[...smart.custom, ...smart.builtins].map((l) => <Card key={l.id} art={<SmartArt list={l} size={150} />} title={l.name} sub={l.rules ? songs(l.ids.length) : `Made for you · ${songs(l.ids.length)}`} onOpen={() => open({ kind: "smart", id: l.id })} onPlay={l.ids.length ? () => m.play(l.ids) : undefined} />)}
+            </div>
+            <div className="section-title" style={{ margin: "8px 0 0" }}>Your playlists</div>
             {m.playlists.length === 0 ? <div className="small dim">No playlists yet. Create one, or use "New playlist with this" on any song.</div> : (
               <div className="music-grid">{m.playlists.map((p) => <Card key={p.id} art={<PlaylistArt p={p} size={150} byId={m.byId} />} title={p.name} sub={songs(p.tracks.length)} onOpen={() => open({ kind: "playlist", id: p.id })} onPlay={() => m.play(p.tracks)} />)}</div>
             )}

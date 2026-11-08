@@ -1444,3 +1444,131 @@ pub async fn empty_recycle_bin(state: State<'_, Shared>) -> AppResult<()> {
     })
     .await
 }
+
+// ------------------------------------------------------- music: levelling
+
+/// Measure these songs' loudness soon (`urgent`: they're about to play).
+#[tauri::command]
+pub fn music_loudness_request(app: tauri::AppHandle, state: State<'_, Shared>, ids: Vec<i64>, urgent: bool) {
+    let ids: Vec<i64> = ids.into_iter().take(2000).collect();
+    crate::music_loudness::request(app, state.inner().clone(), &ids, urgent);
+}
+
+/// Measure every local song that hasn't been yet, in the background.
+#[tauri::command]
+pub async fn music_loudness_backfill(app: tauri::AppHandle, state: State<'_, Shared>) -> AppResult<usize> {
+    let st = state.inner().clone();
+    let ids = blocking({
+        let st = st.clone();
+        move || crate::music_loudness::missing(&st.db)
+    })
+    .await?;
+    let n = ids.len();
+    crate::music_loudness::request(app, st, &ids, false);
+    Ok(n)
+}
+
+// ------------------------------------------------------ music: smart lists
+
+#[tauri::command]
+pub async fn music_stats(state: State<'_, Shared>) -> AppResult<crate::music_smart::Stats> {
+    let st = state.inner().clone();
+    blocking(move || crate::music_smart::stats(&st.db)).await
+}
+
+#[tauri::command]
+pub fn music_smart_list(state: State<'_, Shared>) -> AppResult<Vec<crate::music_smart::SmartPlaylist>> {
+    crate::music_smart::list(&state.db)
+}
+
+#[tauri::command]
+pub fn music_smart_save(state: State<'_, Shared>, playlist: crate::music_smart::SmartInput) -> AppResult<crate::music_smart::SmartPlaylist> {
+    crate::music_smart::save(&state.db, playlist)
+}
+
+#[tauri::command]
+pub fn music_smart_delete(state: State<'_, Shared>, id: String) -> AppResult<()> {
+    crate::music_smart::delete(&state.db, &id)
+}
+
+// ---------------------------------------------------------------- discord
+
+const DISCORD_ID_KEY: &str = "discord.client_id";
+
+fn discord_client_id(db: &crate::db::Db) -> String {
+    db.get_setting::<String>(DISCORD_ID_KEY).ok().flatten().filter(|s| crate::discord::valid_client_id(s)).unwrap_or_else(|| crate::discord::CLIENT_ID.to_string())
+}
+
+/// Show what's playing on Discord (None clears it). For a streamed song the
+/// YouTube thumbnail and link are filled in here from the track.
+#[tauri::command]
+pub fn discord_presence(state: State<'_, Shared>, presence: Option<crate::discord::Presence>, track_id: Option<i64>) {
+    let mut p = presence;
+    if let (Some(p), Some(id)) = (p.as_mut(), track_id) {
+        let path: Option<String> = state.db.conn().query_row("SELECT path FROM music_tracks WHERE id = ?1 AND source = 'youtube'", [id], |r| r.get(0)).ok();
+        if let Some(vid) = path.as_deref().and_then(|x| x.strip_prefix("youtube:")).filter(|v| crate::music_stream::valid_video_id(v)) {
+            p.image_url = Some(format!("https://i.ytimg.com/vi/{vid}/mqdefault.jpg"));
+            p.link = Some(format!("https://www.youtube.com/watch?v={vid}"));
+        } else {
+            p.image_url = None;
+            p.link = None;
+        }
+    }
+    crate::discord::set(&discord_client_id(&state.db), p);
+}
+
+#[tauri::command]
+pub fn discord_status(state: State<'_, Shared>) -> crate::discord::Status {
+    crate::discord::status(&discord_client_id(&state.db))
+}
+
+/// Use your own Discord application (its name is what Discord shows). Empty = the built-in one.
+#[tauri::command]
+pub fn discord_set_client_id(state: State<'_, Shared>, id: String) -> AppResult<crate::discord::Status> {
+    let id = id.trim().to_string();
+    if id.is_empty() {
+        state.db.set_setting(DISCORD_ID_KEY, &Option::<String>::None)?;
+    } else if crate::discord::valid_client_id(&id) {
+        state.db.set_setting(DISCORD_ID_KEY, &id)?;
+    } else {
+        return Err(AppError::Invalid("a Discord Application ID is a long number (17–20 digits)".into()));
+    }
+    Ok(crate::discord::status(&discord_client_id(&state.db)))
+}
+
+// --------------------------------------------------------------- wind-down
+
+#[tauri::command]
+pub fn winddown_status(state: State<'_, Shared>) -> crate::winddown::Status {
+    crate::winddown::status(&state.db)
+}
+
+#[tauri::command]
+pub fn winddown_save(app: tauri::AppHandle, state: State<'_, Shared>, config: crate::winddown::Config) -> AppResult<crate::winddown::Status> {
+    crate::winddown::save(&app, &state, config)
+}
+
+#[tauri::command]
+pub fn winddown_start(app: tauri::AppHandle, state: State<'_, Shared>, minutes: u32) -> AppResult<crate::winddown::Status> {
+    crate::winddown::start_now(&app, &state, minutes)
+}
+
+#[tauri::command]
+pub fn winddown_stop(app: tauri::AppHandle, state: State<'_, Shared>) -> AppResult<crate::winddown::Status> {
+    crate::winddown::stop(&app, &state)
+}
+
+#[tauri::command]
+pub fn winddown_snooze(app: tauri::AppHandle, state: State<'_, Shared>, minutes: u32) -> AppResult<crate::winddown::Status> {
+    crate::winddown::snooze(&app, &state, minutes)
+}
+
+#[tauri::command]
+pub fn winddown_cancel_sleep(app: tauri::AppHandle, state: State<'_, Shared>) -> AppResult<crate::winddown::Status> {
+    crate::winddown::cancel_sleep(&app, &state)
+}
+
+#[tauri::command]
+pub fn winddown_preview_warm(state: State<'_, Shared>, strength: f64) {
+    crate::winddown::preview_warm(state.inner().clone(), strength);
+}

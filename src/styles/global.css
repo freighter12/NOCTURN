@@ -854,3 +854,31 @@ html[data-backdrop="mica"], html[data-backdrop="acrylic"] { --panel-bg: var(--pa
 .slow-finding.high .slow-dot { background: var(--critical); box-shadow: 0 0 8px rgba(208, 59, 59, 0.6); }
 .slow-finding.medium .slow-dot { background: var(--warning); }
 .slow-finding.info .slow-dot { background: var(--series-1); }
+
+/* ------------------------------------------------------------ wind-down */
+
+.wd-hero { position: relative; overflow: hidden; padding: 22px 24px; min-height: 150px; display: flex; align-items: center; }
+.wd-hero .wd-sky { position: absolute; inset: 0; pointer-events: none; opacity: 0.9;
+  background: radial-gradient(120% 140% at 85% 0%, rgba(var(--accent-rgb), 0.10), transparent 60%); }
+.wd-hero.on .wd-sky { background:
+  radial-gradient(120% 140% at 85% 0%, rgba(255, 176, 96, calc(0.06 + var(--wd, 0) * 0.14)), transparent 60%),
+  linear-gradient(180deg, rgba(20, 24, 48, calc(var(--wd, 0) * 0.35)), transparent); }
+.wd-moon { position: absolute; right: 48px; top: calc(26px + var(--wd, 0) * 46px); width: 54px; height: 54px; border-radius: 50%;
+  background: var(--moon, #dfe2e8); box-shadow: 0 0 40px rgba(var(--accent-rgb), 0.25); transition: top 1.2s ease;
+  -webkit-mask: radial-gradient(circle at 70% 35%, transparent 21px, #000 22px); mask: radial-gradient(circle at 70% 35%, transparent 21px, #000 22px); }
+.wd-hero.on .wd-moon { background: #f3d9b1; box-shadow: 0 0 46px rgba(255, 190, 120, 0.35); }
+.wd-hero h2 { font-size: calc(22px * var(--fs, 1)); }
+.wd-progress { height: 6px; border-radius: 3px; background: var(--bg-4, var(--bg-3)); overflow: hidden; max-width: 420px; margin-top: 6px; }
+.wd-progress span { display: block; height: 100%; background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.7), #f3b77a); border-radius: inherit; transition: width 0.8s ease; }
+@media (max-width: 1100px) { .wd-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ------------------------------------------------------ smart playlists */
+
+.smart-art { color: rgba(255, 255, 255, 0.92); font-weight: 600; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35); }
+.smart-rule { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.smart-rule .input { width: 180px; }
+.smart-rule input[type="number"].input { width: 100px; }
+.wd-days .chip.on { border-color: rgba(var(--accent-rgb), 0.55); background: rgba(var(--accent-rgb), 0.14); color: var(--ink-0); }
+.wd-days .chip { min-width: 44px; }
+.smart-editor .select { width: auto; }
+.smart-editor .smart-rule .select:first-child { min-width: 150px; }

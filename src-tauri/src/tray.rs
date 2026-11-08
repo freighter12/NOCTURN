@@ -27,6 +27,9 @@ pub struct TrayState {
     pub track: Option<String>,
     pub playing: bool,
     pub workspaces: Vec<TrayWorkspace>,
+    /// Wind-down is running.
+    #[serde(default)]
+    pub winddown: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -79,6 +82,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, s: &TrayState) -> tauri::Result<ta
             .text("music:prev", "Previous track")
             .separator();
     }
+    m = m.text("winddown", if s.winddown { "Stop winding down" } else { "Wind down now" });
     m.item(&ws).text("clean", "Clean temporary files…").separator().text("report", "Report a problem…").text("quit", "Quit NOCTURN").build()
 }
 
@@ -99,7 +103,7 @@ fn on_menu<R: Runtime>(app: &AppHandle<R>, id: &str) {
             app.exit(0);
         }
         // Playback works with the window hidden.
-        "music:toggle" | "music:next" | "music:prev" => {
+        "music:toggle" | "music:next" | "music:prev" | "winddown" => {
             let _ = app.emit("tray", id);
         }
         _ if id == "search" || id == "clean" || id == "report" || id == "slow" || id == "ws:leave" || id.starts_with("ws:") => {
@@ -183,6 +187,11 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
     }
 }
 
+/// A notification that ignores quiet hours (the wind-down sleep warning).
+pub fn notify_always<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
+    show_notification(app, title, body);
+}
+
 fn show_notification<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
     if let Err(e) = app.notification().builder().title(title).body(body).show() {
         tracing::warn!("notification failed: {e}");
@@ -194,7 +203,7 @@ fn show_notification<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
 /// (then the in-app toast is enough).
 pub fn notify<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
     let Some(st) = app.try_state::<Arc<AppState>>() else { return };
-    if !settings::load(&st.db).desktop_notifications {
+    if !settings::load(&st.db).desktop_notifications || crate::winddown::quiet(&st.db) {
         return;
     }
     let in_front = app
@@ -227,6 +236,7 @@ mod tests {
                 TrayWorkspace { id: "bad id;".into(), name: "X".into(), active: false },
                 TrayWorkspace { id: "ws-2".into(), name: " ".into(), active: false },
             ],
+            winddown: false,
         });
         assert_eq!(s.track, None);
         assert_eq!(s.workspaces.len(), 1);

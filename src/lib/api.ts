@@ -1307,6 +1307,10 @@ export interface Track {
   added_at: string;
   plays: number;
   last_played: string | null;
+  /** Integrated loudness (LUFS) for volume levelling, once measured. */
+  loudness: number | null;
+  /** Sample peak (linear), once measured. */
+  peak: number | null;
 }
 export interface PlaylistCover {
   track_id?: number | null;
@@ -1439,6 +1443,96 @@ export const music = {
   setLyricsOffset: (id: number, offsetMs: number) => invoke<number>("music_set_lyrics_offset", { id, offsetMs }),
   session: () => invoke<MusicSession>("music_session"),
   saveSession: (session: MusicSession) => invoke<void>("music_save_session", { session }),
+  /** Measure these songs' loudness soon; results arrive as `music-loudness` events. */
+  loudnessRequest: (ids: number[], urgent: boolean) => invoke<void>("music_loudness_request", { ids, urgent }),
+  loudnessBackfill: () => invoke<number>("music_loudness_backfill"),
+  stats: () => invoke<MusicStats>("music_stats"),
+  smartList: () => invoke<SmartPlaylistRecord[]>("music_smart_list"),
+  smartSave: (playlist: { id?: string | null; name: string; rules: unknown }) => invoke<SmartPlaylistRecord>("music_smart_save", { playlist }),
+  smartDelete: (id: string) => invoke<void>("music_smart_delete", { id }),
+};
+
+export interface MusicStats {
+  /** [track, plays] in the last 30 days. */
+  recent: [number, number][];
+  /** [track, local hour, plays] over the last year. */
+  by_hour: [number, number, number][];
+}
+export interface SmartPlaylistRecord {
+  id: string;
+  name: string;
+  rules: unknown;
+  created_at: string;
+  updated_at: string;
+}
+export interface LoudnessMeasured {
+  id: number;
+  lufs: number | null;
+  peak: number | null;
+}
+
+// ---------------------------------------------------------------- discord
+
+export interface DiscordStatus {
+  configured: boolean;
+  connected: boolean;
+  user: string | null;
+  error: string | null;
+}
+export interface DiscordPresence {
+  title: string;
+  artist: string;
+  album: string;
+  start_ms: number | null;
+  end_ms: number | null;
+  paused: boolean;
+}
+export const discord = {
+  presence: (presence: DiscordPresence | null, trackId: number | null) => invoke<void>("discord_presence", { presence, trackId }),
+  status: () => invoke<DiscordStatus>("discord_status"),
+  setClientId: (id: string) => invoke<DiscordStatus>("discord_set_client_id", { id }),
+};
+
+// -------------------------------------------------------------- wind-down
+
+export type BedtimeAction = "nothing" | "screen_off" | "sleep";
+export interface WindDownConfig {
+  scheduled: boolean;
+  bedtime: string;
+  lead_min: number;
+  /** 0 = Monday … 6 = Sunday. */
+  days: number[];
+  morning: string;
+  warm: boolean;
+  warm_strength: number;
+  music_fade: boolean;
+  music_floor: number;
+  music_stop: boolean;
+  playlist: string | null;
+  quiet: boolean;
+  bedtime_action: BedtimeAction;
+}
+export interface WindDownStatus {
+  phase: "off" | "winding" | "night";
+  progress: number;
+  started_at: string | null;
+  bedtime: string | null;
+  morning: string | null;
+  manual: boolean;
+  sleep_at: string | null;
+  next_start: string | null;
+  warm_applied: number;
+  note: string | null;
+  config: WindDownConfig;
+}
+export const winddown = {
+  status: () => invoke<WindDownStatus>("winddown_status"),
+  save: (config: WindDownConfig) => invoke<WindDownStatus>("winddown_save", { config }),
+  start: (minutes: number) => invoke<WindDownStatus>("winddown_start", { minutes }),
+  stop: () => invoke<WindDownStatus>("winddown_stop"),
+  snooze: (minutes: number) => invoke<WindDownStatus>("winddown_snooze", { minutes }),
+  cancelSleep: () => invoke<WindDownStatus>("winddown_cancel_sleep"),
+  previewWarm: (strength: number) => invoke<void>("winddown_preview_warm", { strength }),
 };
 
 /** Unofficial YouTube streaming (opt-in). */

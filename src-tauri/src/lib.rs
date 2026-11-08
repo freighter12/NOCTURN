@@ -14,12 +14,15 @@ mod background;
 mod commands;
 mod customise;
 mod db;
+mod discord;
 mod games;
 mod library;
 mod lyrics_online;
 mod library_icons;
 mod music;
 mod music_import;
+mod music_loudness;
+mod music_smart;
 mod music_stream;
 mod music_stream_engine;
 mod privacy;
@@ -37,6 +40,7 @@ mod tray;
 mod updates;
 mod tweaks;
 mod util;
+mod winddown;
 
 use std::sync::Arc;
 
@@ -106,6 +110,7 @@ pub fn run() {
             system::scheduler::start(app.handle().clone(), state.clone());
             system::app_profiles::start(app.handle().clone(), state.clone());
             updates::start(app.handle().clone());
+            winddown::start(app.handle().clone(), state.clone());
             // Keep yt-dlp current if streaming is set up (YouTube breaks old versions).
             let upd = state.clone();
             tauri::async_runtime::spawn(async move {
@@ -181,6 +186,22 @@ pub fn run() {
             commands::music_lyrics,
             commands::music_session,
             commands::music_save_session,
+            commands::music_loudness_request,
+            commands::music_loudness_backfill,
+            commands::music_stats,
+            commands::music_smart_list,
+            commands::music_smart_save,
+            commands::music_smart_delete,
+            commands::discord_presence,
+            commands::discord_status,
+            commands::discord_set_client_id,
+            commands::winddown_status,
+            commands::winddown_save,
+            commands::winddown_start,
+            commands::winddown_stop,
+            commands::winddown_snooze,
+            commands::winddown_cancel_sleep,
+            commands::winddown_preview_warm,
             commands::library_list,
             commands::library_start_apps,
             commands::library_services,

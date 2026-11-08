@@ -51,7 +51,7 @@ tracing = "0.1.44"
 tracing-appender = "0.2.5"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 uuid = { version = "1.29.0", features = ["v4", "serde"] }
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Performance", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_Security", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_System_Power", "Win32_NetworkManagement_WiFi", "Win32_Security_Credentials", "Win32_Security_WinTrust", "Win32_Security_Cryptography", "Win32_System_Com", "Win32_Storage_FileSystem", "Win32_System_Registry", "Win32_System_Services", "Win32_Graphics_Gdi"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Performance", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_Security", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_System_Power", "Win32_NetworkManagement_WiFi", "Win32_Security_Credentials", "Win32_Security_WinTrust", "Win32_Security_Cryptography", "Win32_System_Com", "Win32_Storage_FileSystem", "Win32_System_Registry", "Win32_System_Services", "Win32_Graphics_Gdi", "Win32_UI_ColorSystem"] }
 winreg = "0.56.0"
 webview2-com = "0.39"
 nocturn-bench = { path = "bench" }
@@ -59,6 +59,8 @@ wmi = "0.18.4"
 lofty = "0.25.5"
 png = "0.18"
 base64 = "0.21"
+symphonia = { version = "0.5", default-features = false, features = ["mp3", "aac", "isomp4", "flac", "wav", "pcm", "vorbis", "ogg", "alac", "adpcm"] }
+ebur128 = "0.1"
 
 [dev-dependencies]
 tempfile = "3.27.0"

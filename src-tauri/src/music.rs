@@ -241,16 +241,21 @@ pub struct Track {
     pub added_at: String,
     pub plays: i64,
     pub last_played: Option<String>,
+    /// Integrated loudness (LUFS) for volume levelling, once known.
+    pub loudness: Option<f64>,
+    /// Sample peak (linear), once known.
+    pub peak: Option<f64>,
 }
 
 pub fn tracks(db: &Db) -> AppResult<Vec<Track>> {
     let conn = db.conn();
     let mut st = conn.prepare(
         "SELECT t.id, t.source, t.title, t.artist, t.album, t.album_artist, t.track_no, t.disc_no, t.year, t.genre, t.duration_ms, t.has_art, t.added_at,
-                (l.track_id IS NOT NULL), COALESCE(p.n, 0), p.last
+                (l.track_id IS NOT NULL), COALESCE(p.n, 0), p.last, lo.lufs, lo.peak
          FROM music_tracks t
          LEFT JOIN music_likes l ON l.track_id = t.id
          LEFT JOIN (SELECT track_id, COUNT(*) n, MAX(played_at) last FROM music_plays GROUP BY track_id) p ON p.track_id = t.id
+         LEFT JOIN music_loudness lo ON lo.track_id = t.id AND lo.key = CASE WHEN t.source = 'youtube' THEN t.path ELSE t.size || ':' || t.mtime END
          ORDER BY t.album_artist COLLATE NOCASE, t.album COLLATE NOCASE, t.disc_no, t.track_no, t.title COLLATE NOCASE",
     )?;
     let rows = st
@@ -272,6 +277,8 @@ pub fn tracks(db: &Db) -> AppResult<Vec<Track>> {
                 liked: r.get::<_, i64>(13)? != 0,
                 plays: r.get(14)?,
                 last_played: r.get(15)?,
+                loudness: r.get(16)?,
+                peak: r.get(17)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -891,7 +898,7 @@ mod tests {
 
     #[test]
     fn recommendations_come_from_listening() {
-        let mk = |id: i64, artist: &str, plays: i64, liked: bool| Track { id, source: "local".into(), title: format!("t{id}"), artist: artist.into(), album: "a".into(), album_artist: artist.into(), track_no: None, disc_no: None, year: None, genre: String::new(), duration_ms: 1, has_art: false, liked, added_at: String::new(), plays, last_played: None };
+        let mk = |id: i64, artist: &str, plays: i64, liked: bool| Track { id, source: "local".into(), title: format!("t{id}"), artist: artist.into(), album: "a".into(), album_artist: artist.into(), track_no: None, disc_no: None, year: None, genre: String::new(), duration_ms: 1, has_art: false, liked, added_at: String::new(), plays, last_played: None, loudness: None, peak: None };
         let all = vec![mk(1, "A", 10, false), mk(2, "A", 0, false), mk(3, "B", 0, false), mk(4, "C", 0, true)];
         let r = recommended(&all, 10);
         assert_eq!(r[0], 2, "unplayed track by most-played artist first");

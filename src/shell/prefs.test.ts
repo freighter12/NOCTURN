@@ -34,6 +34,9 @@ describe("sanitize", () => {
     expect(p.navigation.order[0]).toBe("settings");
     expect(p.navigation.order[1]).toBe("home");
     expect([...p.navigation.order].sort()).toEqual([...SECTION_IDS].sort());
+    // A new section lands after its default neighbour, not at the end.
+    const q = clean({ navigation: { order: ["home", "library", "music", "workspaces", "ai", "gaming", "system", "studio", "settings"] } });
+    expect(q.navigation.order.indexOf("winddown")).toBe(q.navigation.order.indexOf("workspaces") + 1);
   });
 
   it("rejects unknown pages for start page and pins", () => {

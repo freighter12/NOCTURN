@@ -95,6 +95,20 @@ export interface Prefs {
     onlineLyrics: boolean;
     /** Highlight word by word (estimated when the lyrics only time whole lines). */
     wordSync: boolean;
+    /** Seconds the end of one song overlaps the next (0 = off, up to 12). */
+    crossfade: number;
+    /** Start the next song the moment this one ends, with no gap. */
+    gapless: boolean;
+    /** Albums that run track to track play gaplessly, never crossfaded. */
+    keepAlbums: boolean;
+    /** Level every song to the same loudness. */
+    normalize: boolean;
+    /** Show what you're listening to on your Discord profile. */
+    discord: boolean;
+    /** Include Discord's progress bar (song length). */
+    discordProgress: boolean;
+    /** Keep showing the song on Discord while paused. */
+    discordWhenPaused: boolean;
   };
   workspaces: {
     /** ID of the active workspace; null = none (plain Nocturn). */
@@ -129,7 +143,7 @@ export const DEFAULT_PREFS: Prefs = {
   version: PREFS_VERSION,
   appearance: { theme: "nocturn", accent: null, radius: 1, transparency: 0, blur: 0, shadows: true, borders: true, highContrast: false, background: "plain", customThemes: [], intro: "full", backdrop: "solid" },
   navigation: {
-    order: ["home", "library", "music", "workspaces", "ai", "gaming", "system", "studio", "settings"],
+    order: ["home", "library", "music", "workspaces", "winddown", "ai", "gaming", "system", "studio", "settings"],
     hidden: [],
     pinned: [],
     expanded: ["system"],
@@ -138,7 +152,7 @@ export const DEFAULT_PREFS: Prefs = {
     compact: false,
   },
   home: { widgets: DEFAULT_WIDGETS },
-  music: { playerMode: "standard", volume: 0.8, visualiser: true, showLyrics: true, onlineLyrics: true, wordSync: true },
+  music: { playerMode: "standard", volume: 0.8, visualiser: true, showLyrics: true, onlineLyrics: true, wordSync: true, crossfade: 0, gapless: true, keepAlbums: true, normalize: true, discord: false, discordProgress: true, discordWhenPaused: false },
   workspaces: { active: null, list: [], startWith: null, confirmLaunch: true },
   accessibility: { reduceMotion: false, fontScale: 1, uiScale: 1 },
 };
@@ -226,9 +240,16 @@ export function sanitize(raw: unknown, pages: readonly string[], sections: reado
   const w = isObj(r.workspaces) ? r.workspaces : {};
   const x = isObj(r.accessibility) ? r.accessibility : {};
 
-  // Order: keep the stored order of known sections, append any new ones.
+  // Order: keep the stored order of known sections, and fit in any new ones.
   const stored = strList(n.order, sections) ?? [];
-  const order = [...stored, ...d.navigation.order.filter((s) => sections.includes(s) && !stored.includes(s)), ...sections.filter((s) => !stored.includes(s) && !d.navigation.order.includes(s))];
+  // A section added in a newer version goes after the section it follows by default.
+  const order = [...stored];
+  for (const [i, s] of d.navigation.order.entries()) {
+    if (!sections.includes(s) || order.includes(s)) continue;
+    const before = d.navigation.order.slice(0, i).reverse().find((x) => order.includes(x));
+    order.splice(before ? order.indexOf(before) + 1 : order.length, 0, s);
+  }
+  for (const s of sections) if (!order.includes(s)) order.push(s);
   const hidden = (strList(n.hidden, sections) ?? []).filter((s) => !LOCKED_SECTIONS.includes(s));
 
   const customThemes: Theme[] = [];
@@ -280,6 +301,13 @@ export function sanitize(raw: unknown, pages: readonly string[], sections: reado
       showLyrics: bool(m.showLyrics, d.music.showLyrics),
       onlineLyrics: bool(m.onlineLyrics, d.music.onlineLyrics),
       wordSync: bool(m.wordSync, d.music.wordSync),
+      crossfade: Math.round(num(m.crossfade, 0, 12, d.music.crossfade)),
+      gapless: bool(m.gapless, d.music.gapless),
+      keepAlbums: bool(m.keepAlbums, d.music.keepAlbums),
+      normalize: bool(m.normalize, d.music.normalize),
+      discord: bool(m.discord, d.music.discord),
+      discordProgress: bool(m.discordProgress, d.music.discordProgress),
+      discordWhenPaused: bool(m.discordWhenPaused, d.music.discordWhenPaused),
     },
     workspaces: {
       active: typeof w.active === "string" && workspaces.some((x) => x.id === w.active) ? w.active : null,

@@ -11,12 +11,14 @@ import { openReport } from "../components/Report";
 import { openSlowCheck } from "../components/SlowCheck";
 import { usePrefs } from "./PrefsProvider";
 import { useWorkspaces } from "./WorkspaceProvider";
+import { useWindDown } from "./WindDownProvider";
 
 export function TrayBridge() {
   const m = useMusic();
   const { prefs, loaded } = usePrefs();
   const { requestApply } = useApp();
   const { switchTo } = useWorkspaces();
+  const winding = (useWindDown().status?.phase ?? "off") !== "off";
 
   const track = m.current ? `${m.current.title || "Untitled"} — ${m.current.artist || "Unknown artist"}` : null;
   const wsKey = JSON.stringify(prefs.workspaces.list.map((w) => [w.id, w.name, w.id === prefs.workspaces.active]));
@@ -24,9 +26,9 @@ export function TrayBridge() {
   useEffect(() => {
     if (!loaded) return;
     const workspaces = prefs.workspaces.list.map((w) => ({ id: w.id, name: w.name, active: w.id === prefs.workspaces.active }));
-    invoke("tray_update", { state: { track, playing: m.playing, workspaces } }).catch(() => {});
+    invoke("tray_update", { state: { track, playing: m.playing, workspaces, winddown: winding } }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, track, m.playing, wsKey]);
+  }, [loaded, track, m.playing, wsKey, winding]);
 
   // Latest handlers without re-subscribing on every render.
   const h = useRef({ m, requestApply, switchTo, prefs });

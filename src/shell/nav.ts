@@ -27,6 +27,7 @@ export const SECTIONS: NavSection[] = [
   { id: "library", label: "Library", icon: "library", page: "library", description: "Apps and services" },
   { id: "music", label: "Music", icon: "music", page: "music", description: "Nocturn Music" },
   { id: "workspaces", label: "Workspaces", icon: "workspaces", page: "workspaces", description: "Environments for different activities" },
+  { id: "winddown", label: "Wind down", icon: "moon", page: "winddown", description: "A calmer end to the day" },
   { id: "ai", label: "AI", icon: "assistant", page: "assistant", description: "Nocturn AI" },
   {
     id: "gaming",

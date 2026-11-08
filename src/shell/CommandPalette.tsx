@@ -17,6 +17,7 @@ import { usePrefs } from "./PrefsProvider";
 import { previewIntro } from "./splash";
 import { OFFICIAL_THEMES } from "./theme";
 import { useWorkspaces } from "./WorkspaceProvider";
+import { useWindDown } from "./WindDownProvider";
 
 function CommandIcon({ c, Icon }: { c: Command; Icon: ComponentType | null }) {
   const real = useAppIcon(c.appId);
@@ -57,7 +58,8 @@ const writeRecent = (ids: string[]) => {
 const PAGE_WORDS: Partial<Record<PageId, string[]>> = {
   home: ["dashboard", "start"],
   library: ["apps", "launcher", "programs"],
-  music: ["songs", "player", "playlists"],
+  music: ["songs", "player", "playlists", "smart playlists", "mixes", "crossfade"],
+  winddown: ["bedtime", "night", "sleep", "night light", "warm screen", "blue light", "f.lux"],
   assistant: ["ai", "chat", "help", "ask"],
   gaming: ["games", "fps", "game mode"],
   benchmarks: ["speed test", "performance"],
@@ -95,6 +97,7 @@ export function CommandPalette() {
   const { prefs, update } = usePrefs();
   const { active: ws, switchTo } = useWorkspaces();
   const m = useMusic();
+  const wd = useWindDown();
 
   const show = useCallback(() => {
     returnFocus.current = document.activeElement as HTMLElement | null;
@@ -165,6 +168,9 @@ export function CommandPalette() {
       { id: "action:slow", group: "Actions", label: "Why is my PC slow?", hint: "5-second check", keywords: ["slow", "lag", "laggy", "freezing", "stutter", "high cpu", "memory", "what is using"], icon: "processes", run: () => openSlowCheck() },
       { id: "action:report", group: "Actions", label: "Report a problem", hint: "Make a report to send", keywords: ["bug", "feedback", "help", "logs", "support", "not working"], icon: "diagnostics", run: () => openReport() },
       { id: "action:undo", group: "Actions", label: "Undo a change", hint: "History", keywords: ["rollback", "revert"], icon: "undo", run: () => navigate("history") },
+      wd.status?.phase && wd.status.phase !== "off"
+        ? { id: "action:winddown-stop", group: "Actions", label: "Stop winding down", hint: "Screen and music back to normal", keywords: ["wind down", "night", "bed"], icon: "moon", run: () => void wd.stop() }
+        : { id: "action:winddown", group: "Actions", label: "Wind down now", hint: "Warm screen, music fades, bedtime in 30 min", keywords: ["wind down", "bedtime", "night", "sleep", "night light", "warm screen", "blue light"], icon: "moon", run: () => void wd.start() },
       { id: "action:dashboard", group: "Actions", label: "Edit the Home dashboard", keywords: ["widgets"], icon: "grid", run: () => navigate("studio") },
       { id: "action:intro", group: "Actions", label: "Replay the startup animation", keywords: ["splash", "intro", "moon"], icon: "studio", run: () => previewIntro(prefs.appearance.intro === "off" ? "full" : prefs.appearance.intro, reduce) },
     );
@@ -213,6 +219,10 @@ export function CommandPalette() {
         { id: "music:next", group: "Music", label: "Next track", keywords: ["skip"], icon: "next", run: () => m.next() },
         { id: "music:prev", group: "Music", label: "Previous track", keywords: ["back"], icon: "prev", run: () => m.prev() },
         { id: "music:shuffle", group: "Music", label: m.shuffle ? "Turn shuffle off" : "Turn shuffle on", icon: "shuffle", run: () => m.setShuffle(!m.shuffle) },
+        m.sleep
+          ? { id: "music:sleep-off", group: "Music", label: "Turn off the sleep timer", keywords: ["sleep timer", "cancel"], icon: "moon", run: () => m.setSleep(null) }
+          : { id: "music:sleep", group: "Music", label: "Sleep timer: stop the music in 30 minutes", keywords: ["sleep timer", "stop music", "bed"], icon: "moon", run: () => m.setSleep(30) },
+        { id: "music:sleep-track", group: "Music", label: "Stop the music after this song", keywords: ["sleep timer", "end of song"], icon: "moon", run: () => m.setSleep("track") },
       );
     }
     const liked = m.tracks.filter((t) => t.liked).map((t) => t.id);
@@ -255,7 +265,7 @@ export function CommandPalette() {
       },
     );
     return out;
-  }, [open, apps, games, prefs, settings?.reduce_motion, ws, m, navigate, requestApply, toast, switchTo, update]);
+  }, [open, apps, games, prefs, settings?.reduce_motion, ws, m, wd, navigate, requestApply, toast, switchTo, update]);
 
   const results = useMemo(() => {
     const r = rank(query, commands, recent, { suggestions: SUGGESTED });

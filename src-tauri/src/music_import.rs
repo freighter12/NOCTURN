@@ -1001,6 +1001,8 @@ mod tests {
             added_at: String::new(),
             plays: 0,
             last_played: None,
+            loudness: None,
+            peak: None,
         }
     }
     fn remote(title: &str, artist: &str, secs: Option<i64>) -> RemoteTrack {

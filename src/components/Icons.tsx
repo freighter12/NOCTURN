@@ -131,6 +131,12 @@ export const I = {
   queue: (p: P) => (
     <svg {...base(p)}><path d="M2 4h9M2 8h9M2 12h5" /><path d="M11 10.5v3l2.6-1.5z" fill="currentColor" /></svg>
   ),
+  moon: (p: P) => (
+    <svg {...base(p)}><path d="M13.4 9.6A5.6 5.6 0 016.4 2.6a5.6 5.6 0 107 7z" /></svg>
+  ),
+  smart: (p: P) => (
+    <svg {...base(p)}><path d="M8 1.8l1.3 3.4 3.4 1.3-3.4 1.3L8 11.2 6.7 7.8 3.3 6.5l3.4-1.3z" /><path d="M12.6 10.4l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z" /></svg>
+  ),
   heart: (p: P) => (
     <svg {...base(p)}><path d="M8 13.2S2.3 9.9 2.3 6a3 3 0 015.7-1.3A3 3 0 0113.7 6c0 3.9-5.7 7.2-5.7 7.2z" /></svg>
   ),

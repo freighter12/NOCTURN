@@ -15,6 +15,7 @@ import { usePrefs } from "./PrefsProvider";
 import { useMusic } from "../music/MusicProvider";
 import { Art } from "../music/Player";
 import { openSlowCheck } from "../components/SlowCheck";
+import { useWindDown } from "./WindDownProvider";
 import type { WidgetType } from "./prefs";
 
 export interface WidgetDef {
@@ -86,6 +87,7 @@ function Vitals() {
 
 function Quick() {
   const { requestApply, navigate, dataVersion } = useApp();
+  const wd = useWindDown();
   const plans = useLoad(() => api.powerPlans(), [dataVersion]);
   const profiles = useLoad(() => api.appProfiles(), [dataVersion]);
   const active = plans.data?.find((p) => p.active);
@@ -106,6 +108,7 @@ function Quick() {
         </button>
         <button className="chip" onClick={() => navigate("benchmarks")}>Run a benchmark</button>
         <button className="chip" onClick={() => navigate("startup")}>Startup apps</button>
+        {wd.status?.phase && wd.status.phase !== "off" ? <button className="chip on" onClick={() => navigate("winddown")}>☾ Winding down</button> : <button className="chip" onClick={() => void wd.start()}>☾ Wind down</button>}
       </div>
     </Card>
   );

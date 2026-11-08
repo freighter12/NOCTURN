@@ -1,10 +1,11 @@
 // Experience Studio: customise how Nocturn looks and is laid out. Every
 // control writes to the central preference document, which applies live.
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { I } from "../components/Icons";
 import { Note, PageHead, Panel, Seg, Toggle } from "../components/ui";
 import { useApp, type PageId } from "../lib/app";
+import { discord, errorMessage, type DiscordStatus } from "../lib/api";
 import { ALL_PAGES, SECTIONS } from "../shell/nav";
 import { usePrefs } from "../shell/PrefsProvider";
 import { BACKGROUNDS, LOCKED_SECTIONS, sanitizeTheme, type Backdrop, type BackgroundStyle, type IntroMode, type Prefs } from "../shell/prefs";
@@ -391,6 +392,7 @@ const MODES: { value: Prefs["music"]["playerMode"]; label: string; hint: string 
 function MusicPrefs({ prefs, set }: { prefs: Prefs; set: (fn: (m: Prefs["music"]) => Prefs["music"]) => void }) {
   const mm = prefs.music;
   return (
+    <>
     <Panel title="Player" sub="How Nocturn Music looks while it plays. You can also switch modes from the player itself.">
       <Row label="Player mode" hint={MODES.find((x) => x.value === mm.playerMode)?.hint}>
         <Seg value={mm.playerMode} onChange={(v) => set((x) => ({ ...x, playerMode: v }))} options={MODES.map(({ value, label }) => ({ value, label }))} />
@@ -404,6 +406,64 @@ function MusicPrefs({ prefs, set }: { prefs: Prefs; set: (fn: (m: Prefs["music"]
       <Row label="Find lyrics online" hint="For songs without lyrics of their own (an .lrc file or lyrics stored in the file), look them up on LRCLIB, a free lyrics database. Sends only the artist, title, album and length; each song is looked up once.">
         <Toggle on={mm.onlineLyrics} label="Find lyrics online" disabled={!mm.showLyrics} onChange={(v) => set((x) => ({ ...x, onlineLyrics: v }))} />
       </Row>
+    </Panel>
+    <Panel title="Playback" sub="How one song leads into the next, and how loud each one is.">
+      <Row label="Even out volume" hint="Turns loud songs down and quiet songs up so everything plays at about the same level (like Spotify's normalisation). Each song is measured once, on this PC; songs with ReplayGain tags use those.">
+        <Toggle on={mm.normalize} label="Even out volume" onChange={(v) => set((x) => ({ ...x, normalize: v }))} />
+      </Row>
+      <Row label="Crossfade" hint={mm.crossfade ? `The last ${mm.crossfade} seconds of a song blend into the next.` : "Off: each song finishes before the next starts."}>
+        <Slider label="Crossfade" value={mm.crossfade} min={0} max={12} step={1} format={(v) => (v ? `${v} s` : "Off")} onChange={(v) => set((x) => ({ ...x, crossfade: Math.round(v) }))} />
+      </Row>
+      <Row label="Gapless playback" hint="Starts the next song the instant this one ends, with no silence in between. Best for live albums and DJ mixes.">
+        <Toggle on={mm.gapless} label="Gapless playback" onChange={(v) => set((x) => ({ ...x, gapless: v }))} />
+      </Row>
+      <Row label="Keep albums intact" hint="Songs that follow each other on an album are never crossfaded — they play gaplessly, as the artist intended.">
+        <Toggle on={mm.keepAlbums} label="Keep albums intact" disabled={!mm.crossfade} onChange={(v) => set((x) => ({ ...x, keepAlbums: v }))} />
+      </Row>
+    </Panel>
+    <DiscordPrefs prefs={prefs} set={set} />
+    </>
+  );
+}
+
+function DiscordPrefs({ prefs, set }: { prefs: Prefs; set: (fn: (m: Prefs["music"]) => Prefs["music"]) => void }) {
+  const mm = prefs.music;
+  const { toast } = useApp();
+  const [st, setSt] = useState<DiscordStatus | null>(null);
+  const [own, setOwn] = useState("");
+  const [showOwn, setShowOwn] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const poll = () => discord.status().then((s) => alive && setSt(s)).catch(() => {});
+    poll();
+    const iv = window.setInterval(poll, 3000);
+    return () => {
+      alive = false;
+      window.clearInterval(iv);
+    };
+  }, []);
+  const state = !st ? "" : !st.configured ? "Needs a Discord Application ID (below)." : st.connected ? `Showing on Discord${st.user ? ` as ${st.user}` : ""}.` : mm.discord ? (st.error ?? "Waiting for Discord — it shows up while music plays and the Discord app is open.") : "Off.";
+  return (
+    <Panel title="Discord" sub="Show what you're listening to on your Discord profile, like Spotify does. Talks only to the Discord app on this PC.">
+      <Row label="Show on Discord" hint={state}>
+        <Toggle on={mm.discord} label="Show on Discord" onChange={(v) => set((x) => ({ ...x, discord: v }))} />
+      </Row>
+      <Row label="Song progress" hint="Show how far through the song you are.">
+        <Toggle on={mm.discordProgress} label="Song progress" disabled={!mm.discord} onChange={(v) => set((x) => ({ ...x, discordProgress: v }))} />
+      </Row>
+      <Row label="Keep showing while paused" hint="Off: your status clears when you pause.">
+        <Toggle on={mm.discordWhenPaused} label="Keep showing while paused" disabled={!mm.discord} onChange={(v) => set((x) => ({ ...x, discordWhenPaused: v }))} />
+      </Row>
+      <div className="small dim mt-2">Shown: the song, artist and album. Streamed songs also show their YouTube thumbnail and an "Open on YouTube" button; your own files show the Nocturn moon. Nothing else about you or your library is shared.</div>
+      {(showOwn || (st && !st.configured)) ? (
+        <div className="row mt-2" style={{ gap: 8, flexWrap: "wrap" }}>
+          <input className="input" style={{ width: 230 }} inputMode="numeric" placeholder="Discord Application ID" value={own} onChange={(e) => setOwn(e.target.value.replace(/D/g, ""))} aria-label="Discord Application ID" />
+          <button className="btn sm" onClick={async () => { try { setSt(await discord.setClientId(own)); toast({ tone: "good", title: own ? "Using your Discord application" : "Using NOCTURN's Discord application" }); setShowOwn(false); } catch (e) { toast({ tone: "critical", title: "That isn't an Application ID", detail: errorMessage(e) }); } }}>Save</button>
+          <span className="small dim">From discord.com/developers › your application › General Information. Its name is what Discord shows above the song.</span>
+        </div>
+      ) : (
+        <button className="btn ghost sm mt-2" onClick={() => setShowOwn(true)}>Use your own Discord application…</button>
+      )}
     </Panel>
   );
 }
@@ -441,7 +501,7 @@ export function Studio() {
     themes: () => update((p) => ({ ...p, appearance: { ...p.appearance, theme: "nocturn" } })),
     layout: () => reset("navigation"),
     dashboard: () => reset("home"),
-    music: () => update((p) => ({ ...p, music: { ...p.music, playerMode: "standard", visualiser: true, showLyrics: true, onlineLyrics: true, wordSync: true } })),
+    music: () => update((p) => ({ ...p, music: { ...p.music, playerMode: "standard", visualiser: true, showLyrics: true, onlineLyrics: true, wordSync: true, crossfade: 0, gapless: true, keepAlbums: true, normalize: true } })),
     accessibility: () => reset("accessibility"),
   };
   return (

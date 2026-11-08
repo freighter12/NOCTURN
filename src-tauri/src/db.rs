@@ -276,6 +276,26 @@ const MIGRATIONS: &[&str] = &[
         offset_ms INTEGER NOT NULL
     );
     "#,
+    // Volume levelling: each song's loudness (from tags or measured), valid
+    // while `key` (size:mtime, or the stream's video) still matches. NULL
+    // lufs = couldn't be measured. Smart playlists: rule-based lists.
+    r#"
+    CREATE TABLE music_loudness (
+        track_id    INTEGER PRIMARY KEY,
+        key         TEXT NOT NULL,
+        lufs        REAL,
+        peak        REAL,
+        how         TEXT NOT NULL,
+        measured_at TEXT NOT NULL
+    );
+    CREATE TABLE music_smart_playlists (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        rules_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    "#,
 ];
 
 #[derive(Clone)]
