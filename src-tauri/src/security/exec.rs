@@ -211,6 +211,9 @@ pub enum SafeCommand {
     YtDlpExtract { exe: PathBuf, deno: PathBuf, video: VideoId },
     /// Unpack a downloaded archive with Windows' own tar.exe.
     TarExtract { archive: PathBuf, dest: PathBuf },
+    /// Run Ollama's official installer (downloaded and checksum-verified by
+    /// ai_setup) silently as a per-user install.
+    OllamaInstall { installer: PathBuf },
 }
 
 /// A YouTube video ID (11 characters of [A-Za-z0-9_-]).
@@ -262,6 +265,10 @@ impl SafeCommand {
                 sys32.join("tar.exe"),
                 vec!["-xf".into(), archive.display().to_string(), "-C".into(), dest.display().to_string()],
             ),
+            SafeCommand::OllamaInstall { installer } => (
+                installer.clone(),
+                vec!["/VERYSILENT".into(), "/SUPPRESSMSGBOXES".into(), "/NORESTART".into(), "/SP-".into()],
+            ),
             SafeCommand::NetshWlanInterfaces => (
                 sys32.join("netsh.exe"),
                 vec!["wlan".into(), "show".into(), "interfaces".into()],
@@ -294,6 +301,7 @@ impl SafeCommand {
             SafeCommand::PowerShell(_) => Duration::from_secs(30),
             SafeCommand::YtDlpExtract { .. } => Duration::from_secs(60),
             SafeCommand::TarExtract { .. } => Duration::from_secs(120),
+            SafeCommand::OllamaInstall { .. } => Duration::from_secs(900),
             _ => Duration::from_secs(15),
         }
     }
@@ -322,6 +330,24 @@ impl CmdOutput {
     pub fn success(&self) -> bool {
         self.status == Some(0)
     }
+}
+
+/// Start Ollama (its tray app, or the server if only the CLI is there) and
+/// leave it running. Only those two file names are accepted.
+pub fn spawn_ollama(exe: &std::path::Path) -> AppResult<()> {
+    let name = exe.file_name().map(|f| f.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    let mut c = Command::new(exe);
+    match name.as_str() {
+        "ollama app.exe" => {}
+        "ollama.exe" => {
+            c.arg("serve");
+        }
+        _ => return Err(AppError::Invalid("not Ollama".into())),
+    }
+    tracing::info!("exec: start {}", exe.display());
+    c.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).creation_flags(CREATE_NO_WINDOW);
+    c.spawn().map_err(|e| AppError::msg(format!("could not start Ollama: {e}")))?;
+    Ok(())
 }
 
 pub fn system32() -> PathBuf {

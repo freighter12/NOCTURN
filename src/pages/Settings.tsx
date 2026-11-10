@@ -11,6 +11,7 @@ import { ErrorNote, Loading, Note, PageHead, Panel, Spinner, Toggle } from "../c
 import { api, errorMessage, type AiSettings, type AppInfo, type AppSettings, type ConnectionTest, type UpdateInfo, type UpdateProgress } from "../lib/api";
 import { useApp } from "../lib/app";
 import { openReport } from "../components/Report";
+import { AiSetup } from "../components/AiSetup";
 
 const CLAUDE_MODELS = [
   { id: "claude-opus-5-5", label: "Claude Opus 5.5 — most capable" },
@@ -248,6 +249,7 @@ function AiPanel({ ai, setAi, dirty, saving, onSave, onReset }: { ai: AiSettings
 
   const hasKey = keys ? keys[ai.provider] : false;
   const isClaude = ai.provider === "anthropic";
+  const configured = isClaude ? !!hasKey : !!ai.model;
 
   async function storeKey(value: string | null) {
     setKeyBusy(true);
@@ -291,6 +293,8 @@ function AiPanel({ ai, setAi, dirty, saving, onSave, onReset }: { ai: AiSettings
       }
     >
       <div className="stack" style={{ gap: 16 }}>
+        <AiSetup compact={configured} onDone={(s) => setAi(s.ai)} />
+
         <div className="field">
           <label htmlFor="provider">Provider</label>
           <select id="provider" className="select" value={ai.provider} onChange={(e) => setAi({ provider: e.target.value as AiSettings["provider"], model: e.target.value === "anthropic" ? CLAUDE_MODELS[0].id : "" })}>

@@ -9,6 +9,7 @@
 //! * `db`, `settings`, `logging`, `state`, `commands`
 
 mod ai;
+mod ai_setup;
 mod autostart;
 mod background;
 mod commands;
@@ -301,6 +302,10 @@ pub fn run() {
             commands::ai_key_status,
             commands::ai_set_key,
             commands::ai_test_connection,
+            commands::ai_setup_detect,
+            commands::ai_setup_local,
+            commands::ai_setup_cancel,
+            commands::ai_setup_open,
             commands::ai_send,
             commands::ai_cancel,
             commands::ai_list_conversations,

@@ -1091,6 +1091,47 @@ pub async fn ai_test_connection(state: State<'_, Shared>) -> AppResult<provider:
 }
 
 #[tauri::command]
+pub async fn ai_setup_detect(state: State<'_, Shared>) -> AppResult<crate::ai_setup::Detect> {
+    let (ram, vram) = {
+        let t = state.telemetry.read().map_err(|_| AppError::msg("telemetry unavailable"))?;
+        match &t.latest {
+            Some(s) => (s.mem_total, s.gpus.iter().filter_map(|g| g.vram_total).max()),
+            None => (0, None),
+        }
+    };
+    let ram = if ram > 0 {
+        ram
+    } else {
+        sysinfo::System::new()
+            .map(|mut sys| {
+                sys.refresh_memory();
+                sys.total_memory()
+            })
+            .unwrap_or(0)
+    };
+    Ok(crate::ai_setup::detect(ram, vram).await)
+}
+
+#[tauri::command]
+pub async fn ai_setup_local(state: State<'_, Shared>, model: String, on_progress: Channel<crate::ai_setup::Progress>) -> AppResult<String> {
+    let st = state.inner().clone();
+    crate::ai_setup::setup_local(&st.db, &st.data_dir, &model, &|p| {
+        let _ = on_progress.send(p);
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn ai_setup_open(which: String) -> AppResult<()> {
+    crate::ai_setup::open_page(&which)
+}
+
+#[tauri::command]
+pub fn ai_setup_cancel() {
+    crate::ai_setup::cancel();
+}
+
+#[tauri::command]
 pub async fn ai_send(
     state: State<'_, Shared>,
     conversation_id: Option<String>,

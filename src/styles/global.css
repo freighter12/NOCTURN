@@ -882,3 +882,23 @@ html[data-backdrop="mica"], html[data-backdrop="acrylic"] { --panel-bg: var(--pa
 .wd-days .chip { min-width: 44px; }
 .smart-editor .select { width: auto; }
 .smart-editor .smart-rule .select:first-child { min-width: 150px; }
+
+/* AI setup */
+.ai-setup { border: 1px solid var(--line-2); border-radius: var(--radius-l); padding: 16px; background: linear-gradient(140deg, rgba(var(--accent-rgb), 0.07), transparent 60%), var(--bg-2); }
+.ai-setup.compact { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.ai-setup .grow { flex: 1; min-width: 0; }
+.ai-setup-orb { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: none; background: radial-gradient(circle at 35% 30%, rgba(var(--accent-rgb), 0.35), rgba(var(--accent-rgb), 0.06)); color: var(--moon); box-shadow: 0 0 18px rgba(var(--accent-rgb), 0.15); }
+.ai-setup-orb svg { width: 17px; height: 17px; }
+.ai-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.ai-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 14px; border-radius: var(--radius-l); border: 1px solid var(--line-2); background: var(--bg-3); transition: border-color var(--t-fast), background var(--t-fast), transform var(--t-fast); cursor: default; }
+.ai-choice:hover { border-color: var(--line-3); background: var(--bg-4); transform: translateY(-1px); }
+.ai-choice b { font-size: calc(14.5px * var(--fs, 1)); }
+.ai-steps { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 6px; color: var(--ink-1); }
+.ai-steps li { display: flex; gap: 8px; align-items: baseline; }
+.ai-steps:not(.numbered) li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--ink-3); flex: none; transform: translateY(1px); }
+.ai-steps li.done::before { background: var(--good); border-color: var(--good); }
+.ai-steps.numbered { counter-reset: s; }
+.ai-steps.numbered li { counter-increment: s; align-items: center; flex-wrap: wrap; }
+.ai-steps.numbered li::before { content: counter(s); width: 20px; height: 20px; border-radius: 50%; background: var(--bg-4); display: grid; place-items: center; font-size: 11px; flex: none; }
+.ai-progress { height: 6px; }
+.linkish { background: none; border: 0; padding: 0; color: var(--moon); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }

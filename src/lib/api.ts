@@ -1068,6 +1068,32 @@ export type ChatEvent =
   | { type: "turn_end"; stop_reason: string; detail: string | null; usage: Usage }
   | { type: "error"; message: string }
   | { type: "done"; conversation_id: string; usage: Usage };
+export interface AiModelChoice {
+  id: string;
+  label: string;
+  size_gb: number;
+  why: string;
+}
+
+export interface AiSetupDetect {
+  ollama_running: boolean;
+  ollama_version: string | null;
+  ollama_installed: boolean;
+  models: string[];
+  ram_gb: number;
+  vram_gb: number | null;
+  recommended: AiModelChoice;
+  options: AiModelChoice[];
+  free_gb: number | null;
+}
+
+export interface AiSetupProgress {
+  stage: "download" | "verify" | "install" | "start" | "pull" | "configure" | "done";
+  label: string;
+  fraction: number | null;
+  detail: string | null;
+}
+
 export interface ConnectionTest {
   ok: boolean;
   message: string;
@@ -1212,6 +1238,14 @@ export const api = {
   aiKeyStatus: () => invoke<{ anthropic: boolean; openai_compatible: boolean }>("ai_key_status"),
   aiSetKey: (provider: string, key: string | null) => invoke<void>("ai_set_key", { provider, key }),
   aiTest: () => invoke<ConnectionTest>("ai_test_connection"),
+  aiSetupDetect: () => invoke<AiSetupDetect>("ai_setup_detect"),
+  aiSetupLocal: (model: string, onProgress: (p: AiSetupProgress) => void) => {
+    const ch = new Channel<AiSetupProgress>();
+    ch.onmessage = onProgress;
+    return invoke<string>("ai_setup_local", { model, onProgress: ch });
+  },
+  aiSetupCancel: () => invoke<void>("ai_setup_cancel"),
+  aiSetupOpen: (which: "claude_keys" | "ollama") => invoke<void>("ai_setup_open", { which }),
   aiSend: (conversationId: string | null, text: string, onEvent: (e: ChatEvent) => void, meta?: unknown) => {
     const ch = new Channel<ChatEvent>();
     ch.onmessage = onEvent;

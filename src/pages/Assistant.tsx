@@ -11,6 +11,7 @@ import { I } from "../components/Icons";
 import { ErrorNote, Note, RiskTag, Spinner } from "../components/ui";
 import { api, errorMessage, type ChatEvent, type ConversationSummary, type PlanCard, type Usage } from "../lib/api";
 import { useApp } from "../lib/app";
+import { AiSetup } from "../components/AiSetup";
 import { pushPart, toTurns, TOOL_LABEL, type ToolRef, type Turn } from "../lib/chat";
 import { bytes, relative } from "../lib/format";
 
@@ -248,12 +249,10 @@ export function Assistant() {
         <div className="chat-scroll" ref={scrollRef} onScroll={(e) => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; }}>
           <div className="chat-inner">
             {keyOk === false && (
-              <Note tone="warning">
-                <div className="row between" style={{ gap: 14 }}>
-                  <span>NOCTURN AI needs an API key before it can answer. Keys are stored in Windows Credential Manager, never in the app's files.</span>
-                  <button className="btn sm" onClick={() => navigate("settings")}>Open Settings</button>
-                </div>
-              </Note>
+              <div className="stack" style={{ gap: 8 }}>
+                <Note tone="warning">NOCTURN AI isn't set up yet. Pick an option below, or enter your own provider in <button className="linkish" onClick={() => navigate("settings")}>Settings</button>.</Note>
+                <AiSetup onDone={() => setKeyOk(true)} />
+              </div>
             )}
             {settings && !settings.ai.allow_system_context && (
               <Note>System access is off in Settings, so the assistant can't inspect this PC and will ask you for details instead.</Note>
