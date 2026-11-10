@@ -92,13 +92,16 @@ pub struct AppSettings {
     pub auto_update_check: bool,
     /// Play songs that aren't in the library from YouTube (unofficial; off by default).
     pub music_streaming: bool,
+    /// Explicit versions of streamed songs (18+ only; turned on through
+    /// music_set_explicit after an age check, never by a plain settings save).
+    pub music_explicit: bool,
     pub ai: AiSettings,
     pub monitor: MonitorSettings,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
-        AppSettings { restore_point_default: true, confirm_advanced: true, reduce_motion: false, close_to_tray: true, desktop_notifications: true, auto_update_check: true, music_streaming: false, ai: AiSettings::default(), monitor: MonitorSettings::default() }
+        AppSettings { restore_point_default: true, confirm_advanced: true, reduce_motion: false, close_to_tray: true, desktop_notifications: true, auto_update_check: true, music_streaming: false, music_explicit: false, ai: AiSettings::default(), monitor: MonitorSettings::default() }
     }
 }
 
@@ -107,12 +110,39 @@ pub fn load(db: &Db) -> AppSettings {
 }
 
 pub fn save(db: &Db, s: &AppSettings) -> AppResult<()> {
-    db.set_setting(KEY, s)
+    db.set_setting(KEY, s)?;
+    crate::music_stream::set_explicit_ok(s.music_explicit);
+    Ok(())
+}
+
+/// Age in whole years on `today` for someone born in `year`/`month`
+/// (the day isn't asked; the 1st is assumed, which can only round up by
+/// less than a month).
+pub fn age_on(year: i32, month: u32, today: chrono::NaiveDate) -> Option<i32> {
+    use chrono::Datelike;
+    if !(1..=12).contains(&month) || year < 1900 || year > today.year() {
+        return None;
+    }
+    let mut age = today.year() - year;
+    if today.month() < month {
+        age -= 1;
+    }
+    (age >= 0).then_some(age)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn age_check() {
+        let d = |y, m, dd| chrono::NaiveDate::from_ymd_opt(y, m, dd).unwrap();
+        assert_eq!(age_on(2008, 11, d(2026, 11, 10)), Some(18));
+        assert_eq!(age_on(2008, 12, d(2026, 11, 10)), Some(17));
+        assert_eq!(age_on(2009, 1, d(2026, 11, 10)), Some(17));
+        assert_eq!(age_on(1990, 13, d(2026, 11, 10)), None);
+        assert_eq!(age_on(2030, 1, d(2026, 11, 10)), None);
+    }
 
     #[test]
     fn defaults_and_roundtrip() {

@@ -109,6 +109,8 @@ export interface Prefs {
     discordProgress: boolean;
     /** Keep showing the song on Discord while paused. */
     discordWhenPaused: boolean;
+    /** When the queue runs low, add similar songs (same genre and mood). */
+    aiShuffle: boolean;
   };
   workspaces: {
     /** ID of the active workspace; null = none (plain Nocturn). */
@@ -152,7 +154,7 @@ export const DEFAULT_PREFS: Prefs = {
     compact: false,
   },
   home: { widgets: DEFAULT_WIDGETS },
-  music: { playerMode: "standard", volume: 0.8, visualiser: true, showLyrics: true, onlineLyrics: true, wordSync: true, crossfade: 0, gapless: true, keepAlbums: true, normalize: true, discord: false, discordProgress: true, discordWhenPaused: false },
+  music: { playerMode: "standard", volume: 0.8, visualiser: true, showLyrics: true, onlineLyrics: true, wordSync: true, crossfade: 0, gapless: true, keepAlbums: true, normalize: true, discord: false, discordProgress: true, discordWhenPaused: false, aiShuffle: false },
   workspaces: { active: null, list: [], startWith: null, confirmLaunch: true },
   accessibility: { reduceMotion: false, fontScale: 1, uiScale: 1 },
 };
@@ -308,6 +310,7 @@ export function sanitize(raw: unknown, pages: readonly string[], sections: reado
       discord: bool(m.discord, d.music.discord),
       discordProgress: bool(m.discordProgress, d.music.discordProgress),
       discordWhenPaused: bool(m.discordWhenPaused, d.music.discordWhenPaused),
+      aiShuffle: bool(m.aiShuffle, d.music.aiShuffle),
     },
     workspaces: {
       active: typeof w.active === "string" && workspaces.some((x) => x.id === w.active) ? w.active : null,

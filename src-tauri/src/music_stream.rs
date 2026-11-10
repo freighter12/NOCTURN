@@ -23,6 +23,25 @@ pub struct Candidate {
     pub duration_ms: Option<i64>,
     /// Verified artist badge or an auto-generated "Artist - Topic" channel.
     pub official: bool,
+    /// From YouTube Music: whether this upload is the explicit version.
+    /// None when unknown (regular YouTube search doesn't say).
+    #[serde(default)]
+    pub explicit: Option<bool>,
+}
+
+static EXPLICIT_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the user (18+) chose explicit versions of streamed songs.
+pub fn set_explicit_ok(on: bool) {
+    EXPLICIT_OK.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+pub fn explicit_ok() -> bool {
+    EXPLICIT_OK.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Words in a title that mark a clean (censored) edit.
+fn is_clean_edit(raw_lower: &str) -> bool {
+    ["clean", "clean version", "censored", "radio edit", "clean edit", "radio version"].iter().any(|w| has_word(raw_lower, w))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -144,9 +163,37 @@ pub fn pick(want: &RemoteTrack, cands: &[Candidate]) -> Option<Pick> {
     } else {
         want
     };
+    pick_with(want, cands, explicit_ok())
+}
+
+/// [`pick`] with an explicit-content preference: the explicit version wins
+/// when allowed, the clean one when not (when both exist). Clean edits are
+/// recognised by YouTube Music's flag or by words like "Clean" / "Radio Edit".
+pub fn pick_with(want: &RemoteTrack, cands: &[Candidate], explicit_allowed: bool) -> Option<Pick> {
+    let want_clean = is_clean_edit(&lower_words(&want.title));
     cands
         .iter()
-        .filter_map(|c| score(want, c).map(|(s, conf)| Pick { candidate: c.clone(), confidence: conf, score: s }))
+        .filter_map(|c| {
+            score(want, c).map(|(mut s, conf)| {
+                if !want_clean {
+                    let clean_words = is_clean_edit(&lower_words(&c.title));
+                    let is_explicit = c.explicit.unwrap_or(false) || has_word(&lower_words(&c.title), "explicit");
+                    let is_clean = clean_words || c.explicit == Some(false);
+                    if explicit_allowed {
+                        if is_explicit {
+                            s += 1.5;
+                        } else if clean_words {
+                            s -= 2.5;
+                        }
+                    } else if is_clean {
+                        s += if clean_words { 1.5 } else { 0.8 };
+                    } else if is_explicit {
+                        s -= 1.0;
+                    }
+                }
+                Pick { candidate: c.clone(), confidence: conf, score: s }
+            })
+        })
         .max_by(|a, b| a.score.total_cmp(&b.score))
 }
 
@@ -202,7 +249,7 @@ pub fn parse_search(html: &str) -> AppResult<SearchPage> {
                 let channel = str_at(x, &["ownerText", "runs", "0", "text"]).or_else(|| str_at(x, &["longBylineText", "runs", "0", "text"])).unwrap_or("").to_string();
                 let badges = x.get("ownerBadges").and_then(Value::as_array).map(|a| a.iter().filter_map(|b| str_at(b, &["metadataBadgeRenderer", "style"])).collect::<Vec<_>>()).unwrap_or_default();
                 let official = channel.ends_with(" - Topic") || badges.iter().any(|b| b.contains("VERIFIED_ARTIST"));
-                out.push(Candidate { video_id: id.to_string(), title: title.to_string(), channel, duration_ms: str_at(x, &["lengthText", "simpleText"]).and_then(parse_len), official });
+                out.push(Candidate { video_id: id.to_string(), title: title.to_string(), channel, duration_ms: str_at(x, &["lengthText", "simpleText"]).and_then(parse_len), official, explicit: None });
             }
             true
         }
@@ -222,7 +269,7 @@ pub fn parse_search(html: &str) -> AppResult<SearchPage> {
                         }
                         false
                     });
-                    out.push(Candidate { video_id: id.to_string(), title: title.to_string(), official: channel.ends_with(" - Topic") || verified, channel, duration_ms: dur });
+                    out.push(Candidate { video_id: id.to_string(), title: title.to_string(), official: channel.ends_with(" - Topic") || verified, channel, duration_ms: dur, explicit: None });
                 }
             }
             true
@@ -282,6 +329,14 @@ pub async fn resolve(want: &RemoteTrack) -> AppResult<Option<Pick>> {
 /// As [`resolve`], never picking one of `exclude` (videos that stopped working).
 pub async fn resolve_excluding(want: &RemoteTrack, exclude: &std::collections::HashSet<String>) -> AppResult<Option<Pick>> {
     let base = query_for(want);
+    // YouTube Music first: album audio with explicit flags. Any failure there
+    // falls back to the regular search below.
+    if let Ok(songs) = crate::music_ytm::search(&base).await {
+        let c: Vec<Candidate> = songs.iter().map(|s| s.candidate()).filter(|c| !exclude.contains(&c.video_id)).collect();
+        if let Some(p) = pick(want, &c) {
+            return Ok(Some(p));
+        }
+    }
     let mut queries = vec![base.clone()];
     let clean = without_explicit(&base);
     if clean != base && !clean.is_empty() {
@@ -309,7 +364,26 @@ mod tests {
         RemoteTrack { title: title.into(), artist: artist.into(), album: String::new(), duration_ms: secs.map(|s| s * 1000), path: None, video_id: None }
     }
     fn cand(id: &str, title: &str, channel: &str, secs: i64, official: bool) -> Candidate {
-        Candidate { video_id: format!("{id:_<11}"), title: title.into(), channel: channel.into(), duration_ms: Some(secs * 1000), official }
+        Candidate { video_id: format!("{id:_<11}"), title: title.into(), channel: channel.into(), duration_ms: Some(secs * 1000), official, explicit: None }
+    }
+
+    #[test]
+    fn explicit_preference_picks_the_right_version() {
+        let w = want("Without Me", "Eminem", Some(291));
+        let mut e = cand("E", "Without Me", "Eminem - Topic", 291, true);
+        e.explicit = Some(true);
+        let mut c = cand("C", "Without Me", "Eminem - Topic", 290, true);
+        c.explicit = Some(false);
+        let radio = cand("R", "Without Me (Radio Edit)", "Eminem - Topic", 289, true);
+        let all = vec![c.clone(), e.clone(), radio.clone()];
+        assert!(pick_with(&w, &all, true).unwrap().candidate.video_id.starts_with('E'));
+        assert!(pick_with(&w, &all, false).unwrap().candidate.video_id.starts_with('C'));
+        // Only a radio edit or only the explicit one: still plays something.
+        assert!(pick_with(&w, std::slice::from_ref(&e), false).is_some());
+        // Asking for the clean edit by name gets it either way.
+        let wc = want("Without Me (Clean)", "Eminem", Some(289));
+        let named = cand("N", "Without Me (Clean)", "Eminem - Topic", 289, true);
+        assert!(pick_with(&wc, &[e.clone(), named.clone()], true).unwrap().candidate.video_id.starts_with('N'));
     }
 
     #[test]
@@ -383,7 +457,7 @@ mod tests {
         // Newer layout.
         let new = r#"<script>var ytInitialData = {"x":[{"lockupViewModel":{"contentType":"LOCKUP_CONTENT_TYPE_VIDEO","contentId":"mQER0A0ej0M","contentImage":{"thumbnailBadgeViewModel":{"text":"7:06"}},"metadata":{"lockupMetadataViewModel":{"title":{"content":"Hey Jude (Remastered 2015)"},"metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{"text":{"content":"The Beatles - Topic"}}]}]}}}}}}]};</script>"#;
         match parse_search(new).unwrap() {
-            SearchPage::Results(c) => assert_eq!(c, vec![Candidate { video_id: "mQER0A0ej0M".into(), title: "Hey Jude (Remastered 2015)".into(), channel: "The Beatles - Topic".into(), duration_ms: Some(426_000), official: true }]),
+            SearchPage::Results(c) => assert_eq!(c, vec![Candidate { video_id: "mQER0A0ej0M".into(), title: "Hey Jude (Remastered 2015)".into(), channel: "The Beatles - Topic".into(), duration_ms: Some(426_000), official: true, explicit: None }]),
             other => panic!("{other:?}"),
         }
         let w = want("Choosin' Texas", "Ella Langley", Some(220));

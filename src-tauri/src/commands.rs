@@ -61,6 +61,8 @@ pub fn save_settings(state: State<'_, Shared>, value: AppSettings) -> AppResult<
     v.ai.max_tokens = v.ai.max_tokens.clamp(1024, 128_000);
     v.ai.custom_instructions = crate::util::clamp(&v.ai.custom_instructions, 4000);
     v.monitor = v.monitor.sanitised();
+    // Explicit songs only change through music_set_explicit (age check).
+    v.music_explicit = settings::load(&state.db).music_explicit;
     settings::save(&state.db, &v)?;
     state.db.audit("info", "user", "settings.saved", None);
     Ok(v)
@@ -141,6 +143,15 @@ pub async fn music_recommended(state: State<'_, Shared>) -> AppResult<Vec<i64>> 
     blocking(move || Ok(crate::music::recommended(&crate::music::tracks(&st.db)?, 24))).await
 }
 
+/// AI shuffle: songs to play next in the same vein as `seeds` (most recent last).
+#[tauri::command]
+pub async fn music_ai_continue(state: State<'_, Shared>, seeds: Vec<i64>, exclude: Vec<i64>, count: usize) -> AppResult<crate::music_radio::Continue> {
+    let st = state.inner().clone();
+    let streaming = settings::load(&st.db).music_streaming;
+    let exclude: Vec<i64> = exclude.into_iter().take(5000).collect();
+    crate::music_radio::continue_from(&st.db, &seeds, &exclude, count, streaming).await
+}
+
 #[tauri::command]
 pub fn music_playlists(state: State<'_, Shared>) -> AppResult<Vec<crate::music::Playlist>> {
     crate::music::playlists(&state.db)
@@ -209,6 +220,27 @@ pub async fn music_stream_enable(state: State<'_, Shared>, on_progress: Channel<
     s.music_streaming = true;
     crate::settings::save(&st.db, &s)?;
     Ok(crate::music_stream_engine::status(&st.db, &st.data_dir, true))
+}
+
+/// Turn explicit streamed songs on (18+, checked from the month and year of
+/// birth, which aren't stored) or off.
+#[tauri::command]
+pub fn music_set_explicit(state: State<'_, Shared>, on: bool, birth_year: Option<i32>, birth_month: Option<u32>) -> AppResult<AppSettings> {
+    let mut s = settings::load(&state.db);
+    if on {
+        let (Some(y), Some(m)) = (birth_year, birth_month) else {
+            return Err(AppError::Invalid("enter your month and year of birth".into()));
+        };
+        let age = settings::age_on(y, m, chrono::Local::now().date_naive()).ok_or_else(|| AppError::Invalid("that date of birth isn't valid".into()))?;
+        if age < 18 {
+            state.db.audit("info", "user", "music.explicit.refused", None);
+            return Err(AppError::Invalid("explicit songs are only available if you're 18 or older".into()));
+        }
+    }
+    s.music_explicit = on;
+    settings::save(&state.db, &s)?;
+    state.db.audit("info", "user", "music.explicit", Some(serde_json::json!({ "on": on })));
+    Ok(s)
 }
 
 #[tauri::command]

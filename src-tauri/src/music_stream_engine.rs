@@ -750,7 +750,7 @@ pub async fn resolve_many(db: &Db, items: Vec<RemoteTrack>, progress: &(dyn Fn(R
     let mut stream = futures_util::stream::iter(items.into_iter().enumerate())
         .map(|(i, t)| async move {
             if let Some(v) = t.video_id.as_deref().filter(|v| music_stream::valid_video_id(v)) {
-                let c = Candidate { video_id: v.into(), title: t.title.clone(), channel: t.artist.clone(), duration_ms: t.duration_ms, official: false };
+                let c = Candidate { video_id: v.into(), title: t.title.clone(), channel: t.artist.clone(), duration_ms: t.duration_ms, official: false, explicit: None };
                 return (i, t, Ok(Some(music_stream::Pick { candidate: c, confidence: "exact", score: 0.0 })));
             }
             let r = music_stream::resolve(&t).await;
@@ -857,7 +857,7 @@ mod tests {
     fn streaming_tracks_are_reused_and_survive_scans() {
         let db = Db::open_in_memory().unwrap();
         let want = RemoteTrack { title: "Hey Jude".into(), artist: "The Beatles".into(), album: String::new(), duration_ms: Some(429_000), path: None, video_id: None };
-        let c = Candidate { video_id: "mQER0A0ej0M".into(), title: "Hey Jude (Remastered 2015)".into(), channel: "The Beatles - Topic".into(), duration_ms: Some(426_000), official: true };
+        let c = Candidate { video_id: "mQER0A0ej0M".into(), title: "Hey Jude (Remastered 2015)".into(), channel: "The Beatles - Topic".into(), duration_ms: Some(426_000), official: true, explicit: None };
         let a = ensure_track(&db, &want, &c).unwrap();
         assert_eq!(ensure_track(&db, &want, &c).unwrap(), a);
         let t = crate::music::tracks(&db).unwrap();
@@ -899,7 +899,7 @@ mod tests {
 
         // Self-repair: a song pointing at a removed video gets another upload, transparently.
         let want = RemoteTrack { title: "Stand By Me".into(), artist: "Ben E. King".into(), album: String::new(), duration_ms: Some(180_000), path: None, video_id: None };
-        let dead = Candidate { video_id: "aaaaaaaaaaa".into(), title: "Stand By Me".into(), channel: "Ben E. King".into(), duration_ms: Some(180_000), official: false };
+        let dead = Candidate { video_id: "aaaaaaaaaaa".into(), title: "Stand By Me".into(), channel: "Ben E. King".into(), duration_ms: Some(180_000), official: false, explicit: None };
         let id = ensure_track(&db, &want, &dead).unwrap();
         let t2 = std::time::Instant::now();
         let s = serve_track(&db, &dir, true, id, "youtube:aaaaaaaaaaa", Some("bytes=0-1023"));

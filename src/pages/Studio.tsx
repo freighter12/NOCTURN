@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { I } from "../components/Icons";
 import { Note, PageHead, Panel, Seg, Toggle } from "../components/ui";
 import { useApp, type PageId } from "../lib/app";
-import { discord, errorMessage, type DiscordStatus } from "../lib/api";
+import { discord, errorMessage, music, type DiscordStatus } from "../lib/api";
 import { ALL_PAGES, SECTIONS } from "../shell/nav";
 import { usePrefs } from "../shell/PrefsProvider";
 import { BACKGROUNDS, LOCKED_SECTIONS, sanitizeTheme, type Backdrop, type BackgroundStyle, type IntroMode, type Prefs } from "../shell/prefs";
@@ -421,8 +421,72 @@ function MusicPrefs({ prefs, set }: { prefs: Prefs; set: (fn: (m: Prefs["music"]
         <Toggle on={mm.keepAlbums} label="Keep albums intact" disabled={!mm.crossfade} onChange={(v) => set((x) => ({ ...x, keepAlbums: v }))} />
       </Row>
     </Panel>
+    <SmartPlayPrefs prefs={prefs} set={set} />
     <DiscordPrefs prefs={prefs} set={set} />
     </>
+  );
+}
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function SmartPlayPrefs({ prefs, set }: { prefs: Prefs; set: (fn: (m: Prefs["music"]) => Prefs["music"]) => void }) {
+  const mm = prefs.music;
+  const { settings, setSettings, toast } = useApp();
+  const [asking, setAsking] = useState(false);
+  const [month, setMonth] = useState(0);
+  const [year, setYear] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const explicit = !!settings?.music_explicit;
+  const streaming = !!settings?.music_streaming;
+
+  async function apply(on: boolean) {
+    setErr(null);
+    try {
+      const s = on ? await music.setExplicit(true, Number(year), month) : await music.setExplicit(false);
+      setSettings(s);
+      setAsking(false);
+      setYear("");
+      setMonth(0);
+      toast({ tone: "good", title: on ? "Explicit songs allowed" : "Clean versions preferred" });
+    } catch (e) {
+      setErr(errorMessage(e));
+    }
+  }
+
+  return (
+    <Panel title="Smart play" sub="Keep the music going, and choose which versions of streamed songs you hear.">
+      <Row label="AI shuffle" hint={streaming ? "When the queue runs low, NOCTURN adds songs in the same style as what you're playing (like Spotify's autoplay): from your library when it has them, streamed when not. Also on the sparkle button in the player." : "When the queue runs low, NOCTURN adds similar songs from your library. Turn on streaming in Music › Sources to get new songs too (from YouTube Music's song radio)."}>
+        <Toggle on={mm.aiShuffle} label="AI shuffle" onChange={(v) => set((x) => ({ ...x, aiShuffle: v }))} />
+      </Row>
+      <Row
+        label="Explicit songs (18+)"
+        hint={
+          explicit
+            ? "On: streamed songs play their original, uncensored versions, and AI shuffle can add explicit songs."
+            : "Off: when a clean version of a streamed song exists, NOCTURN plays that one, and AI shuffle skips explicit songs. (A song with no clean version still plays as released.) Your own files always play as they are."
+        }
+      >
+        <Toggle on={explicit} label="Explicit songs" onChange={(v) => (v ? setAsking(true) : apply(false))} />
+      </Row>
+      {asking && !explicit && (
+        <div className="age-check">
+          <b>Confirm your age</b>
+          <div className="small dim">Explicit songs are only for people 18 or older. Your date of birth is used for this check only and isn't saved.</div>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <select className="select" style={{ width: 150 }} value={month} onChange={(e) => setMonth(Number(e.target.value))} aria-label="Month of birth">
+              <option value={0}>Month</option>
+              {MONTHS.map((m, i) => (
+                <option key={m} value={i + 1}>{m}</option>
+              ))}
+            </select>
+            <input className="input num" style={{ width: 110 }} inputMode="numeric" maxLength={4} placeholder="Year" value={year} onChange={(e) => setYear(e.target.value.replace(/\D/g, ""))} aria-label="Year of birth" onKeyDown={(e) => e.key === "Enter" && month && year.length === 4 && apply(true)} />
+            <button className="btn primary sm" disabled={!month || year.length !== 4} onClick={() => apply(true)}>Confirm</button>
+            <button className="btn ghost sm" onClick={() => { setAsking(false); setErr(null); }}>Cancel</button>
+          </div>
+          {err && <Note tone="warning">{err}</Note>}
+        </div>
+      )}
+    </Panel>
   );
 }
 
@@ -457,7 +521,7 @@ function DiscordPrefs({ prefs, set }: { prefs: Prefs; set: (fn: (m: Prefs["music
       <div className="small dim mt-2">Shown: the song, artist and album. Streamed songs also show their YouTube thumbnail and an "Open on YouTube" button; your own files show the Nocturn moon. Nothing else about you or your library is shared.</div>
       {(showOwn || (st && !st.configured)) ? (
         <div className="row mt-2" style={{ gap: 8, flexWrap: "wrap" }}>
-          <input className="input" style={{ width: 230 }} inputMode="numeric" placeholder="Discord Application ID" value={own} onChange={(e) => setOwn(e.target.value.replace(/D/g, ""))} aria-label="Discord Application ID" />
+          <input className="input" style={{ width: 230 }} inputMode="numeric" placeholder="Discord Application ID" value={own} onChange={(e) => setOwn(e.target.value.replace(/\D/g, ""))} aria-label="Discord Application ID" />
           <button className="btn sm" onClick={async () => { try { setSt(await discord.setClientId(own)); toast({ tone: "good", title: own ? "Using your Discord application" : "Using NOCTURN's Discord application" }); setShowOwn(false); } catch (e) { toast({ tone: "critical", title: "That isn't an Application ID", detail: errorMessage(e) }); } }}>Save</button>
           <span className="small dim">From discord.com/developers › your application › General Information. Its name is what Discord shows above the song.</span>
         </div>

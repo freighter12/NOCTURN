@@ -775,7 +775,7 @@ impl Matcher {
     }
 }
 
-fn local_paths(db: &Db) -> AppResult<Vec<(i64, String)>> {
+pub(crate) fn local_paths(db: &Db) -> AppResult<Vec<(i64, String)>> {
     let conn = db.conn();
     let mut st = conn.prepare("SELECT id, path FROM music_tracks")?;
     let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<Vec<_>, _>>()?;

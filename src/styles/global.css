@@ -902,3 +902,6 @@ html[data-backdrop="mica"], html[data-backdrop="acrylic"] { --panel-bg: var(--pa
 .ai-steps.numbered li::before { content: counter(s); width: 20px; height: 20px; border-radius: 50%; background: var(--bg-4); display: grid; place-items: center; font-size: 11px; flex: none; }
 .ai-progress { height: 6px; }
 .linkish { background: none; border: 0; padding: 0; color: var(--moon); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.ai-shuffle.on { color: var(--moon); filter: drop-shadow(0 0 6px rgba(var(--accent-rgb), 0.45)); }
+.ai-pick { width: 11px; height: 11px; margin-right: 4px; vertical-align: -1px; color: var(--moon); }
+.age-check { display: grid; gap: 8px; padding: 14px; margin-top: 4px; border-radius: var(--radius-l); border: 1px solid var(--line-2); background: var(--bg-3); }

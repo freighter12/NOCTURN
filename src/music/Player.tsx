@@ -43,6 +43,7 @@ function Controls({ big = false }: { big?: boolean }) {
   return (
     <div className={`controls ${big ? "big" : ""}`}>
       <button className={`btn ghost icon ${m.shuffle ? "on" : ""}`} aria-label={m.shuffle ? "Shuffle on" : "Shuffle off"} aria-pressed={m.shuffle} onClick={() => m.setShuffle(!m.shuffle)}><I.shuffle /></button>
+      <AiShuffleButton />
       <button className="btn ghost icon" aria-label="Previous" onClick={m.prev}><I.prev /></button>
       <button className="btn primary icon play" aria-label={m.playing ? "Pause" : "Play"} onClick={m.toggle}>{m.buffering && m.playing ? <Spinner /> : m.playing ? <I.pause /> : <I.play />}</button>
       <button className="btn ghost icon" aria-label="Next" onClick={m.next}><I.next /></button>
@@ -51,6 +52,16 @@ function Controls({ big = false }: { big?: boolean }) {
         {m.repeat === "one" && <span className="badge-1">1</span>}
       </button>
     </div>
+  );
+}
+
+export function AiShuffleButton() {
+  const m = useMusic();
+  const label = m.aiShuffle ? "AI shuffle on: similar songs are added when the queue runs low" : "AI shuffle: keep playing songs like these";
+  return (
+    <button className={`btn ghost icon ai-shuffle ${m.aiShuffle ? "on" : ""}`} aria-label={label} title={label} aria-pressed={m.aiShuffle} onClick={() => m.setAiShuffle(!m.aiShuffle)}>
+      {m.aiBusy ? <Spinner /> : <I.smart />}
+    </button>
   );
 }
 
@@ -192,11 +203,19 @@ export function QueueDrawer({ onClose }: { onClose: () => void }) {
       <div className="row between" style={{ padding: "14px 16px 8px" }}>
         <b>Queue</b>
         <div className="row" style={{ gap: 4 }}>
+          <button className={`btn ghost sm ${m.aiShuffle ? "on" : ""}`} aria-pressed={m.aiShuffle} onClick={() => m.setAiShuffle(!m.aiShuffle)} title="When the queue runs low, add songs in the same style">
+            {m.aiBusy ? <Spinner /> : <I.smart />} AI shuffle
+          </button>
           <button className="btn ghost sm" onClick={save} disabled={!m.queue.length}>Save</button>
           <button className="btn ghost sm" onClick={m.clearUpcoming} disabled={m.index >= m.queue.length - 1}>Clear</button>
           <button className="btn ghost sm icon" aria-label="Close queue" onClick={onClose}><I.close /></button>
         </div>
       </div>
+      {m.aiShuffle && (
+        <div className="small dim" style={{ padding: "0 16px 8px" }}>
+          {m.aiBecause ? `${m.aiBecause}: similar songs are added as the queue runs low.` : "Similar songs will be added as the queue runs low."}
+        </div>
+      )}
       <div className="queue-list">
         {m.queue.map((id, i) => {
           const t = m.byId.get(id);
@@ -218,7 +237,7 @@ export function QueueDrawer({ onClose }: { onClose: () => void }) {
                 <Art track={t} size={34} />
                 <span className="stack" style={{ gap: 0, minWidth: 0 }}>
                   <span className="truncate">{t.title}</span>
-                  <span className="small dim truncate">{t.artist}</span>
+                  <span className="small dim truncate">{m.aiPicks.has(id) && <I.smart className="ai-pick" aria-label="Added by AI shuffle" />}{t.artist}</span>
                 </span>
               </button>
               {now ? <span className="tag solid">Playing</span> : <button className="btn ghost sm icon" aria-label={`Remove ${t.title} from queue`} onClick={() => m.removeAt(i)}><I.close /></button>}

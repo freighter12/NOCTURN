@@ -8,7 +8,7 @@
 //! Playback goes through the `media` URI scheme (see `serve`), which only
 //! serves tracks that are in the index — never arbitrary paths.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -462,13 +462,23 @@ pub fn delete_playlist(db: &Db, id: &str) -> AppResult<()> {
 /// older than `grace` — so an import that's still being saved is never touched.
 pub fn prune_streams(db: &Db, grace: chrono::Duration) -> AppResult<usize> {
     let cutoff = (chrono::Utc::now() - grace).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    // Songs waiting in the play queue (e.g. added by AI shuffle) are in use too.
+    let queued: HashSet<i64> = session(db).queue.into_iter().collect();
     let conn = db.conn();
-    let n = conn.execute(
-        "DELETE FROM music_tracks WHERE source = 'youtube' AND added_at < ?1
-           AND id NOT IN (SELECT track_id FROM music_playlist_tracks)
-           AND id NOT IN (SELECT track_id FROM music_likes)",
-        [cutoff],
-    )?;
+    let ids: Vec<i64> = conn
+        .prepare(
+            "SELECT id FROM music_tracks WHERE source = 'youtube' AND added_at < ?1
+               AND id NOT IN (SELECT track_id FROM music_playlist_tracks)
+               AND id NOT IN (SELECT track_id FROM music_likes)",
+        )?
+        .query_map([cutoff], |r| r.get(0))?
+        .filter_map(Result::ok)
+        .filter(|id| !queued.contains(id))
+        .collect();
+    let mut n = 0;
+    for id in ids {
+        n += conn.execute("DELETE FROM music_tracks WHERE id = ?1", [id])?;
+    }
     if n > 0 {
         conn.execute("DELETE FROM music_plays WHERE track_id NOT IN (SELECT id FROM music_tracks)", [])?;
     }

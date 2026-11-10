@@ -969,6 +969,8 @@ export interface AppSettings {
   desktop_notifications: boolean;
   auto_update_check: boolean;
   music_streaming: boolean;
+  /** Explicit versions of streamed songs (18+; changed only via music.setExplicit). */
+  music_explicit: boolean;
   ai: AiSettings;
   monitor: MonitorSettings;
 }
@@ -1449,6 +1451,12 @@ export interface MusicSession {
 export const mediaUrl = (id: number) => `http://media.localhost/track/${id}`;
 export const artUrl = (id: number) => `http://media.localhost/art/${id}`;
 
+export interface AiContinue {
+  track_ids: number[];
+  source: "radio" | "library";
+  because: string | null;
+}
+
 export const music = {
   folders: () => invoke<string[]>("music_folders"),
   addFolder: (path: string) => invoke<string>("music_add_folder", { path }),
@@ -1464,6 +1472,8 @@ export const music = {
   history: (limit = 200) => invoke<{ track_id: number; played_at: string }[]>("music_history", { limit }),
   clearHistory: () => invoke<void>("music_clear_history"),
   recommended: () => invoke<number[]>("music_recommended"),
+  aiContinue: (seeds: number[], exclude: number[], count: number) => invoke<AiContinue>("music_ai_continue", { seeds, exclude, count }),
+  setExplicit: (on: boolean, birthYear?: number, birthMonth?: number) => invoke<AppSettings>("music_set_explicit", { on, birthYear: birthYear ?? null, birthMonth: birthMonth ?? null }),
   playlists: () => invoke<Playlist[]>("music_playlists"),
   savePlaylist: (playlist: { id?: string | null; name: string; description: string; cover: PlaylistCover; tracks: number[] }) => invoke<Playlist>("music_save_playlist", { playlist }),
   deletePlaylist: (id: string) => invoke<void>("music_delete_playlist", { id }),

@@ -68,7 +68,7 @@ export function Assistant() {
     refreshConvs();
     api
       .aiKeyStatus()
-      .then((k) => setKeyOk(provider === "anthropic" ? k.anthropic : true))
+      .then((k) => setKeyOk(provider === "anthropic" ? k.anthropic : !!settings?.ai.model))
       .catch(() => setKeyOk(null));
   }, [refreshConvs, provider]);
 

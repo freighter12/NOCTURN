@@ -70,6 +70,13 @@ interface MusicCtx {
   fadeOutAndPause: (seconds: number) => void;
   /** Levelling applied to the current song (dB), when levelling is on. */
   levelDb: number | null;
+  /** AI shuffle: keeps adding similar songs when the queue runs low. */
+  aiShuffle: boolean;
+  setAiShuffle: (on: boolean) => void;
+  /** Queue entries added by AI shuffle, and why. */
+  aiPicks: Set<number>;
+  aiBecause: string | null;
+  aiBusy: boolean;
 }
 
 const Ctx = createContext<MusicCtx | null>(null);
@@ -785,6 +792,45 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     [toast],
   );
 
+  // ------------------------------------------------------------ AI shuffle
+  const [aiPicks, setAiPicks] = useState<Set<number>>(new Set());
+  const [aiBecause, setAiBecause] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const aiCooldown = useRef(0);
+  const aiShuffle = mp.aiShuffle;
+  const setAiShuffle = useCallback(
+    (on: boolean) => {
+      aiCooldown.current = 0;
+      update((p) => ({ ...p, music: { ...p.music, aiShuffle: on } }));
+    },
+    [update],
+  );
+  useEffect(() => {
+    if (!aiShuffle || aiBusy || !current || repeat !== "off") return;
+    if (queue.length - index > 2 || Date.now() < aiCooldown.current) return;
+    setAiBusy(true);
+    const seeds = queue.slice(Math.max(0, index - 4), index + 1);
+    music
+      .aiContinue(seeds, queue, 10)
+      .then(async (r) => {
+        const fresh = r.track_ids.filter((id) => !live.current.queue.includes(id));
+        if (!fresh.length) {
+          aiCooldown.current = Date.now() + 60_000;
+          return;
+        }
+        // Newly added streaming songs aren't in the track list yet.
+        if (fresh.some((id) => !live.current.byId.has(id))) setTracks(await music.tracks());
+        setQueue((q) => [...q, ...fresh.filter((id) => !q.includes(id))]);
+        setAiPicks((s) => new Set([...s, ...fresh]));
+        setAiBecause(r.because);
+      })
+      .catch((e) => {
+        aiCooldown.current = Date.now() + 60_000;
+        toast({ tone: "warning", title: "AI shuffle couldn't find more songs", detail: errorMessage(e) });
+      })
+      .finally(() => setAiBusy(false));
+  }, [aiShuffle, aiBusy, current, queue, index, repeat, toast]);
+
   // Queue edits can change what comes next: forget a planned handover.
   useEffect(() => cancelTransition(), [queue, repeat, mp.crossfade, mp.gapless]);
 
@@ -798,7 +844,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       value={{
         tracks, byId, playlists, loaded, reload, reloadPlaylists, queue, index, current, playing, position, duration, shuffle, repeat, volume,
         play, playNext, addToQueue, removeAt, moveInQueue, clearUpcoming, jumpTo: goto, toggle, next, prev, seek, setVolume, setShuffle, setRepeat, setLiked, analyser, buffering, timeMs, latencyMs,
-        sleep, setSleep, setDim, fadeOutAndPause, levelDb,
+        sleep, setSleep, setDim, fadeOutAndPause, levelDb, aiShuffle, setAiShuffle, aiPicks, aiBecause, aiBusy,
       }}
     >
       {children}

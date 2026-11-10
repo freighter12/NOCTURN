@@ -26,6 +26,8 @@ mod music_loudness;
 mod music_smart;
 mod music_stream;
 mod music_stream_engine;
+mod music_ytm;
+mod music_radio;
 mod privacy;
 mod report;
 mod error;
@@ -105,6 +107,7 @@ pub fn run() {
                 Err(e) => tracing::error!("journal recovery failed: {e}"),
             }
             db.audit("info", "system", "app.start", None);
+            music_stream::set_explicit_ok(settings::load(&db).music_explicit);
 
             let state = Arc::new(state::AppState::new(db, data_dir, log_dir));
             system::monitor::start(app.handle().clone(), state.clone());
@@ -177,6 +180,8 @@ pub fn run() {
             commands::music_stream_status,
             commands::music_stream_enable,
             commands::music_stream_disable,
+            commands::music_set_explicit,
+            commands::music_ai_continue,
             commands::music_stream_update,
             commands::music_stream_resolve,
             commands::music_stream_prepare,
