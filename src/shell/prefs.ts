@@ -9,8 +9,9 @@
 import type { PageId } from "../lib/app";
 import { OFFICIAL_THEMES, readabilityProblem, type Theme, type ThemeTokens } from "./theme";
 
-export type BackgroundStyle = "plain" | "glow" | "horizon" | "stars";
-export const BACKGROUNDS: BackgroundStyle[] = ["plain", "glow", "horizon", "stars"];
+export type BackgroundStyle = "plain" | "glow" | "horizon" | "stars" | "aurora" | "nebula" | "starfield" | "waves" | "fireflies";
+export const BACKGROUNDS: BackgroundStyle[] = ["plain", "glow", "horizon", "stars", "aurora", "nebula", "starfield", "waves", "fireflies"];
+export const BG_LABEL: Record<BackgroundStyle, string> = { plain: "Plain", glow: "Moonglow", horizon: "Horizon", stars: "Stars", aurora: "Aurora", nebula: "Nebula", starfield: "Drifting stars", waves: "Synthwave", fireflies: "Fireflies" };
 const TOKEN_KEYS: (keyof ThemeTokens)[] = ["bg0", "bg1", "bg2", "bg3", "bg4", "ink0", "ink1", "ink2", "ink3", "accent", "accent2"];
 
 /** A stored custom theme, or null if it's malformed or unreadable. */
@@ -37,6 +38,22 @@ export interface WidgetSlot {
   type: WidgetType;
   size: WidgetSize;
 }
+
+export type SkyChoice = "auto" | "night" | "dawn" | "day" | "dusk";
+export interface Greeting {
+  /** Shown in the greeting; empty = none. */
+  name: string;
+  /** Custom headline; empty = "Good evening" etc. {greeting} and {name} are filled in. */
+  text: string;
+  /** Line under the headline; empty = the default. */
+  subtitle: string;
+  /** Sky colours: follow the time of day, or always one. */
+  sky: SkyChoice;
+  showMoon: boolean;
+  showClock: boolean;
+  showDate: boolean;
+}
+export const DEFAULT_GREETING: Greeting = { name: "", text: "", subtitle: "", sky: "auto", showMoon: true, showClock: false, showDate: false };
 
 export type PlayerMode = "full" | "standard" | "mini" | "minimal";
 export type SidebarSide = "left" | "right";
@@ -85,6 +102,7 @@ export interface Prefs {
   };
   home: {
     widgets: WidgetSlot[];
+    greeting: Greeting;
   };
   music: {
     playerMode: PlayerMode;
@@ -128,6 +146,10 @@ export interface Prefs {
     /** Whole-interface zoom 0.8–1.5. */
     uiScale: number;
   };
+  tour: {
+    /** The first-run guided tour has been finished or skipped. */
+    done: boolean;
+  };
 }
 
 export const DEFAULT_WIDGETS: WidgetSlot[] = [
@@ -153,10 +175,11 @@ export const DEFAULT_PREFS: Prefs = {
     sidebar: "left",
     compact: false,
   },
-  home: { widgets: DEFAULT_WIDGETS },
+  home: { widgets: DEFAULT_WIDGETS, greeting: DEFAULT_GREETING },
   music: { playerMode: "standard", volume: 0.8, visualiser: true, showLyrics: true, onlineLyrics: true, wordSync: true, crossfade: 0, gapless: true, keepAlbums: true, normalize: true, discord: false, discordProgress: true, discordWhenPaused: false, aiShuffle: false },
   workspaces: { active: null, list: [], startWith: null, confirmLaunch: true },
   accessibility: { reduceMotion: false, fontScale: 1, uiScale: 1 },
+  tour: { done: false },
 };
 
 /** Sections that can never be hidden, so the user can always get back. */
@@ -269,6 +292,17 @@ export function sanitize(raw: unknown, pages: readonly string[], sections: reado
     }
   }
   const widgets = sanitizeWidgets(h.widgets) ?? d.home.widgets;
+  const g = isObj(h.greeting) ? h.greeting : {};
+  const text = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/[\u0000-\u001f]/g, "").slice(0, max) : "");
+  const greeting: Greeting = {
+    name: text(g.name, 40).trim(),
+    text: text(g.text, 80),
+    subtitle: text(g.subtitle, 140),
+    sky: oneOf<SkyChoice>(g.sky, ["auto", "night", "dawn", "day", "dusk"], "auto"),
+    showMoon: bool(g.showMoon, true),
+    showClock: bool(g.showClock, false),
+    showDate: bool(g.showDate, false),
+  };
 
   return {
     version: PREFS_VERSION,
@@ -295,7 +329,7 @@ export function sanitize(raw: unknown, pages: readonly string[], sections: reado
       sidebar: oneOf<SidebarSide>(n.sidebar, ["left", "right"], "left"),
       compact: bool(n.compact, false),
     },
-    home: { widgets },
+    home: { widgets, greeting },
     music: {
       playerMode: oneOf<PlayerMode>(m.playerMode, ["full", "standard", "mini", "minimal"], d.music.playerMode),
       volume: num(m.volume, 0, 1, d.music.volume),
@@ -323,5 +357,6 @@ export function sanitize(raw: unknown, pages: readonly string[], sections: reado
       fontScale: num(x.fontScale, 0.85, 1.4, 1),
       uiScale: num(x.uiScale, 0.8, 1.5, 1),
     },
+    tour: { done: bool(isObj(r.tour) ? r.tour.done : undefined, false) },
   };
 }

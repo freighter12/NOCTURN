@@ -12,6 +12,7 @@ import { api, errorMessage, type AiSettings, type AppInfo, type AppSettings, typ
 import { useApp } from "../lib/app";
 import { openReport } from "../components/Report";
 import { AiSetup } from "../components/AiSetup";
+import { startTour } from "../shell/Tour";
 
 const CLAUDE_MODELS = [
   { id: "claude-opus-5-5", label: "Claude Opus 5.5 — most capable" },
@@ -97,7 +98,7 @@ export function Settings() {
 
           <UpdatesPanel auto={draft.auto_update_check} onAuto={(v) => setFlag({ auto_update_check: v })} disabled={saving} />
 
-          <Panel title="About NOCTURN" actions={<button className="btn sm" onClick={openReport}>Report a problem…</button>}>
+          <Panel title="About NOCTURN" actions={<div className="row" style={{ gap: 8 }}><button className="btn sm" onClick={startTour}>Take the tour</button><button className="btn sm" onClick={openReport}>Report a problem…</button></div>}>
             <dl className="kv">
               <dt>Version</dt>
               <dd>{info?.version ?? "—"}</dd>

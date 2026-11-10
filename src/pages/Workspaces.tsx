@@ -3,13 +3,13 @@
 
 import { useState } from "react";
 import { I } from "../components/Icons";
-import { Empty, Note, PageHead, Panel, Seg, Toggle } from "../components/ui";
+import { Empty, Note, PageHead, Panel, Toggle } from "../components/ui";
 import { library, type LibraryItem } from "../lib/api";
 import { useApp, useLoad } from "../lib/app";
 import { AppIcon } from "../library/tiles";
 import { DashboardEditor } from "../shell/DashboardEditor";
 import { usePrefs } from "../shell/PrefsProvider";
-import { BACKGROUNDS, isHexColour, type BackgroundStyle, type WidgetSlot, type Workspace } from "../shell/prefs";
+import { BACKGROUNDS, BG_LABEL, isHexColour, type BackgroundStyle, type WidgetSlot, type Workspace } from "../shell/prefs";
 import { accentProblem, findTheme } from "../shell/theme";
 import { useWorkspaces } from "../shell/WorkspaceProvider";
 import { useMusic } from "../music/MusicProvider";
@@ -35,7 +35,6 @@ const TEMPLATES: Template[] = [
   { key: "blank", name: "Blank", glyph: "✦", description: "Start from nothing.", accent: null, background: null, categories: [], widgets: [] },
 ];
 
-const BG_LABEL: Record<BackgroundStyle, string> = { plain: "Plain", glow: "Moonglow", horizon: "Horizon", stars: "Starfield" };
 const ACCENTS = ["#9fc3ff", "#a6e3cf", "#c8b6ff", "#f0c89a", "#f4a7b9", "#e8e08a", "#dfe2e8"];
 
 function Editor({ ws, items, onChange, onDelete, onClose }: { ws: Workspace; items: LibraryItem[]; onChange: (w: Workspace) => void; onDelete: () => void; onClose: () => void }) {
@@ -91,7 +90,12 @@ function Editor({ ws, items, onChange, onDelete, onClose }: { ws: Workspace; ite
         <div className="studio-row">
           <div className="studio-label">Background while active</div>
           <div className="studio-control">
-            <Seg<BackgroundStyle | "global"> value={ws.background ?? "global"} onChange={(v) => set({ background: v === "global" ? null : v })} options={[{ value: "global", label: "As usual" }, ...BACKGROUNDS.map((b) => ({ value: b, label: BG_LABEL[b] }))]} />
+            <select className="select" style={{ width: 220 }} aria-label="Workspace background" value={ws.background ?? "global"} onChange={(e) => set({ background: e.target.value === "global" ? null : (e.target.value as BackgroundStyle) })}>
+              <option value="global">As usual</option>
+              {BACKGROUNDS.map((b) => (
+                <option key={b} value={b}>{BG_LABEL[b]}</option>
+              ))}
+            </select>
           </div>
         </div>
       </Panel>

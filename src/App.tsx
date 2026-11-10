@@ -7,6 +7,8 @@ import { WorkspaceProvider } from "./shell/WorkspaceProvider";
 import { MusicProvider } from "./music/MusicProvider";
 import { Player } from "./music/Player";
 import { PrefsProvider, usePrefs } from "./shell/PrefsProvider";
+import { Scene } from "./shell/Scene";
+import { Tour } from "./shell/Tour";
 import { SplashBridge } from "./shell/splash";
 import { CommandPalette } from "./shell/CommandPalette";
 import { TrayBridge } from "./shell/TrayBridge";
@@ -107,6 +109,7 @@ function Pages() {
 function Shell() {
   const { prefs } = usePrefs();
   const nav = prefs.navigation;
+  const bg = prefs.workspaces.list.find((w) => w.id === prefs.workspaces.active)?.background ?? prefs.appearance.background;
   return (
     <AppProvider>
       <MusicProvider>
@@ -116,9 +119,12 @@ function Shell() {
         <TitleBar />
         <div className={["body", nav.sidebar === "right" ? "right" : "", nav.compact ? "compact" : ""].filter(Boolean).join(" ")}>
           <Sidebar />
-          <main className="main" id="main" data-bg={prefs.workspaces.list.find((w) => w.id === prefs.workspaces.active)?.background ?? prefs.appearance.background}>
-            <GuardedPages />
-          </main>
+          <div className="main-wrap">
+            <Scene kind={bg} still={prefs.accessibility.reduceMotion} />
+            <main className="main" id="main" data-bg={bg}>
+              <GuardedPages />
+            </main>
+          </div>
         </div>
         <Player />
       </div>
@@ -129,6 +135,7 @@ function Shell() {
       <TrayBridge />
       <DiscordBridge />
       <SplashBridge />
+      <Tour />
       </WorkspaceProvider>
       </WindDownProvider>
       </MusicProvider>

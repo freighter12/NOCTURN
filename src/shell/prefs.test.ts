@@ -133,3 +133,25 @@ describe("intro", () => {
     expect(clean({ appearance: { intro: "fireworks" } }).appearance.intro).toBe("full");
   });
 });
+
+import { greetingTitle } from "./greeting";
+import { DEFAULT_GREETING } from "./prefs";
+
+describe("greeting", () => {
+  const evening = new Date(2026, 10, 10, 20, 0);
+  it("defaults to the time of day, with the name if set", () => {
+    expect(greetingTitle(DEFAULT_GREETING, evening)).toBe("Good evening");
+    expect(greetingTitle({ ...DEFAULT_GREETING, name: "Sam" }, evening)).toBe("Good evening, Sam");
+  });
+  it("fills placeholders and drops a dangling comma", () => {
+    expect(greetingTitle({ ...DEFAULT_GREETING, text: "{greeting}, {name}!", name: "Sam" }, evening)).toBe("Good evening, Sam!");
+    expect(greetingTitle({ ...DEFAULT_GREETING, text: "{greeting}, {name}!" }, evening)).toBe("Good evening!");
+    expect(greetingTitle({ ...DEFAULT_GREETING, text: "Welcome back" }, evening)).toBe("Welcome back");
+  });
+  it("sanitises stored greetings", () => {
+    const p = clean({ home: { greeting: { name: "  Sam\u0007 ", sky: "purple", showClock: "yes" } } });
+    expect(p.home.greeting.name).toBe("Sam");
+    expect(p.home.greeting.sky).toBe("auto");
+    expect(p.home.greeting.showClock).toBe(false);
+  });
+});

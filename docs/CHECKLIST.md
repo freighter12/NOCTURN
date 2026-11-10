@@ -122,6 +122,18 @@ octurn-updater.key, outside the repo — back it up; public key in tauri.conf.js
 - ✅ Playback: two decks through Web Audio. Crossfade 0–12 s (equal-power, capped to a third of a short song), gapless (next song started ~60 ms before the end, timed exactly), "Keep albums intact" (album runs never crossfaded), volume levelling to -14 LUFS from ReplayGain/R128 tags or EBU R128 measured on this PC (Symphonia + ebur128, background thread at background priority; streamed songs measured once when about to play; boosts limited by the peak; unmeasured songs get the library's typical level; table music_loudness keyed to size:mtime / video). Customise › Music › Playback. Verified live: test tones measured −5.7/−12.7/−23.7 LUFS (18 dB apart as made); gains −8.2 / −1.3 / +8 dB applied; gapless overlap 43 ms; crossfade began exactly 4 s before the end; album run stayed gapless with crossfade on. 4 Rust + 6 frontend tests
 - 🟡 Discord Rich Presence (Customise › Music, off by default): "Listening to <song>" via the Discord app's local pipe (no login/token), song/artist/album, progress bar, YouTube thumbnail + "Open on YouTube" for streamed songs, the moon logo for local files; clears on pause (option) and when nothing plays. Needs NOCTURN's Discord Application ID (or the user's own, pasted in the panel). Verified: live pipe test — Discord answered (rejecting a dummy ID); 5 tests + 1 ignored live test
 
+## Quality-of-life round (asked 2026-11-10)
+
+- ✅ GPU usage measured like Task Manager (busiest engine per card, never above 100%) — 7103990
+- ✅ "Set up AI for me": one-click free local AI (Ollama + a model sized for the PC) or a guided Claude key — c7a6dd6
+- ✅ 18+ explicit-songs setting (backend age check, not stored) and AI shuffle (radio of recent songs, artist limits) via a keyless YouTube Music client — 1b29316
+- ✅ Quick tour: spotlight walk through every sidebar section, search and Customise, opening each page as it goes; first launch only (pref tour.done, waits for the splash and a visible window), replay from Settings › About or Ctrl+K "tour"; Esc/←/→/Enter. Verified live: all 12 steps placed correctly, finish persists
+- ✅ More themes: 11 new (5 animated: Northern Lights, Nebula, Synthwave, Starfall, Fireflies; Sakura, Ocean, Crimson; light Arctic, Latte, Lavender), all pass the readability test. Animated page backgrounds (aurora, nebula, drifting stars, synthwave horizon, fireflies) — transform/opacity only, paused with reduce motion; live previews in the background picker; an animated theme brings its scene and leaving it restores a plain page
+- ✅ Customisable greeting (Customise › Home page): name, own headline with {greeting}/{name}, subtitle, fixed or time-of-day sky, moon/clock/date toggles, live preview. 3 tests
+- ✅ Rounder look: base corner radii 5/8/12 → 7/12/18 px plus a 24 px size for dialogs (the Corner roundness slider still scales them)
+- ✅ Movable widgets on Home: Arrange → drag widgets (others slide aside, saved on drop), S/M/L, move earlier/later buttons, remove; edits the active workspace's dashboard when it has one. Verified live with real mouse input: reorder and resize saved
+- ⬜ v0.5.0: version bump, signed installer + latest.json, push, GitHub release, auto-update check from 0.4.0
+
 ## Phase 6 — Testing and release
 
 - ✅ Rust unit/integration tests: 138 passing + 2 benchmark-kernel tests (4 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin, storage benchmark)

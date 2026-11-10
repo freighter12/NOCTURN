@@ -8,9 +8,12 @@ import { useApp, type PageId } from "../lib/app";
 import { discord, errorMessage, music, type DiscordStatus } from "../lib/api";
 import { ALL_PAGES, SECTIONS } from "../shell/nav";
 import { usePrefs } from "../shell/PrefsProvider";
-import { BACKGROUNDS, LOCKED_SECTIONS, sanitizeTheme, type Backdrop, type BackgroundStyle, type IntroMode, type Prefs } from "../shell/prefs";
+import { BACKGROUNDS, BG_LABEL, DEFAULT_GREETING, LOCKED_SECTIONS, sanitizeTheme, type Backdrop, type BackgroundStyle, type Greeting, type IntroMode, type Prefs, type SkyChoice } from "../shell/prefs";
+import { SkyHeader } from "../shell/SkyHeader";
+import { DEFAULT_SUBTITLE, greetingSubtitle, greetingTitle } from "../shell/greeting";
 import { previewIntro } from "../shell/splash";
-import { OFFICIAL_THEMES, accentProblem, findTheme, readabilityProblem, type Theme, type ThemeTokens } from "../shell/theme";
+import { ANIMATED_SCENES, OFFICIAL_THEMES, accentProblem, findTheme, readabilityProblem, type Theme, type ThemeTokens } from "../shell/theme";
+import { Scene } from "../shell/Scene";
 import { DashboardEditor, move } from "../shell/DashboardEditor";
 
 type Tab = "appearance" | "themes" | "layout" | "dashboard" | "music" | "accessibility";
@@ -18,7 +21,21 @@ type Tab = "appearance" | "themes" | "layout" | "dashboard" | "music" | "accessi
 const ACCENTS = ["#dfe2e8", "#b9cdf5", "#9fc3ff", "#a6e3cf", "#c8b6ff", "#f0c89a", "#f4a7b9", "#e8e08a"];
 /** Deeper presets that stay readable on light themes. */
 const ACCENTS_LIGHT = ["#2d3644", "#1f4e9c", "#1d6b57", "#6b3fa0", "#9a4a12", "#a3264a", "#5b6b12", "#0e6a86"];
-const BG_LABEL: Record<BackgroundStyle, string> = { plain: "Plain", glow: "Moonglow", horizon: "Horizon", stars: "Starfield" };
+
+/** Pick a page background, with live miniature previews (animated ones move). */
+export function BackgroundPicker({ value, onChange, still }: { value: BackgroundStyle; onChange: (b: BackgroundStyle) => void; still: boolean }) {
+  return (
+    <div className="bg-grid" role="radiogroup" aria-label="Page background">
+      {BACKGROUNDS.map((b) => (
+        <button key={b} role="radio" aria-checked={value === b} className={`bg-tile ${value === b ? "on" : ""}`} onClick={() => onChange(b)}>
+          {ANIMATED_SCENES.includes(b) ? <Scene kind={b} still={still} /> : <span className="static-bg" data-bg={b} />}
+          <span className="lbl">{BG_LABEL[b]}</span>
+          {ANIMATED_SCENES.includes(b) && <span className="tag anim-tag anim">Animated</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
 const TOKEN_LABELS: [keyof ThemeTokens, string][] = [
   ["bg0", "Window"], ["bg1", "Sidebar"], ["bg2", "Panels"], ["bg3", "Raised / hover"], ["bg4", "Inputs"],
   ["ink0", "Main text"], ["ink1", "Secondary text"], ["ink2", "Muted text"], ["ink3", "Faint text"],
@@ -134,9 +151,11 @@ function Appearance({ prefs, set }: { prefs: Prefs; set: (fn: (a: Prefs["appeara
         <Row label="High contrast" hint="Brighter text and stronger borders.">
           <Toggle on={a.highContrast} label="High contrast" onChange={(v) => set((x) => ({ ...x, highContrast: v }))} />
         </Row>
-        <Row label="Page background">
-          <Seg<BackgroundStyle> value={a.background} onChange={(v) => set((x) => ({ ...x, background: v }))} options={BACKGROUNDS.map((b) => ({ value: b, label: BG_LABEL[b] }))} />
-        </Row>
+        <div className="studio-row" style={{ display: "block" }}>
+          <div className="studio-label">Page background</div>
+          <div className="small dim" style={{ marginBottom: 8 }}>Animated backgrounds move gently behind every page; they stop while NOCTURN is hidden and stay still with reduce motion.</div>
+          <BackgroundPicker value={a.background} onChange={(v) => set((x) => ({ ...x, background: v }))} still={prefs.accessibility.reduceMotion} />
+        </div>
         <Row label="Window material" hint="Windows 11 only. Mica softly tints the window with your desktop wallpaper, like Settings and File Explorer; Acrylic is frostier and more see-through. Panels stay solid so text stays sharp.">
           <Seg<Backdrop> value={a.backdrop} onChange={(v) => set((x) => ({ ...x, backdrop: v }))} options={[{ value: "solid", label: "Solid" }, { value: "mica", label: "Mica" }, { value: "acrylic", label: "Acrylic" }]} />
         </Row>
@@ -159,7 +178,15 @@ function Themes({ prefs, update }: { prefs: Prefs; update: (fn: (p: Prefs) => Pr
   const [importText, setImportText] = useState("");
   const [showImport, setShowImport] = useState(false);
   const problem = draft ? readabilityProblem(draft.tokens) : null;
-  const setTheme = (id: string) => update((p) => ({ ...p, appearance: { ...p.appearance, theme: id } }));
+  const setTheme = (id: string) =>
+    update((p) => {
+      const next = findTheme(id, p.appearance.customThemes);
+      const prev = findTheme(p.appearance.theme, p.appearance.customThemes);
+      // An animated theme brings its scene; leaving one puts back a plain page
+      // (unless the user picked a different background themselves).
+      const background = next.scene ?? (prev.scene && p.appearance.background === prev.scene ? "plain" : p.appearance.background);
+      return { ...p, appearance: { ...p.appearance, theme: id, background } };
+    });
 
   function save() {
     if (!draft || problem) return;
@@ -206,7 +233,10 @@ function Themes({ prefs, update }: { prefs: Prefs; update: (fn: (p: Prefs) => Pr
   const card = (t: Theme, custom: boolean) => (
     <div key={t.id} className={`theme-card ${a.theme === t.id ? "on" : ""}`}>
       <button className="theme-pick" onClick={() => setTheme(t.id)} aria-pressed={a.theme === t.id}>
-        <ThemePreview t={t.tokens} />
+        <div className="theme-preview-wrap">
+          <ThemePreview t={t.tokens} />
+          {t.scene && <span className="tag anim-tag theme-anim">Animated</span>}
+        </div>
         <div className="row between" style={{ marginTop: 8 }}>
           <b style={{ fontWeight: 600 }}>{t.name}</b>
           <span className="small dim">{t.kind === "light" ? "Light" : "Dark"}</span>
@@ -372,11 +402,44 @@ function Layout({ prefs, set }: { prefs: Prefs; set: (fn: (n: Prefs["navigation"
 function Dashboard({ prefs, update }: { prefs: Prefs; update: (fn: (p: Prefs) => Prefs) => void }) {
   const { navigate } = useApp();
   return (
-    <DashboardEditor
-      widgets={prefs.home.widgets}
-      onChange={(w) => update((p) => ({ ...p, home: { widgets: w } }))}
-      actions={<button className="btn ghost sm" onClick={() => navigate("home")}>View Home <I.arrow /></button>}
-    />
+    <>
+      <GreetingEditor prefs={prefs} update={update} />
+      <DashboardEditor
+        widgets={prefs.home.widgets}
+        onChange={(w) => update((p) => ({ ...p, home: { ...p.home, widgets: w } }))}
+        actions={<button className="btn ghost sm" onClick={() => navigate("home")}>View Home <I.arrow /></button>}
+      />
+    </>
+  );
+}
+
+function GreetingEditor({ prefs, update }: { prefs: Prefs; update: (fn: (p: Prefs) => Prefs) => void }) {
+  const g = prefs.home.greeting;
+  const set = (patch: Partial<Greeting>) => update((p) => ({ ...p, home: { ...p.home, greeting: { ...p.home.greeting, ...patch } } }));
+  const changed = JSON.stringify(g) !== JSON.stringify(DEFAULT_GREETING);
+  return (
+    <Panel title="Greeting" sub="The sky banner at the top of Home." actions={changed && <button className="btn ghost sm" onClick={() => set(DEFAULT_GREETING)}>Reset</button>}>
+      <div className="greeting-preview">
+        <SkyHeader eyebrow="Nocturn" title={greetingTitle(g)} sky={g.sky} showMoon={g.showMoon} showClock={g.showClock} showDate={g.showDate}>
+          {greetingSubtitle(g)}
+        </SkyHeader>
+      </div>
+      <Row label="Your name" hint="Added after the greeting, e.g. “Good evening, Sam”.">
+        <input className="input" style={{ width: 230 }} maxLength={40} placeholder="Optional" value={g.name} onChange={(e) => set({ name: e.target.value })} aria-label="Your name" />
+      </Row>
+      <Row label="Headline" hint="Leave empty for the usual. {greeting} becomes “Good morning” etc., {name} your name.">
+        <input className="input" style={{ width: 230 }} maxLength={80} placeholder="{greeting}, {name}" value={g.text} onChange={(e) => set({ text: e.target.value })} aria-label="Greeting headline" />
+      </Row>
+      <Row label="Line underneath">
+        <input className="input" style={{ width: 300 }} maxLength={140} placeholder={DEFAULT_SUBTITLE} value={g.subtitle} onChange={(e) => set({ subtitle: e.target.value })} aria-label="Greeting subtitle" />
+      </Row>
+      <Row label="Sky" hint="Follow the time of day, or keep one sky all the time.">
+        <Seg<SkyChoice> value={g.sky} onChange={(v) => set({ sky: v })} options={[{ value: "auto", label: "Time of day" }, { value: "night", label: "Night" }, { value: "dawn", label: "Dawn" }, { value: "day", label: "Day" }, { value: "dusk", label: "Dusk" }]} />
+      </Row>
+      <Row label="Moon" hint="Tonight's real moon phase."><Toggle on={g.showMoon} label="Show the moon" onChange={(v) => set({ showMoon: v })} /></Row>
+      <Row label="Clock"><Toggle on={g.showClock} label="Show a clock" onChange={(v) => set({ showClock: v })} /></Row>
+      <Row label="Date"><Toggle on={g.showDate} label="Show the date" onChange={(v) => set({ showDate: v })} /></Row>
+    </Panel>
   );
 }
 
@@ -593,7 +656,7 @@ export function Studio() {
             { value: "appearance", label: "Appearance" },
             { value: "themes", label: "Themes" },
             { value: "layout", label: "Layout" },
-            { value: "dashboard", label: "Dashboard" },
+            { value: "dashboard", label: "Home page" },
             { value: "music", label: "Music" },
             { value: "accessibility", label: "Accessibility" },
           ]}

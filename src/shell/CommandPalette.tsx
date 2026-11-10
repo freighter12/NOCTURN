@@ -15,6 +15,7 @@ import { pushRecent, rank, type Command } from "./commands";
 import { ALL_PAGES, sectionOf } from "./nav";
 import { usePrefs } from "./PrefsProvider";
 import { previewIntro } from "./splash";
+import { startTour } from "./Tour";
 import { OFFICIAL_THEMES } from "./theme";
 import { useWorkspaces } from "./WorkspaceProvider";
 import { useWindDown } from "./WindDownProvider";
@@ -163,6 +164,7 @@ export function CommandPalette() {
         icon: "storage",
         run: () => requestApply({ tweakIds: ["performance.clean_temp"], source: "user", label: "Clean temporary files", title: "Clean temporary files" }),
       },
+      { id: "action:tour", group: "Actions", label: "Take the quick tour", keywords: ["tutorial", "help", "guide", "introduction", "walkthrough"], icon: "moon", run: () => startTour() },
       { id: "action:benchmark", group: "Actions", label: "Run a benchmark", keywords: ["test speed"], icon: "bench", run: () => navigate("benchmarks") },
       { id: "action:crashes", group: "Actions", label: "Check for crashes and problems", keywords: ["diagnose", "why", "bsod"], icon: "diagnostics", run: () => navigate("diagnostics") },
       { id: "action:slow", group: "Actions", label: "Why is my PC slow?", hint: "5-second check", keywords: ["slow", "lag", "laggy", "freezing", "stutter", "high cpu", "memory", "what is using"], icon: "processes", run: () => openSlowCheck() },

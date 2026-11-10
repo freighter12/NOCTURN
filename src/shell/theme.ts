@@ -3,7 +3,7 @@
 // so custom themes can't get those wrong. Applying a theme only sets CSS
 // variables on :root — switching is instant.
 
-import type { Prefs } from "./prefs";
+import type { BackgroundStyle, Prefs } from "./prefs";
 
 export interface ThemeTokens {
   /** Window, sidebar, panels, raised, inputs — darkest to lightest on dark themes. */
@@ -19,6 +19,8 @@ export interface Theme {
   description: string;
   kind: "dark" | "light";
   tokens: ThemeTokens;
+  /** Animated themes bring a moving page background (still with reduce motion). */
+  scene?: BackgroundStyle;
 }
 
 export const OFFICIAL_THEMES: Theme[] = [
@@ -32,11 +34,36 @@ export const OFFICIAL_THEMES: Theme[] = [
     tokens: { bg0: "#0a0807", bg1: "#100d0b", bg2: "#16120f", bg3: "#1d1814", bg4: "#26201b", ink0: "#f3eee9", ink1: "#c3b8ad", ink2: "#8c8177", ink3: "#5f564e", accent: "#f0c89a", accent2: "#c2a07b" } },
   { id: "aurora", name: "Aurora", description: "Deep green-black with a mint accent.", kind: "dark",
     tokens: { bg0: "#060908", bg1: "#0a0e0d", bg2: "#0f1513", bg3: "#151c1a", bg4: "#1c2522", ink0: "#e9f2ef", ink1: "#b2c2bd", ink2: "#7b8d88", ink3: "#53625e", accent: "#a6e3cf", accent2: "#80b3a3" } },
+  { id: "northern-lights", name: "Northern Lights", description: "Ribbons of green and teal drifting across a polar night.", kind: "dark", scene: "aurora",
+    tokens: { bg0: "#04090a", bg1: "#070d0f", bg2: "#0b1416", bg3: "#111c1f", bg4: "#182629", ink0: "#e8f5f2", ink1: "#afc7c1", ink2: "#7a948e", ink3: "#526662", accent: "#7ee8c7", accent2: "#5fb8a0" } },
+  { id: "nebula", name: "Nebula", description: "Slowly turning violet and rose clouds of a distant nebula.", kind: "dark", scene: "nebula",
+    tokens: { bg0: "#08060e", bg1: "#0c0914", bg2: "#120e1c", bg3: "#191426", bg4: "#221b33", ink0: "#f0ebf8", ink1: "#bdb3cf", ink2: "#887e9c", ink3: "#5d5570", accent: "#d6b0ff", accent2: "#a98bcc" } },
+  { id: "synthwave", name: "Synthwave", description: "Neon magenta over a gliding retro horizon.", kind: "dark", scene: "waves",
+    tokens: { bg0: "#0a0612", bg1: "#0f0919", bg2: "#150d22", bg3: "#1d132e", bg4: "#271a3c", ink0: "#f6eefc", ink1: "#c6b5d6", ink2: "#9282a6", ink3: "#655778", accent: "#ff86dc", accent2: "#c76fb0" } },
+  { id: "starfall", name: "Starfall", description: "Deep navy sky with drifting, twinkling stars.", kind: "dark", scene: "starfield",
+    tokens: { bg0: "#04060d", bg1: "#070a14", bg2: "#0b0f1c", bg3: "#111727", bg4: "#182033", ink0: "#eaeefa", ink1: "#b1b9d0", ink2: "#7c859e", ink3: "#545c73", accent: "#c4d4ff", accent2: "#97a7d1" } },
+  { id: "fireflies", name: "Fireflies", description: "A warm summer night with glowing fireflies rising.", kind: "dark", scene: "fireflies",
+    tokens: { bg0: "#070806", bg1: "#0b0d09", bg2: "#11140e", bg3: "#181c14", bg4: "#21261b", ink0: "#f2f2e8", ink1: "#c1c2ae", ink2: "#8d8f7b", ink3: "#606252", accent: "#f1d98a", accent2: "#c2ad6c" } },
+  { id: "sakura", name: "Sakura", description: "Plum-black planes with a soft cherry-blossom pink.", kind: "dark",
+    tokens: { bg0: "#0b0709", bg1: "#110b0e", bg2: "#171014", bg3: "#1f161b", bg4: "#291e24", ink0: "#f6edf1", ink1: "#c9b6bf", ink2: "#94818a", ink3: "#67585f", accent: "#f7b9d2", accent2: "#c693a8" } },
+  { id: "ocean", name: "Ocean", description: "Deep-sea blue-green with a clear lagoon accent.", kind: "dark",
+    tokens: { bg0: "#040a0c", bg1: "#071013", bg2: "#0b161a", bg3: "#101e23", bg4: "#17282e", ink0: "#e8f3f6", ink1: "#adc3c9", ink2: "#788e95", ink3: "#506368", accent: "#7fd6ea", accent2: "#61a9ba" } },
+  { id: "crimson", name: "Crimson", description: "Charcoal with a bold, warm red.", kind: "dark",
+    tokens: { bg0: "#0a0707", bg1: "#100b0b", bg2: "#161010", bg3: "#1e1616", bg4: "#281e1e", ink0: "#f6eded", ink1: "#c9b7b7", ink2: "#958282", ink3: "#695959", accent: "#ff9f9f", accent2: "#cc7f7f" } },
   { id: "daylight", name: "Daylight", description: "Light grey planes with slate ink, for bright rooms.", kind: "light",
     tokens: { bg0: "#eef0f3", bg1: "#e6e9ed", bg2: "#fbfbfc", bg3: "#f0f2f5", bg4: "#e2e5ea", ink0: "#14161b", ink1: "#3b404a", ink2: "#5c6370", ink3: "#858b97", accent: "#2d3644", accent2: "#4f5868" } },
   { id: "paper", name: "Paper", description: "Warm off-white with ink-blue accents.", kind: "light",
     tokens: { bg0: "#f2efe9", bg1: "#ebe7df", bg2: "#fcfbf8", bg3: "#f2eee7", bg4: "#e5e0d6", ink0: "#1b1915", ink1: "#433e36", ink2: "#655f55", ink3: "#8d867b", accent: "#27406b", accent2: "#4b5f84" } },
+  { id: "arctic", name: "Arctic", description: "Icy blue-white with a deep glacier accent.", kind: "light",
+    tokens: { bg0: "#ecf1f5", bg1: "#e3eaf0", bg2: "#fafcfd", bg3: "#eef3f7", bg4: "#dde5ec", ink0: "#0f1720", ink1: "#334250", ink2: "#556574", ink3: "#7e8c99", accent: "#1d5a86", accent2: "#3f6f93" } },
+  { id: "latte", name: "Latte", description: "Creamy coffee tones with a roasted brown accent.", kind: "light",
+    tokens: { bg0: "#f3ede5", bg1: "#ece4d9", bg2: "#fdfaf6", bg3: "#f4eee6", bg4: "#e7ded2", ink0: "#1f1812", ink1: "#4a3d31", ink2: "#6b5c4e", ink3: "#958677", accent: "#7a4719", accent2: "#8f6440" } },
+  { id: "lavender", name: "Lavender", description: "Soft lilac light with a violet accent.", kind: "light",
+    tokens: { bg0: "#f0eef8", bg1: "#e8e5f3", bg2: "#fcfbff", bg3: "#f1eff9", bg4: "#e2def0", ink0: "#16131f", ink1: "#3d3750", ink2: "#5f5874", ink3: "#88819c", accent: "#5a3ea8", accent2: "#715ca8" } },
 ];
+
+/** Page backgrounds that move (shown still with reduce motion). */
+export const ANIMATED_SCENES: BackgroundStyle[] = ["aurora", "nebula", "starfield", "waves", "fireflies"];
 
 export function findTheme(id: string, custom: Theme[] = []): Theme {
   return [...OFFICIAL_THEMES, ...custom].find((t) => t.id === id) ?? OFFICIAL_THEMES[0];
@@ -143,9 +170,10 @@ export function applyAppearance(prefs: Prefs, el: HTMLElement = document.documen
   set("--ink-critical", light ? "#b42323" : "#ee8a8a");
   set("--grid", mix(t.bg2, t.ink0, light ? 0.1 : 0.08));
   set("--axis", mix(t.bg2, t.ink0, light ? 0.22 : 0.16));
-  set("--radius-s", `${Math.round(5 * a.radius)}px`);
-  set("--radius", `${Math.round(8 * a.radius)}px`);
-  set("--radius-l", `${Math.round(12 * a.radius)}px`);
+  set("--radius-s", `${Math.round(7 * a.radius)}px`);
+  set("--radius", `${Math.round(12 * a.radius)}px`);
+  set("--radius-l", `${Math.round(18 * a.radius)}px`);
+  set("--radius-xl", `${Math.round(24 * a.radius)}px`);
   // See-through window and chrome colours, used only while Windows shows Mica/Acrylic behind the app.
   const [w0r, w0g, w0b] = hexToRgb(t.bg0);
   const [w1r, w1g, w1b] = hexToRgb(t.bg1);

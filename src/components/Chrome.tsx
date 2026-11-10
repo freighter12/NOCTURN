@@ -66,7 +66,7 @@ export function TitleBar() {
       <div className="center" data-tauri-drag-region onDoubleClick={() => win.toggleMaximize()}>
         <WorkspaceSwitcher />
       </div>
-      <button className="tb-search" onClick={openPalette} title="Search and run commands (Ctrl+K)">
+      <button className="tb-search" data-tour="search" onClick={openPalette} title="Search and run commands (Ctrl+K)">
         <I.search />
         Search
         <kbd>Ctrl K</kbd>
@@ -105,10 +105,10 @@ export function Sidebar() {
   const toggle = (id: string) =>
     update((p) => ({ ...p, navigation: { ...p.navigation, expanded: p.navigation.expanded.includes(id) ? p.navigation.expanded.filter((x) => x !== id) : [...p.navigation.expanded, id] } }));
 
-  const item = (id: PageId, label: string, icon: keyof typeof I, sub = false) => {
+  const item = (id: PageId, label: string, icon: keyof typeof I, sub = false, tour?: string) => {
     const Icon = I[icon];
     return (
-      <button key={`${sub ? "c" : "p"}-${id}`} className={`nav-item ${sub ? "sub" : ""} ${page === id ? "active" : ""}`} aria-current={page === id ? "page" : undefined} title={nav.compact ? label : undefined} onClick={() => navigate(id)}>
+      <button key={`${sub ? "c" : "p"}-${id}`} data-tour={tour} className={`nav-item ${sub ? "sub" : ""} ${page === id ? "active" : ""}`} aria-current={page === id ? "page" : undefined} title={nav.compact ? label : undefined} onClick={() => navigate(id)}>
         <Icon />
         <span className="label">{label}</span>
       </button>
@@ -128,13 +128,14 @@ export function Sidebar() {
         </>
       )}
       {sections.map((s) => {
-        if (!s.children) return item(s.page!, s.label, s.icon);
+        if (!s.children) return item(s.page!, s.label, s.icon, false, s.id);
         const Icon = I[s.icon];
         const open = nav.expanded.includes(s.id);
         const here = current?.id === s.id;
         return (
           <div key={s.id} style={{ display: "contents" }}>
             <button
+              data-tour={s.id}
               className={`nav-item section ${here && !open ? "active" : ""} ${here ? "here" : ""}`}
               aria-expanded={open}
               title={nav.compact ? s.label : undefined}
