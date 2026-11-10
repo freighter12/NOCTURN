@@ -63,9 +63,58 @@ impl Nvidia {
     }
 }
 
+/// Graphics adapters as DXGI lists them: (description, LUID key in the form
+/// the "GPU Engine" counters use, lower-case: `0x00000000_0x0000d1e7`).
+/// sysinfo enumerates the same adapters in the same order but doesn't expose
+/// the LUID, so the monitor matches its entries to these by description.
+pub fn adapter_luids() -> Vec<(String, String)> {
+    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
+    let mut out = Vec::new();
+    unsafe {
+        let Ok(factory) = CreateDXGIFactory1::<IDXGIFactory1>() else { return out };
+        let mut i = 0;
+        while let Ok(adapter) = factory.EnumAdapters1(i) {
+            i += 1;
+            let Ok(desc) = adapter.GetDesc1() else { continue };
+            let len = desc.Description.iter().position(|&c| c == 0).unwrap_or(desc.Description.len());
+            let name = String::from_utf16_lossy(&desc.Description[..len]);
+            let luid = format!("0x{:08x}_0x{:08x}", desc.AdapterLuid.HighPart as u32, desc.AdapterLuid.LowPart);
+            out.push((name, luid));
+        }
+    }
+    out
+}
+
+/// For each GPU name (in order), the usage of the matching adapter: the first
+/// not-yet-used adapter with the same description.
+pub fn match_usage(names: &[String], adapters: &[(String, String)], by_luid: &std::collections::HashMap<String, f32>) -> Vec<Option<f32>> {
+    let mut used = vec![false; adapters.len()];
+    names
+        .iter()
+        .map(|n| {
+            let i = adapters.iter().enumerate().position(|(i, (d, _))| !used[i] && d.trim() == n.trim())?;
+            used[i] = true;
+            Some(by_luid.get(&adapters[i].1).copied().unwrap_or(0.0))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn usage_matched_by_name_in_order() {
+        let adapters = vec![
+            ("RTX".to_string(), "0x0_0xa".to_string()),
+            ("RTX".to_string(), "0x0_0xb".to_string()),
+            ("Basic Render".to_string(), "0x0_0xc".to_string()),
+        ];
+        let by: std::collections::HashMap<String, f32> = [("0x0_0xa".to_string(), 10.0), ("0x0_0xb".to_string(), 90.0)].into_iter().collect();
+        let names = vec!["RTX".to_string(), "RTX".to_string(), "Other".to_string()];
+        assert_eq!(match_usage(&names, &adapters, &by), vec![Some(10.0), Some(90.0), None]);
+        eprintln!("adapters on this PC: {:?}", adapter_luids());
+    }
 
     #[test]
     fn nvml_is_optional_and_sane() {

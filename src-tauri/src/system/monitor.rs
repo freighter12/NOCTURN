@@ -245,7 +245,10 @@ fn run(app: AppHandle, state: Shared) {
     let mut nets = Networks::new_with_refreshed_list().ok();
     let mut disks = Disks::new_with_refreshed_list().ok();
     let nvidia = Nvidia::new();
+    let mut adapters = super::gpu::adapter_luids();
+    let mut last_adapters = Instant::now();
     let mut perf = Perf::new();
+    let perf_missing = perf.is_none();
     if perf.is_none() {
         tracing::warn!("telemetry: performance counters unavailable; disk I/O and memory pressure disabled");
     }
@@ -330,6 +333,22 @@ fn run(app: AppHandle, state: Shared) {
                     .collect()
             })
             .unwrap_or_default();
+        // sysinfo adds every engine of every process together, which goes past
+        // 100% (testers saw 180%+). Use the busiest engine per card, as Task
+        // Manager does; clamp whatever is left as a last resort.
+        if last_adapters.elapsed() >= Duration::from_secs(60) || adapters.len() < gpu_samples.len() {
+            adapters = super::gpu::adapter_luids();
+            last_adapters = Instant::now();
+        }
+        let names: Vec<String> = gpu_samples.iter().map(|g| g.name.clone()).collect();
+        let fixed = if pf.gpu_by_luid.is_empty() { vec![None; names.len()] } else { super::gpu::match_usage(&names, &adapters, &pf.gpu_by_luid) };
+        for (g, u) in gpu_samples.iter_mut().zip(fixed) {
+            g.usage = match u {
+                Some(u) => Some(u),
+                None if !pf.gpu_by_luid.is_empty() || perf_missing => g.usage.map(|v| v.clamp(0.0, 100.0)),
+                None => None,
+            };
+        }
         for n in nv {
             let target = gpu_samples.iter_mut().find(|g| g.name.contains(&n.name) || n.name.contains(&g.name));
             let g = match target {
