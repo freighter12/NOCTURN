@@ -1,37 +1,318 @@
-import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { api, errorText, type Card, type Track } from "./api";
+import { library, loadLibrary } from "./library";
+import { chrome, isNative, player, type PlayerState } from "./native";
+import { AppContext, useApp, type AppCtx, type Route, type TabId } from "./state";
+import { Art, Icon } from "./ui";
+import Home from "./pages/Home";
+import Search from "./pages/Search";
+import LibraryPage, { LikedPage, RecentPage, SavedPage } from "./pages/Library";
+import CollectionPage from "./pages/Collection";
+import ArtistView from "./pages/Artist";
+import { ActionSheet, QueueSheet } from "./sheets";
 
-// Build 1: proves the iPhone build pipeline works end to end.
+const TABS: { id: TabId; title: string; symbol: string; search?: boolean }[] = [
+  { id: "home", title: "Home", symbol: "house.fill" },
+  { id: "library", title: "Library", symbol: "square.stack.fill" },
+  { id: "search", title: "Search", symbol: "magnifyingglass", search: true },
+];
+
+const idle: PlayerState = {
+  playing: false, loading: false, index: -1, positionMs: 0, durationMs: 0, queueLength: 0,
+  track: null, repeatMode: "off", autoplay: true, error: null,
+};
+
+function shuffled<T>(a: T[]): T[] {
+  const b = [...a];
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
+}
+
 export default function App() {
-  const [info, setInfo] = useState<string>("…");
+  const [tab, setTab] = useState<TabId>("home");
+  const [stacks, setStacks] = useState<Record<TabId, Route[]>>({ home: [{ kind: "root" }], search: [{ kind: "root" }], library: [{ kind: "root" }] });
+  const [ps, setPs] = useState<PlayerState>(idle);
+  const [queue, setQueue] = useState<Track[]>([]);
+  const [actions, setActions] = useState<Track | null>(null);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [toastText, setToastText] = useState<string | null>(null);
+  const scrolls = useRef(new Map<string, number>());
+  const known = useRef(new Map<string, Track>());
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  useEffect(() => {
-    invoke<string>("app_info")
-      .then(setInfo)
-      .catch((e) => setInfo(`Rust bridge error: ${String(e)}`));
+  const stack = stacks[tab];
+  const route = stack[stack.length - 1];
+  const routeKey = `${tab}:${stack.length}:${JSON.stringify(route).slice(0, 80)}`;
+
+  const toast = useCallback((text: string) => {
+    setToastText(text);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToastText(null), 2200);
   }, []);
 
+  // remember where each page was scrolled so Back returns to the same spot
+  const saveScroll = () => scrolls.current.set(routeKey, window.scrollY);
+  useEffect(() => {
+    const y = scrolls.current.get(routeKey) ?? 0;
+    requestAnimationFrame(() => window.scrollTo(0, y));
+  }, [routeKey]);
+
+  const push = useCallback(
+    (r: Route) => {
+      saveScroll();
+      setStacks((s) => ({ ...s, [tab]: [...s[tab], r] }));
+      player.haptic("light");
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tab, routeKey],
+  );
+  const back = useCallback(() => {
+    setStacks((s) => (s[tab].length > 1 ? { ...s, [tab]: s[tab].slice(0, -1) } : s));
+  }, [tab]);
+
+  const selectTab = useCallback(
+    (t: TabId) => {
+      saveScroll();
+      if (t === tab) {
+        // tapping the current tab again goes back to its first page, like iOS
+        setStacks((s) => ({ ...s, [t]: s[t].slice(0, 1) }));
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      setTab(t);
+      chrome.select(t);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tab, routeKey],
+  );
+
+  // ---- player
+
+  const remember = (ts: Track[]) => ts.forEach((t) => known.current.set(t.videoId, t));
+
+  const playList = useCallback<AppCtx["playList"]>(
+    (tracks, index = 0, opts) => {
+      const playable = tracks.filter(Boolean);
+      if (!playable.length) return;
+      let list = playable;
+      let start = Math.min(index, list.length - 1);
+      if (opts?.shuffle) {
+        list = shuffled(playable);
+        start = 0;
+      }
+      remember(list);
+      setQueue(list);
+      player.setQueue(list, start, true).catch((e) => toast(errorText(e)));
+      player.haptic("light");
+    },
+    [toast],
+  );
+  const playNext = useCallback<AppCtx["playNext"]>(
+    (ts) => {
+      remember(ts);
+      setQueue((q) => {
+        const i = Math.max(0, ps.index + 1);
+        return q.length ? [...q.slice(0, i), ...ts, ...q.slice(i)] : ts;
+      });
+      player.insert(ts, true).catch((e) => toast(errorText(e)));
+      toast(ts.length === 1 ? "Playing next" : `${ts.length} songs playing next`);
+    },
+    [ps.index, toast],
+  );
+  const addToQueue = useCallback<AppCtx["addToQueue"]>(
+    (ts) => {
+      remember(ts);
+      setQueue((q) => [...q, ...ts]);
+      player.insert(ts, false).catch((e) => toast(errorText(e)));
+      toast(ts.length === 1 ? "Added to queue" : `${ts.length} songs added to queue`);
+    },
+    [toast],
+  );
+  const startRadio = useCallback<AppCtx["startRadio"]>(
+    (t) => {
+      toast("Starting radio…");
+      api
+        .radio(t.videoId)
+        .then((list) => {
+          const songs = list.length ? list : [t];
+          if (songs[0]?.videoId !== t.videoId) songs.unshift(t);
+          playList(songs, 0);
+        })
+        .catch((e) => toast(errorText(e)));
+    },
+    [playList, toast],
+  );
+
+  const openCard = useCallback(
+    (c: Card) => {
+      if (c.kind === "song") {
+        const t: Track = { videoId: c.id, title: c.title, artist: c.subtitle.split(" • ")[0] ?? "", artwork: c.artwork };
+        playList([t], 0);
+        return;
+      }
+      push(c.kind === "artist" ? { kind: "artist", id: c.id, seed: c } : { kind: "collection", id: c.id, seed: c });
+    },
+    [playList, push],
+  );
+
+  // player state from the native side
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    player.onState((s) => {
+      if (s.track) {
+        const full = known.current.get(s.track.videoId);
+        if (full) s = { ...s, track: { ...s.track, ...full } };
+      }
+      setPs(s);
+    }).then((f) => (off = f));
+    player.state().then(setPs).catch(() => {});
+    return () => off?.();
+  }, []);
+
+  // history + lyrics when the song changes
+  const lastId = useRef<string | null>(null);
+  useEffect(() => {
+    const t = ps.track;
+    if (!t || t.videoId === lastId.current) return;
+    lastId.current = t.videoId;
+    library.played(t);
+    api
+      .lyrics(t)
+      .then((l) => player.setLyrics(t.videoId, l?.lines ?? []))
+      .catch(() => player.setLyrics(t.videoId, []));
+  }, [ps.track]);
+
+  useEffect(() => {
+    if (ps.error) toast(ps.error);
+  }, [ps.error, toast]);
+
+  // native tab bar + Now Playing actions
+  useEffect(() => {
+    loadLibrary();
+    chrome.setTabs(TABS, "home").catch(() => {});
+    const offs: Promise<() => void>[] = [
+      chrome.onTab((id) => {
+        if (id === "home" || id === "search" || id === "library") {
+          setTab((cur) => {
+            if (cur === id) setStacks((s) => ({ ...s, [id]: s[id].slice(0, 1) }));
+            return id;
+          });
+        }
+      }),
+    ];
+    return () => offs.forEach((p) => p.then((f) => f()));
+  }, []);
+
+  useEffect(() => {
+    const p = chrome.onAction((kind, value) => {
+      const t = ps.track ? (known.current.get(ps.track.videoId) ?? ps.track) : null;
+      if (kind === "queue") setQueueOpen(true);
+      else if (kind === "save" && t) toast(library.toggleLike(t) ? "Added to Liked Songs" : "Removed from Liked Songs");
+      else if (kind === "radio" && t) startRadio(t);
+      else if (kind === "artist" && t) {
+        if (t.artistId) push({ kind: "artist", id: t.artistId });
+        else api.search(value ?? t.artist).then((r) => r.artists[0] && push({ kind: "artist", id: r.artists[0].id, seed: r.artists[0] }));
+      } else if (kind === "album" && t) {
+        if (t.albumId) push({ kind: "collection", id: t.albumId });
+        else api.search(`${t.artist} ${value ?? t.album ?? ""}`).then((r) => r.albums[0] && push({ kind: "collection", id: r.albums[0].id, seed: r.albums[0] }));
+      }
+    });
+    return () => {
+      p.then((f) => f());
+    };
+  }, [ps.track, push, startRadio, toast]);
+
+  // swipe from the left edge to go back
+  useEffect(() => {
+    let sx = -1;
+    let sy = 0;
+    const down = (e: TouchEvent) => {
+      const t = e.touches[0];
+      sx = t.clientX < 24 ? t.clientX : -1;
+      sy = t.clientY;
+    };
+    const up = (e: TouchEvent) => {
+      if (sx < 0) return;
+      const t = e.changedTouches[0];
+      if (t.clientX - sx > 70 && Math.abs(t.clientY - sy) < 60) back();
+      sx = -1;
+    };
+    window.addEventListener("touchstart", down, { passive: true });
+    window.addEventListener("touchend", up, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", down);
+      window.removeEventListener("touchend", up);
+    };
+  }, [back]);
+
+  const ctx: AppCtx = useMemo(
+    () => ({
+      tab, route, depth: stack.length, push, back, selectTab,
+      player: ps, queue, playList, playNext, addToQueue, startRadio, openCard,
+      openActions: (t) => {
+        player.haptic("medium");
+        setActions(t);
+      },
+      openQueue: () => setQueueOpen(true),
+      toast,
+    }),
+    [tab, route, stack.length, push, back, selectTab, ps, queue, playList, playNext, addToQueue, startRadio, openCard, toast],
+  );
+
+  let page: ReactNode;
+  if (route.kind === "collection") page = <CollectionPage key={route.id} id={route.id} seed={route.seed} />;
+  else if (route.kind === "artist") page = <ArtistView key={route.id} id={route.id} seed={route.seed} />;
+  else if (route.kind === "liked") page = <LikedPage />;
+  else if (route.kind === "recent") page = <RecentPage />;
+  else if (route.kind === "saved") page = <SavedPage what={route.what} />;
+  else if (tab === "home") page = <Home />;
+  else if (tab === "search") page = <Search />;
+  else page = <LibraryPage />;
+
   return (
-    <main className="hello">
-      <svg viewBox="0 0 1024 1024" className="mark" aria-hidden="true">
-        <defs>
-          <linearGradient id="m" x1="0.2" y1="0.1" x2="0.8" y2="0.95">
-            <stop offset="0" stopColor="#F4F5F8" />
-            <stop offset="0.55" stopColor="#C9CCD4" />
-            <stop offset="1" stopColor="#7E828E" />
-          </linearGradient>
-          <mask id="c">
-            <rect width="1024" height="1024" fill="black" />
-            <circle cx="512" cy="512" r="300" fill="white" />
-            <circle cx="628" cy="430" r="262" fill="black" />
-          </mask>
-        </defs>
-        <rect width="1024" height="1024" fill="url(#m)" mask="url(#c)" />
-        <circle cx="742" cy="300" r="14" fill="#E9EBF0" opacity="0.9" />
-      </svg>
-      <h1>Nocturn Music</h1>
-      <p className="sub">It runs on your iPhone.</p>
-      <p className="info">{info}</p>
-    </main>
+    <AppContext.Provider value={ctx}>
+      <main className={`page ${stack.length > 1 ? "pushed" : ""} ${isNative ? "native" : "web"}`} key={routeKey}>
+        {page}
+      </main>
+      {!isNative && <WebChrome />}
+      {actions && <ActionSheet track={actions} onClose={() => setActions(null)} />}
+      {queueOpen && <QueueSheet onClose={() => setQueueOpen(false)} />}
+      {toastText && <div className="toast">{toastText}</div>}
+    </AppContext.Provider>
+  );
+}
+
+/** Stand-in tab bar + mini player when testing on a computer (the iPhone uses the native Liquid Glass ones). */
+function WebChrome() {
+  const app = useApp();
+  const t = app.player.track;
+  return (
+    <div className="web-chrome">
+      {t && (
+        <div className="web-mini">
+          <Art src={t.artwork} size={36} radius={7} />
+          <div className="web-mini-text">
+            <b>{t.title}</b>
+            <span>{t.artist}</span>
+          </div>
+          <button onClick={() => player.toggle()} aria-label="Play or pause">
+            <Icon name={app.player.playing ? "pause" : "play"} />
+          </button>
+          <button onClick={() => player.next()} aria-label="Next">
+            <Icon name="next" />
+          </button>
+        </div>
+      )}
+      <nav className="web-tabs">
+        {TABS.map((x) => (
+          <button key={x.id} className={app.tab === x.id ? "on" : ""} onClick={() => app.selectTab(x.id)}>
+            <Icon name={x.id === "home" ? "home" : x.id === "search" ? "search" : "stack"} />
+            <span>{x.title}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
   );
 }

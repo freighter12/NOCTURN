@@ -1,0 +1,25 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Everything Nocturn Music's own window needs from the native player and tab bar."
+permissions = [
+  "allow-set-queue",
+  "allow-insert",
+  "allow-play",
+  "allow-pause",
+  "allow-toggle",
+  "allow-next",
+  "allow-previous",
+  "allow-seek",
+  "allow-set-repeat",
+  "allow-set-autoplay",
+  "allow-jump",
+  "allow-get-state",
+  "allow-set-tabs",
+  "allow-select-tab",
+  "allow-set-lyrics",
+  "allow-show-now-playing",
+  "allow-haptic",
+  "allow-register-listener",
+  "allow-remove-listener",
+]

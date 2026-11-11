@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "desktop-testing",
+  "description": "Lets the app run on a computer for testing the screens (the real app is iPhone-only)",
+  "windows": ["main"],
+  "platforms": ["windows", "macOS", "linux"],
+  "permissions": ["core:default"]
+}

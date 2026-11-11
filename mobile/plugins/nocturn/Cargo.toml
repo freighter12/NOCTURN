@@ -1,0 +1,14 @@
+[package]
+name = "tauri-plugin-nocturn"
+version = "0.1.0"
+description = "Native iPhone parts of Nocturn Music: audio player, lock screen, Liquid Glass tab bar"
+edition = "2021"
+publish = false
+links = "tauri-plugin-nocturn"
+
+[dependencies]
+tauri = { version = "2" }
+serde = "1"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

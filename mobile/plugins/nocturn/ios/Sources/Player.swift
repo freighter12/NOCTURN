@@ -1,0 +1,492 @@
+import AVFoundation
+import MediaPlayer
+import Observation
+import UIKit
+
+/// What the web side and the native screens see.
+struct PlayerState: Encodable, Sendable {
+  var playing = false
+  var loading = false
+  var index = -1
+  var positionMs: Double = 0
+  var durationMs: Double = 0
+  var queueLength = 0
+  var track: TrackDTO?
+  var repeatMode = "off"
+  var autoplay = true
+  var error: String?
+}
+
+/// The music player. Lives entirely on the native side so playback, skipping
+/// and moving to the next song keep working with the screen locked.
+@MainActor
+@Observable
+final class PlayerEngine {
+  static let shared = PlayerEngine()
+
+  // observed by SwiftUI
+  private(set) var queue: [TrackDTO] = []
+  private(set) var index = -1
+  private(set) var playing = false
+  private(set) var loading = false
+  private(set) var positionMs: Double = 0
+  private(set) var durationMs: Double = 0
+  private(set) var repeatMode = "off"
+  private(set) var autoplay = true
+  private(set) var lastError: String?
+  private(set) var artworkImage: UIImage?
+  var lyrics: [LyricLine] = []
+  var lyricsTrackId: String?
+
+  var current: TrackDTO? { queue.indices.contains(index) ? queue[index] : nil }
+
+  /// Called whenever something the web side cares about changes.
+  @ObservationIgnored var onChange: ((PlayerState) -> Void)?
+
+  private let player = AVQueuePlayer()
+  @ObservationIgnored private var itemIndex: [ObjectIdentifier: Int] = [:]
+  @ObservationIgnored private var preparedNext: AVPlayerItem?
+  @ObservationIgnored private var loadToken = 0
+  @ObservationIgnored private var timeObserver: Any?
+  @ObservationIgnored private var currentItemObserver: NSKeyValueObservation?
+  @ObservationIgnored private var statusObserver: NSKeyValueObservation?
+  @ObservationIgnored private var lastEmit = Date.distantPast
+  @ObservationIgnored private var artworkFor: String?
+  @ObservationIgnored private var fetchingRadio = false
+  @ObservationIgnored private var retried: Set<String> = []
+
+  private init() {
+    player.actionAtItemEnd = .advance
+    player.automaticallyWaitsToMinimizeStalling = true
+    configureSession()
+    configureRemoteCommands()
+    observe()
+  }
+
+  // MARK: public API
+
+  func setQueue(_ tracks: [TrackDTO], start: Int, play: Bool, positionMs: Double?) {
+    queue = tracks
+    retried.removeAll()
+    guard !tracks.isEmpty else {
+      stopAll()
+      return
+    }
+    load(index: max(0, min(start, tracks.count - 1)), autoplay: play, seekMs: positionMs)
+  }
+
+  /// Adds songs right after the current one ("Play next") or at the end.
+  func insert(_ tracks: [TrackDTO], next: Bool) {
+    guard !tracks.isEmpty else { return }
+    if queue.isEmpty {
+      setQueue(tracks, start: 0, play: true, positionMs: nil)
+      return
+    }
+    let at = next ? min(index + 1, queue.count) : queue.count
+    queue.insert(contentsOf: tracks, at: at)
+    if at == index + 1 { dropPrepared() }
+    prepareNext()
+    emit(force: true)
+  }
+
+  func jump(to i: Int) {
+    guard queue.indices.contains(i) else { return }
+    load(index: i, autoplay: true, seekMs: nil)
+  }
+
+  func play() {
+    if player.currentItem == nil, current != nil {
+      load(index: index, autoplay: true, seekMs: positionMs)
+      return
+    }
+    activateSession()
+    player.play()
+    playing = true
+    updateNowPlaying()
+    emit(force: true)
+  }
+
+  func pause() {
+    player.pause()
+    playing = false
+    updateNowPlaying()
+    emit(force: true)
+  }
+
+  func toggle() { playing ? pause() : play() }
+
+  func next() {
+    guard !queue.isEmpty else { return }
+    if index + 1 < queue.count {
+      load(index: index + 1, autoplay: true, seekMs: nil)
+    } else if repeatMode == "all" {
+      load(index: 0, autoplay: true, seekMs: nil)
+    } else {
+      continueWithRadio()
+    }
+  }
+
+  func previous() {
+    if positionMs > 3000 || index <= 0 {
+      seek(ms: 0)
+    } else {
+      load(index: index - 1, autoplay: true, seekMs: nil)
+    }
+  }
+
+  func seek(ms: Double) {
+    let t = CMTime(seconds: max(0, ms) / 1000, preferredTimescale: 600)
+    positionMs = max(0, ms)
+    player.seek(to: t, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+      Task { @MainActor in
+        self?.updateNowPlaying()
+        self?.emit(force: true)
+      }
+    }
+  }
+
+  func setRepeat(_ mode: String) {
+    repeatMode = ["off", "all", "one"].contains(mode) ? mode : "off"
+    player.actionAtItemEnd = repeatMode == "one" ? .pause : .advance
+    dropPrepared()
+    prepareNext()
+    emit(force: true)
+  }
+
+  func setAutoplay(_ on: Bool) {
+    autoplay = on
+    emit(force: true)
+  }
+
+  func state() -> PlayerState {
+    PlayerState(
+      playing: playing, loading: loading, index: index, positionMs: positionMs, durationMs: durationMs,
+      queueLength: queue.count, track: current, repeatMode: repeatMode, autoplay: autoplay, error: lastError)
+  }
+
+  // MARK: loading songs
+
+  private func load(index i: Int, autoplay play: Bool, seekMs: Double?) {
+    loadToken += 1
+    let token = loadToken
+    index = i
+    positionMs = seekMs ?? 0
+    durationMs = queue[i].durationMs ?? 0
+    loading = true
+    lastError = nil
+    player.removeAllItems()
+    itemIndex.removeAll()
+    preparedNext = nil
+    playing = play
+    updateNowPlaying()
+    loadArtwork()
+    emit(force: true)
+    let track = queue[i]
+    Task {
+      do {
+        let item = try await self.makeItem(for: track)
+        guard token == self.loadToken else { return }
+        self.itemIndex[ObjectIdentifier(item)] = i
+        self.player.insert(item, after: nil)
+        if let ms = seekMs, ms > 0 {
+          _ = await item.seek(to: CMTime(seconds: ms / 1000, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+        }
+        guard token == self.loadToken else { return }
+        if play {
+          self.activateSession()
+          self.player.play()
+        }
+        self.prepareNext()
+      } catch {
+        guard token == self.loadToken else { return }
+        self.fail(track: track, error: error)
+      }
+    }
+  }
+
+  private func makeItem(for track: TrackDTO) async throws -> AVPlayerItem {
+    let s = try await YouTube.shared.stream(track.videoId)
+    let wait = s.availableAt - Date().timeIntervalSince1970
+    if wait > 0 && wait < 15 {
+      try await Task.sleep(nanoseconds: UInt64((wait + 0.25) * 1_000_000_000))
+    }
+    let asset = AVURLAsset(url: s.url)
+    let item = AVPlayerItem(asset: asset)
+    item.preferredForwardBufferDuration = 30
+    item.audioTimePitchAlgorithm = .spectral
+    return item
+  }
+
+  /// Gets the next song ready so it starts without a gap.
+  private func prepareNext() {
+    guard repeatMode != "one", preparedNext == nil, player.currentItem != nil else { return }
+    var n = index + 1
+    if n >= queue.count {
+      guard repeatMode == "all", !queue.isEmpty else { return }
+      n = 0
+    }
+    let track = queue[n]
+    let token = loadToken
+    Task {
+      guard let item = try? await self.makeItem(for: track), token == self.loadToken, self.preparedNext == nil,
+        let cur = self.player.currentItem
+      else { return }
+      // the queue may have changed while we waited
+      let expected = self.index + 1 < self.queue.count ? self.index + 1 : (self.repeatMode == "all" ? 0 : -1)
+      guard expected >= 0, self.queue[expected].videoId == track.videoId else { return }
+      self.itemIndex[ObjectIdentifier(item)] = expected
+      self.preparedNext = item
+      self.player.insert(item, after: cur)
+    }
+  }
+
+  private func dropPrepared() {
+    if let p = preparedNext {
+      player.remove(p)
+      itemIndex.removeValue(forKey: ObjectIdentifier(p))
+      preparedNext = nil
+    }
+  }
+
+  private func fail(track: TrackDTO, error: Error) {
+    // A link can go stale; try a fresh one once before skipping.
+    if !retried.contains(track.videoId) {
+      retried.insert(track.videoId)
+      Task {
+        await YouTube.shared.forget(track.videoId)
+        self.load(index: self.index, autoplay: self.playing, seekMs: self.positionMs)
+      }
+      return
+    }
+    loading = false
+    lastError = "\(track.title): \(error.localizedDescription)"
+    emit(force: true)
+    if playing, index + 1 < queue.count {
+      Task {
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+        self.next()
+      }
+    } else {
+      playing = false
+      updateNowPlaying()
+    }
+  }
+
+  private func stopAll() {
+    loadToken += 1
+    player.removeAllItems()
+    itemIndex.removeAll()
+    preparedNext = nil
+    queue = []
+    index = -1
+    playing = false
+    loading = false
+    positionMs = 0
+    durationMs = 0
+    MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+    emit(force: true)
+  }
+
+  /// End of the queue: keep going with YouTube Music's radio for the last song.
+  private func continueWithRadio() {
+    guard autoplay, let last = queue.last, !fetchingRadio else {
+      pause()
+      seek(ms: 0)
+      return
+    }
+    fetchingRadio = true
+    Task {
+      defer { self.fetchingRadio = false }
+      let more = (try? await YouTube.shared.radio(after: last.videoId)) ?? []
+      let known = Set(self.queue.map(\.videoId))
+      let fresh = more.filter { !known.contains($0.videoId) }.prefix(25)
+      guard !fresh.isEmpty else {
+        self.pause()
+        return
+      }
+      let start = self.queue.count
+      self.queue.append(contentsOf: fresh)
+      self.load(index: start, autoplay: true, seekMs: nil)
+    }
+  }
+
+  // MARK: observing AVPlayer
+
+  private func observe() {
+    timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] t in
+      MainActor.assumeIsolated {
+        guard let self else { return }
+        if t.seconds.isFinite { self.positionMs = t.seconds * 1000 }
+        if let d = self.player.currentItem?.duration.seconds, d.isFinite, d > 0 { self.durationMs = d * 1000 }
+        let isPlaying = self.player.timeControlStatus == .playing
+        let waiting = self.player.timeControlStatus == .waitingToPlayAtSpecifiedRate
+        if self.loading && isPlaying { self.loading = false }
+        self.loading = self.loading || (waiting && self.playing)
+        if isPlaying { self.loading = false }
+        self.emit(force: false)
+      }
+    }
+    currentItemObserver = player.observe(\.currentItem, options: [.new]) { [weak self] _, _ in
+      Task { @MainActor in
+        guard let self else { return }
+        let item = self.player.currentItem
+        self.observeStatus(item)
+        // nil = ran out of songs; the end-of-song handler below decides what's next
+        guard let item else { return }
+        if let i = self.itemIndex[ObjectIdentifier(item)], i != self.index {
+          self.index = i
+          if item === self.preparedNext { self.preparedNext = nil }
+          self.positionMs = 0
+          self.durationMs = self.queue[i].durationMs ?? 0
+          self.loadArtwork()
+          self.updateNowPlaying()
+          self.emit(force: true)
+          self.prepareNext()
+        }
+      }
+    }
+    NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: nil, queue: .main) { [weak self] note in
+      MainActor.assumeIsolated {
+        guard let self, let item = note.object as? AVPlayerItem, self.itemIndex[ObjectIdentifier(item)] == self.index else { return }
+        if self.repeatMode == "one" {
+          self.seek(ms: 0)
+          self.player.play()
+        } else if self.preparedNext == nil {
+          // nothing queued up behind this song
+          self.next()
+        }
+      }
+    }
+  }
+
+  private func observeStatus(_ item: AVPlayerItem?) {
+    statusObserver = item?.observe(\.status, options: [.new]) { [weak self] it, _ in
+      guard it.status == .failed else { return }
+      let err = it.error
+      Task { @MainActor in
+        guard let self, let track = self.current else { return }
+        self.fail(track: track, error: err ?? YouTubeError.message("playback failed"))
+      }
+    }
+  }
+
+  private func emit(force: Bool) {
+    guard force || Date().timeIntervalSince(lastEmit) >= 1 else { return }
+    lastEmit = Date()
+    onChange?(state())
+  }
+
+  // MARK: audio session, lock screen, remote controls
+
+  private func configureSession() {
+    let s = AVAudioSession.sharedInstance()
+    try? s.setCategory(.playback, mode: .default, policy: .longFormAudio)
+    NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: s, queue: .main) { [weak self] note in
+      let typeRaw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+      let optsRaw = note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+      MainActor.assumeIsolated {
+        guard let self, let typeRaw, let type = AVAudioSession.InterruptionType(rawValue: typeRaw) else { return }
+        if type == .began {
+          self.playing = false
+          self.emit(force: true)
+        } else if AVAudioSession.InterruptionOptions(rawValue: optsRaw).contains(.shouldResume) {
+          self.play()
+        }
+      }
+    }
+    NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: s, queue: .main) { [weak self] note in
+      let reasonRaw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+      MainActor.assumeIsolated {
+        // headphones unplugged / AirPods taken out → pause, like Apple Music
+        if let reasonRaw, AVAudioSession.RouteChangeReason(rawValue: reasonRaw) == .oldDeviceUnavailable {
+          self?.pause()
+        }
+      }
+    }
+  }
+
+  private func activateSession() {
+    try? AVAudioSession.sharedInstance().setActive(true)
+  }
+
+  private func configureRemoteCommands() {
+    // Handlers may arrive on any thread; hop to the main actor explicitly.
+    let c = MPRemoteCommandCenter.shared()
+    c.playCommand.addTarget { _ in
+      Task { @MainActor in PlayerEngine.shared.play() }
+      return .success
+    }
+    c.pauseCommand.addTarget { _ in
+      Task { @MainActor in PlayerEngine.shared.pause() }
+      return .success
+    }
+    c.togglePlayPauseCommand.addTarget { _ in
+      Task { @MainActor in PlayerEngine.shared.toggle() }
+      return .success
+    }
+    c.nextTrackCommand.addTarget { _ in
+      Task { @MainActor in PlayerEngine.shared.next() }
+      return .success
+    }
+    c.previousTrackCommand.addTarget { _ in
+      Task { @MainActor in PlayerEngine.shared.previous() }
+      return .success
+    }
+    c.changePlaybackPositionCommand.addTarget { e in
+      guard let e = e as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+      let ms = e.positionTime * 1000
+      Task { @MainActor in PlayerEngine.shared.seek(ms: ms) }
+      return .success
+    }
+  }
+
+  private func updateNowPlaying() {
+    guard let t = current else {
+      MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+      return
+    }
+    var info: [String: Any] = [
+      MPMediaItemPropertyTitle: t.title,
+      MPMediaItemPropertyArtist: t.artist,
+      MPNowPlayingInfoPropertyElapsedPlaybackTime: positionMs / 1000,
+      MPNowPlayingInfoPropertyPlaybackRate: playing ? 1.0 : 0.0,
+      MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
+    ]
+    if let a = t.album { info[MPMediaItemPropertyAlbumTitle] = a }
+    if durationMs > 0 { info[MPMediaItemPropertyPlaybackDuration] = durationMs / 1000 }
+    if let img = artworkImage, artworkFor == t.videoId {
+      info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+    }
+    MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+  }
+
+  private func loadArtwork() {
+    guard let t = current else { return }
+    if artworkFor == t.videoId { return }
+    artworkFor = t.videoId
+    artworkImage = nil
+    guard let s = t.artwork, let url = URL(string: s) else { return }
+    let id = t.videoId
+    Task {
+      guard let (data, _) = try? await URLSession.shared.data(from: url), let img = UIImage(data: data) else { return }
+      guard self.current?.videoId == id else { return }
+      self.artworkImage = PlayerEngine.squared(img)
+      self.updateNowPlaying()
+    }
+  }
+
+  /// Video thumbnails are 16:9 with bars; crop to the square middle like album art.
+  static func squared(_ img: UIImage) -> UIImage {
+    let w = img.size.width, h = img.size.height
+    guard w > h * 1.1 else { return img }
+    let side = h
+    let rect = CGRect(x: (w - side) / 2 * img.scale, y: 0, width: side * img.scale, height: side * img.scale)
+    guard let cg = img.cgImage?.cropping(to: rect) else { return img }
+    return UIImage(cgImage: cg, scale: img.scale, orientation: img.imageOrientation)
+  }
+}
+
+struct LyricLine: Decodable, Equatable, Sendable {
+  let ms: Double
+  let text: String
+}
