@@ -4,11 +4,9 @@
 # audio or network is needed. Screenshots are uploaded as an artifact.
 name: iPhone screenshots (simulator)
 
+# Run by hand only (Actions tab › Run workflow).
 on:
-  push:
-    paths:
-      - "mobile/plugins/**"
-      - ".github/workflows/ios-screens.yml"
+  workflow_dispatch:
 
 concurrency:
   group: ios-screens-${{ github.ref }}
