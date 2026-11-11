@@ -134,6 +134,14 @@ octurn-updater.key, outside the repo — back it up; public key in tauri.conf.js
 - ✅ Movable widgets on Home: Arrange → drag widgets (others slide aside, saved on drop), S/M/L, move earlier/later buttons, remove; edits the active workspace's dashboard when it has one. Verified live with real mouse input: reorder and resize saved
 - 🟡 v0.5.0: version bump (d68e598), signed installer + latest.json, pushed, GitHub release v0.5.0 published 2026-11-10 (latest, not pre-release). Verified: the updater endpoint serves 0.5.0, the downloaded installer is byte-identical to the build and its signature passes against the 0.4.0 public key. Left: the user installs it from 0.4.0 via Settings › Updates
 
+## Nocturn Music for iPhone (branch ios-music, details in docs/IOS.md)
+
+- ✅ Separate Tauri 2 app in mobile/, GitHub macOS build → unsigned .ipa + SideStore source on the rolling nocturn-music-ios pre-release
+- ✅ YouTube Music on the phone (search, home, albums, artists, playlists, radio; visionOS audio links), native player with background audio and lock screen, Liquid Glass tab bar + mini player + Now Playing
+- ✅ Desktop-style synced lyrics and playlist import by link (Spotify, Deezer, YouTube, YouTube Music)
+- 🟡 Launch crashes in builds 3–5 fixed; build 0.1.0.6 not yet confirmed on the phone
+- ⬜ Device test: playback, lock screen, lyrics, import; SideStore sign-in (−80045) on the user's phone
+
 ## Phase 6 — Testing and release
 
 - ✅ Rust unit/integration tests: 138 passing + 2 benchmark-kernel tests (4 ignored tests with real side effects, run manually: registry round-trip, Customise round-trip, Recycle Bin, storage benchmark)
