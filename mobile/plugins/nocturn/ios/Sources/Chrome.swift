@@ -33,6 +33,8 @@ final class ChromeController: NSObject, UITabBarControllerDelegate {
   private var specs: [TabSpec] = []
   private var pendingSelect: String?
   private var installed = false
+  /// The tab bar owns the window, so the web view can be moved into tabs.
+  private var ready = false
   private var accessoryHost: UIHostingController<MiniPlayerView>?
   private var accessoryShown = false
   private weak var nowPlaying: UIViewController?
@@ -72,10 +74,15 @@ final class ChromeController: NSObject, UITabBarControllerDelegate {
         TabSpec(id: "search", title: "Search", symbol: "magnifyingglass", search: true),
       ]
     }
-    rebuildTabs()
+    // Hand the window to the tab bar FIRST: iOS refuses to make Tauri's view
+    // controller a child of a tab while it's still the window's root (that
+    // crashed build 0.1.0.3/4 on launch).
     window.rootViewController = tabBar
     window.makeKeyAndVisible()
+    ready = true
+    rebuildTabs()
     if let id = pendingSelect { select(id) }
+    if let host = tabBar.selectedViewController as? HostViewController { embed(into: host) }
     playerChanged()
   }
 
@@ -121,7 +128,9 @@ final class ChromeController: NSObject, UITabBarControllerDelegate {
 
   /// Moves the one web view into the tab that's showing.
   private func embed(into host: HostViewController) {
-    guard let content = webVC else { return }
+    guard ready, let content = webVC else { return }
+    // never adopt a view controller that is still some window's root
+    if let w = content.view.window, w.rootViewController === content { return }
     if content.parent !== host {
       if content.parent != nil {
         content.willMove(toParent: nil)
