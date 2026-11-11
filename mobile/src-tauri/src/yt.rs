@@ -622,6 +622,16 @@ pub async fn search(query: &str) -> YtResult<SearchResults> {
     Ok(parse_search(&music_post("search", json!({ "query": q })).await?))
 }
 
+/// Album songs only (YouTube Music's "Songs" filter) — used to match imported playlists.
+pub async fn search_songs(query: &str) -> YtResult<Vec<Track>> {
+    let q: String = query.trim().chars().take(150).collect();
+    if q.is_empty() {
+        return Ok(Vec::new());
+    }
+    let r = parse_search(&music_post("search", json!({ "query": q, "params": "EgWKAQIIAWoKEAkQBRAKEAMQBA==" })).await?);
+    Ok(r.songs)
+}
+
 pub async fn suggestions(input: &str) -> YtResult<Vec<String>> {
     let q: String = input.chars().take(100).collect();
     if q.trim().is_empty() {

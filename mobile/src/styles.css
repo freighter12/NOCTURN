@@ -344,7 +344,7 @@ h1, h2, h3, p { margin: 0; }
 
 .col-head { display: grid; justify-items: center; text-align: center; padding: 6px 40px 0; gap: 4px; }
 .col-art { width: min(62vw, 270px); border-radius: 14px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55); margin-bottom: 14px; }
-.col-head h1 { font: 700 22px/1.25 var(--font-display); }
+.col-head h1 { font: 700 22px/1.25 var(--font-display); color: var(--ink-0); }
 .col-artist { color: var(--moon); font-size: 20px; }
 .col-sub { color: var(--ink-2); font-size: 13.5px; margin-top: 2px; }
 .col-desc { color: var(--ink-2); font-size: 14px; line-height: 1.5; padding: 20px var(--gutter) 0; -webkit-user-select: text; user-select: text; }
@@ -491,3 +491,25 @@ h1, h2, h3, p { margin: 0; }
 .web-tabs { display: grid; grid-template-columns: repeat(3, 1fr); height: 62px; }
 .web-tabs button { display: grid; justify-items: center; align-content: center; gap: 2px; font-size: 11px; color: var(--ink-2); }
 .web-tabs button.on { color: var(--moon); }
+
+/* ---------------------------------------------------------------- import + your playlists */
+
+.lib-icon.import { background: rgba(var(--moon-rgb), 0.14); }
+.import { padding: 0 20px; }
+.import .sheet-title { padding: 0 0 6px; }
+.import-help { color: var(--ink-1); font-size: 15px; line-height: 1.45; margin-bottom: 14px; }
+.import-field { display: flex; align-items: center; gap: 8px; height: 50px; padding: 0 8px 0 14px; border-radius: 14px; background: rgba(255, 255, 255, 0.06); border: 0.5px solid var(--line-2); }
+.import-field input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; font-size: 16px; -webkit-user-select: text; user-select: text; }
+.import-field input::placeholder { color: var(--ink-3); }
+.import-progress { margin-top: 16px; display: grid; gap: 8px; color: var(--ink-1); font-size: 14px; }
+.import-progress .bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.import-progress .bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #aeb3be, #f4f5f8); transition: width 0.3s var(--ease); }
+.import-error { margin-top: 12px; color: #f2b3b3; font-size: 14px; line-height: 1.4; }
+.import .glass-pill.wide { margin: 18px 0 4px; width: 100%; }
+.glass-pill:disabled { opacity: 0.45; }
+.missing { margin: 18px var(--gutter) 0; color: var(--ink-2); font-size: 14px; }
+.missing summary { cursor: pointer; padding: 8px 0; }
+.missing ul { margin: 4px 0 0; padding-left: 18px; line-height: 1.6; }
+.danger-zone { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 26px var(--gutter) 0; color: var(--ink-1); font-size: 15px; }
+.link.danger { color: #ee8a8a; }
+.pill.danger { background: rgba(208, 59, 59, 0.85); color: #fff; }

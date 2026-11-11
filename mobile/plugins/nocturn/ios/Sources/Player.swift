@@ -35,8 +35,10 @@ final class PlayerEngine {
   private(set) var autoplay = true
   private(set) var lastError: String?
   private(set) var artworkImage: UIImage?
-  var lyrics: [LyricLine] = []
+  var lyricItems: [LyricItem] = []
   var lyricsTrackId: String?
+  var lyricsApprox = false
+  var lyricsPlain = ""
 
   var current: TrackDTO? { queue.indices.contains(index) ? queue[index] : nil }
 
@@ -156,6 +158,15 @@ final class PlayerEngine {
   func setAutoplay(_ on: Bool) {
     autoplay = on
     emit(force: true)
+  }
+
+  /// Output lag of the current speakers (AirPods/Bluetooth are often 150–250 ms).
+  var outputLatencyMs: Double { AVAudioSession.sharedInstance().outputLatency * 1000 }
+
+  /// Where the song is as you *hear* it — read straight from the player, for lyrics.
+  func lyricClockMs() -> Double {
+    let s = player.currentTime().seconds
+    return (s.isFinite ? s * 1000 : positionMs) - outputLatencyMs
   }
 
   func state() -> PlayerState {
@@ -486,7 +497,4 @@ final class PlayerEngine {
   }
 }
 
-struct LyricLine: Decodable, Equatable, Sendable {
-  let ms: Double
-  let text: String
-}
+

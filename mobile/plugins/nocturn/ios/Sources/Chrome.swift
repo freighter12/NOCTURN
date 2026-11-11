@@ -485,53 +485,6 @@ struct NowPlayingView: View {
   }
 }
 
-/// Synced lyrics: the current line is bright and stays centred; tap a line to jump there.
-struct LyricsView: View {
-  let engine: PlayerEngine
-
-  private var lines: [LyricLine] {
-    engine.lyricsTrackId == engine.current?.videoId ? engine.lyrics : []
-  }
-
-  private var currentIndex: Int {
-    let pos = engine.positionMs + 250
-    return lines.lastIndex(where: { $0.ms <= pos }) ?? -1
-  }
-
-  var body: some View {
-    if lines.isEmpty {
-      VStack(spacing: 8) {
-        Image(systemName: "quote.bubble").font(.largeTitle).foregroundStyle(.white.opacity(0.4))
-        Text("No lyrics for this song").foregroundStyle(.white.opacity(0.6))
-      }
-    } else {
-      ScrollViewReader { proxy in
-        ScrollView(showsIndicators: false) {
-          VStack(alignment: .leading, spacing: 18) {
-            Color.clear.frame(height: 120)
-            ForEach(Array(lines.enumerated()), id: \.offset) { i, line in
-              Text(line.text.isEmpty ? "♪" : line.text)
-                .font(.system(size: 26, weight: .bold))
-                .foregroundStyle(.white.opacity(i == currentIndex ? 1 : 0.35))
-                .blur(radius: i == currentIndex ? 0 : 0.6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .id(i)
-                .onTapGesture { engine.seek(ms: line.ms) }
-                .animation(.easeOut(duration: 0.3), value: currentIndex)
-            }
-            Color.clear.frame(height: 240)
-          }
-          .padding(.horizontal, 28)
-        }
-        .onChange(of: currentIndex) { _, i in
-          withAnimation(.easeInOut(duration: 0.45)) { proxy.scrollTo(i, anchor: .init(x: 0.5, y: 0.3)) }
-        }
-        .mask(LinearGradient(colors: [.clear, .black, .black, .clear], startPoint: .top, endPoint: .bottom))
-      }
-    }
-  }
-}
-
 struct VolumeSlider: UIViewRepresentable {
   func makeUIView(context: Context) -> MPVolumeView {
     let v = MPVolumeView(frame: .zero)

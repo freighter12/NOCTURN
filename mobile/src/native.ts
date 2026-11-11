@@ -17,6 +17,16 @@ export type PlayerState = {
   error: string | null;
 };
 
+export type NativeLyricItem = {
+  kind: "line" | "gap";
+  start: number;
+  end: number;
+  text: string;
+  words: { t: number; w: string }[];
+  estimated?: boolean;
+  sungEnd?: number;
+};
+
 export type TabSpec = { id: string; title: string; symbol: string; search?: boolean };
 
 export const isNative = /iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -140,8 +150,8 @@ export const player = {
   state: () => (isNative ? call<PlayerState>("get_state") : Promise.resolve(webPlayer().state)),
   /** The queue as the stand-in knows it (native keeps its own; the app mirrors it). */
   webQueue: () => (web ? web.queue : []),
-  setLyrics: (videoId: string, lines: { ms: number; text: string }[]) =>
-    isNative ? call("set_lyrics", { videoId, lines }) : Promise.resolve(),
+  setLyrics: (videoId: string, data: { items: NativeLyricItem[]; approx: boolean; plain: string }) =>
+    isNative ? call("set_lyrics", { videoId, ...data }) : Promise.resolve(),
   showNowPlaying: () => (isNative ? call("show_now_playing") : Promise.resolve()),
   haptic: (style: "light" | "medium" | "heavy" | "select" | "success" = "light") =>
     isNative ? call("haptic", { style }).catch(() => {}) : Promise.resolve(),

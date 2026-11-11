@@ -77,7 +77,8 @@ jobs:
         id: ipa
         run: |
           set -euo pipefail
-          IPA=$(find src-tauri/gen/apple/build -name '*.ipa' | head -n 1)
+          IPA=$(find src-tauri/gen/apple -name '*.ipa' -not -path '*/Payload/*' | head -n 1)
+          echo "Found: $IPA"
           test -n "$IPA"
           mkdir -p out
           cp "$IPA" "out/$IPA_NAME"

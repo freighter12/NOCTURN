@@ -1,16 +1,24 @@
-import { useLibrary } from "../library";
+import { useState } from "react";
+import { library, useLibrary } from "../library";
 import { useApp } from "../state";
-import { Art, Icon, PageHeader, Shelf, Tile, TrackRow } from "../ui";
+import { Art, Icon, PageHeader, Shelf, Tile, TrackRow, totalTime } from "../ui";
 
 export default function LibraryPage() {
   const app = useApp();
   const lib = useLibrary();
-  const empty = !lib.liked.length && !lib.albums.length && !lib.playlists.length && !lib.artists.length;
+  const empty = !lib.mine.length && !lib.liked.length && !lib.albums.length && !lib.playlists.length && !lib.artists.length;
 
   return (
     <div className="library">
       <PageHeader title="Library" />
       <nav className="lib-links">
+        <button onClick={app.openImport}>
+          <span className="lib-icon import">
+            <Icon name="plus" size={18} />
+          </span>
+          <span className="lib-label">Import Playlist</span>
+          <span className="lib-count">Spotify · YouTube</span>
+        </button>
         <button onClick={() => app.push({ kind: "liked" })}>
           <span className="lib-icon liked">
             <Icon name="heart" size={18} />
@@ -48,11 +56,21 @@ export default function LibraryPage() {
         </button>
       </nav>
 
+      {lib.mine.length > 0 && (
+        <Shelf title="Your Playlists">
+          <div className="grid">
+            {lib.mine.map((p) => (
+              <Tile key={p.id} card={{ kind: "mine", id: p.id, title: p.title, subtitle: `${p.tracks.length} songs${p.source ? ` · ${p.source}` : ""}`, artwork: p.artwork }} />
+            ))}
+          </div>
+        </Shelf>
+      )}
+
       {empty ? (
         <div className="empty-state">
           <Icon name="heartO" size={40} />
           <h3>Your library is empty</h3>
-          <p>Tap the heart on a song, or the + on an album, playlist or artist, and it shows up here.</p>
+          <p>Tap the heart on a song, or the + on an album, playlist or artist, and it shows up here. Or import a playlist from Spotify or YouTube with a link.</p>
         </div>
       ) : (
         lib.albums.length + lib.playlists.length > 0 && (
@@ -65,6 +83,73 @@ export default function LibraryPage() {
           </Shelf>
         )
       )}
+      <div className="bottom-space" />
+    </div>
+  );
+}
+
+export function MinePage({ id }: { id: string }) {
+  const app = useApp();
+  useLibrary();
+  const p = library.playlist(id);
+  const [confirm, setConfirm] = useState(false);
+  if (!p) {
+    return (
+      <div>
+        <PageHeader title="Playlist" onBack={app.back} />
+        <p className="empty">This playlist was deleted.</p>
+      </div>
+    );
+  }
+  const time = totalTime(p.tracks);
+  return (
+    <div className="collection">
+      <PageHeader title={p.title} onBack={app.back} large={false} />
+      <header className="col-head">
+        <Art src={p.artwork} radius={14} className="col-art" />
+        <h1>{p.title}</h1>
+        <p className="col-sub">{[`${p.tracks.length} songs`, time, p.source ? `from ${p.source}` : ""].filter(Boolean).join(" · ")}</p>
+      </header>
+      {p.tracks.length > 0 && <PlayButtons onPlay={() => app.playList(p.tracks, 0)} onShuffle={() => app.playList(p.tracks, 0, { shuffle: true })} />}
+      {p.tracks.map((t, i) => (
+        <TrackRow key={t.videoId} track={t} list={p.tracks} index={i} />
+      ))}
+      {!!p.missing?.length && (
+        <details className="missing">
+          <summary>{p.missing.length} songs weren't found on YouTube Music</summary>
+          <ul>
+            {p.missing.map((m, i) => (
+              <li key={i}>
+                {m.artist} — {m.title}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      <div className="danger-zone">
+        {confirm ? (
+          <>
+            <span>Delete “{p.title}”?</span>
+            <button
+              className="pill danger"
+              onClick={() => {
+                library.removePlaylist(p.id);
+                app.back();
+                app.toast("Playlist deleted");
+              }}
+            >
+              Delete
+            </button>
+            <button className="pill" onClick={() => setConfirm(false)}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button className="link danger" onClick={() => setConfirm(true)}>
+            Delete Playlist
+          </button>
+        )}
+      </div>
       <div className="bottom-space" />
     </div>
   );

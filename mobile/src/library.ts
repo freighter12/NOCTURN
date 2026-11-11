@@ -2,8 +2,20 @@
 import { useSyncExternalStore } from "react";
 import { api, type Card, type Track } from "./api";
 
+export type MyPlaylist = {
+  id: string;
+  title: string;
+  source?: string;
+  url?: string;
+  artwork?: string | null;
+  tracks: Track[];
+  missing?: { title: string; artist: string }[];
+  created: number;
+};
+
 export type Library = {
   version: 1;
+  mine: MyPlaylist[]; // your playlists (imported), newest first
   liked: Track[]; // newest first
   albums: Card[];
   playlists: Card[];
@@ -12,7 +24,7 @@ export type Library = {
   searches: string[];
 };
 
-const blank: Library = { version: 1, liked: [], albums: [], playlists: [], artists: [], recent: [], searches: [] };
+const blank: Library = { version: 1, mine: [], liked: [], albums: [], playlists: [], artists: [], recent: [], searches: [] };
 
 let lib: Library = blank;
 let loaded = false;
@@ -82,6 +94,21 @@ export const library = {
     const s = q.trim();
     if (!s) return;
     set({ ...lib, searches: [s, ...lib.searches.filter((x) => x.toLowerCase() !== s.toLowerCase())].slice(0, 12) });
+  },
+  playlist: (id: string) => lib.mine.find((p) => p.id === id),
+  addPlaylist(p: Omit<MyPlaylist, "id" | "created">): MyPlaylist {
+    const full: MyPlaylist = { ...p, id: `mine:${Date.now().toString(36)}`, created: Date.now() };
+    set({ ...lib, mine: [full, ...lib.mine] });
+    return full;
+  },
+  removePlaylist(id: string) {
+    set({ ...lib, mine: lib.mine.filter((p) => p.id !== id) });
+  },
+  removeFromPlaylist(id: string, videoId: string) {
+    set({ ...lib, mine: lib.mine.map((p) => (p.id === id ? { ...p, tracks: p.tracks.filter((t) => t.videoId !== videoId) } : p)) });
+  },
+  addToPlaylist(id: string, t: Track) {
+    set({ ...lib, mine: lib.mine.map((p) => (p.id === id && !p.tracks.some((x) => x.videoId === t.videoId) ? { ...p, tracks: [...p.tracks, t] } : p)) });
   },
   clearSearches() {
     set({ ...lib, searches: [] });

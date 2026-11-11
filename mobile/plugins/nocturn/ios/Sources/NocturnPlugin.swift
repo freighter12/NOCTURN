@@ -44,7 +44,9 @@ class SelectTabArgs: Decodable {
 
 class LyricsArgs: Decodable {
   let videoId: String
-  let lines: [LyricLine]
+  let items: [LyricItem]
+  let approx: Bool?
+  let plain: String?
 }
 
 class HapticArgs: Decodable {
@@ -153,7 +155,9 @@ class NocturnPlugin: Plugin {
   @objc public func setLyrics(_ invoke: Invoke) throws {
     let a = try invoke.parseArgs(LyricsArgs.self)
     onMain(invoke) {
-      PlayerEngine.shared.lyrics = a.lines
+      PlayerEngine.shared.lyricItems = a.items
+      PlayerEngine.shared.lyricsApprox = a.approx ?? false
+      PlayerEngine.shared.lyricsPlain = a.plain ?? ""
       PlayerEngine.shared.lyricsTrackId = a.videoId
     }
   }

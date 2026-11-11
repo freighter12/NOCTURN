@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { Track } from "./api";
+import { listen } from "@tauri-apps/api/event";
+import { api, errorText, type Track } from "./api";
 import { library } from "./library";
 import { player } from "./native";
 import { useApp } from "./state";
@@ -60,6 +61,17 @@ export function ActionSheet({ track, onClose }: { track: Track; onClose: () => v
         <button onClick={act(() => app.toast(library.toggleLike(track) ? "Added to Liked Songs" : "Removed from Liked Songs"))}>
           <Icon name={liked ? "heart" : "heartO"} /> {liked ? "Remove from Liked Songs" : "Add to Liked Songs"}
         </button>
+        {library.get().mine.slice(0, 3).map((p) => (
+          <button
+            key={p.id}
+            onClick={act(() => {
+              library.addToPlaylist(p.id, track);
+              app.toast(`Added to ${p.title}`);
+            })}
+          >
+            <Icon name="plus" /> Add to “{p.title}”
+          </button>
+        ))}
         <button onClick={act(() => app.startRadio(track))}>
           <Icon name="radio" /> Start Radio
         </button>
@@ -106,6 +118,92 @@ export function QueueSheet({ onClose }: { onClose: () => void }) {
         {!queue.length && <p className="empty">Nothing queued.</p>}
       </div>
         </>
+      )}
+    </Sheet>
+  );
+}
+
+/** Import a playlist from a Spotify, YouTube Music, YouTube or Deezer link. */
+export function ImportSheet({ onClose }: { onClose: () => void }) {
+  const app = useApp();
+  const [link, setLink] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    listen<{ done: number; total: number }>("import-progress", (e) => setProgress(e.payload)).then((f) => (off = f));
+    return () => off?.();
+  }, []);
+
+  const paste = async () => {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (t) setLink(t.trim());
+    } catch {
+      setError("Couldn't read the clipboard — press and hold in the box and choose Paste.");
+    }
+  };
+
+  const run = async (close: () => void) => {
+    if (!link.trim()) return;
+    setBusy(true);
+    setError(null);
+    setProgress(null);
+    try {
+      const r = await api.importPlaylist(link);
+      const p = library.addPlaylist({ title: r.title, source: r.source, url: r.url, artwork: r.artwork ?? r.tracks[0]?.artwork, tracks: r.tracks, missing: r.missing });
+      player.haptic("success");
+      const total = r.tracks.length + r.missing.length;
+      app.toast(r.missing.length ? `Imported ${r.tracks.length} of ${total} songs` : `Imported ${r.tracks.length} songs`);
+      close();
+      if (app.tab !== "library") app.selectTab("library");
+      setTimeout(() => app.push({ kind: "mine", id: p.id }), 60);
+    } catch (e) {
+      setError(errorText(e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet onClose={() => !busy && onClose()}>
+      {(close) => (
+        <div className="import">
+          <h2 className="sheet-title">Import a Playlist</h2>
+          <p className="import-help">
+            Paste a link to a playlist or album from <b>Spotify</b>, <b>YouTube Music</b>, <b>YouTube</b> or <b>Deezer</b>.
+          </p>
+          <div className="import-field">
+            <input
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              placeholder="https://open.spotify.com/playlist/…"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              inputMode="url"
+              disabled={busy}
+            />
+            {!link && !busy && (
+              <button className="pill" onClick={paste}>
+                Paste
+              </button>
+            )}
+          </div>
+          {busy && (
+            <div className="import-progress">
+              <div className="bar">
+                <i style={{ width: progress?.total ? `${(progress.done / progress.total) * 100}%` : "8%" }} />
+              </div>
+              <span>{progress?.total ? `Finding songs on YouTube Music… ${progress.done} of ${progress.total}` : "Reading the playlist…"}</span>
+            </div>
+          )}
+          {error && <p className="import-error">{error}</p>}
+          <button className="glass-pill wide" disabled={busy || !link.trim()} onClick={() => run(close)}>
+            {busy ? "Importing…" : "Import"}
+          </button>
+        </div>
       )}
     </Sheet>
   );

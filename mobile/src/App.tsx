@@ -6,10 +6,11 @@ import { AppContext, useApp, type AppCtx, type Route, type TabId } from "./state
 import { Art, Icon } from "./ui";
 import Home from "./pages/Home";
 import Search from "./pages/Search";
-import LibraryPage, { LikedPage, RecentPage, SavedPage } from "./pages/Library";
+import LibraryPage, { LikedPage, MinePage, RecentPage, SavedPage } from "./pages/Library";
 import CollectionPage from "./pages/Collection";
 import ArtistView from "./pages/Artist";
-import { ActionSheet, QueueSheet } from "./sheets";
+import { ActionSheet, ImportSheet, QueueSheet } from "./sheets";
+import { buildItems } from "@shared/lyricsTiming";
 
 const TABS: { id: TabId; title: string; symbol: string; search?: boolean }[] = [
   { id: "home", title: "Home", symbol: "house.fill" },
@@ -38,6 +39,7 @@ export default function App() {
   const [queue, setQueue] = useState<Track[]>([]);
   const [actions, setActions] = useState<Track | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [toastText, setToastText] = useState<string | null>(null);
   const scrolls = useRef(new Map<string, number>());
   const known = useRef(new Map<string, Track>());
@@ -152,7 +154,8 @@ export default function App() {
         playList([t], 0);
         return;
       }
-      push(c.kind === "artist" ? { kind: "artist", id: c.id, seed: c } : { kind: "collection", id: c.id, seed: c });
+      if (c.kind === "mine") push({ kind: "mine", id: c.id });
+      else push(c.kind === "artist" ? { kind: "artist", id: c.id, seed: c } : { kind: "collection", id: c.id, seed: c });
     },
     [playList, push],
   );
@@ -178,10 +181,20 @@ export default function App() {
     if (!t || t.videoId === lastId.current) return;
     lastId.current = t.videoId;
     library.played(t);
+    // Same timing model as the desktop app: lines, instrumental gaps, word timings.
     api
       .lyrics(t)
-      .then((l) => player.setLyrics(t.videoId, l?.lines ?? []))
-      .catch(() => player.setLyrics(t.videoId, []));
+      .then((l) => {
+        const duration = t.durationMs || ps.durationMs || 0;
+        const items = l?.synced.length ? buildItems(l.synced, l.words ?? [], duration, true) : [];
+        return player.setLyrics(t.videoId, {
+          items: items.map((it) => ({ kind: it.kind, start: it.start, end: it.end, text: it.text, words: it.words.map(([wt, w]) => ({ t: wt, w })), estimated: it.estimated, sungEnd: it.sungEnd })),
+          approx: !!l?.approx,
+          plain: l?.text ?? "",
+        });
+      })
+      .catch(() => player.setLyrics(t.videoId, { items: [], approx: false, plain: "" }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ps.track]);
 
   useEffect(() => {
@@ -256,6 +269,7 @@ export default function App() {
         setActions(t);
       },
       openQueue: () => setQueueOpen(true),
+      openImport: () => setImportOpen(true),
       toast,
     }),
     [tab, route, stack.length, push, back, selectTab, ps, queue, playList, playNext, addToQueue, startRadio, openCard, toast],
@@ -264,6 +278,7 @@ export default function App() {
   let page: ReactNode;
   if (route.kind === "collection") page = <CollectionPage key={route.id} id={route.id} seed={route.seed} />;
   else if (route.kind === "artist") page = <ArtistView key={route.id} id={route.id} seed={route.seed} />;
+  else if (route.kind === "mine") page = <MinePage key={route.id} id={route.id} />;
   else if (route.kind === "liked") page = <LikedPage />;
   else if (route.kind === "recent") page = <RecentPage />;
   else if (route.kind === "saved") page = <SavedPage what={route.what} />;
@@ -279,6 +294,7 @@ export default function App() {
       {!isNative && <WebChrome />}
       {actions && <ActionSheet track={actions} onClose={() => setActions(null)} />}
       {queueOpen && <QueueSheet onClose={() => setQueueOpen(false)} />}
+      {importOpen && <ImportSheet onClose={() => setImportOpen(false)} />}
       {toastText && <div className="toast">{toastText}</div>}
     </AppContext.Provider>
   );

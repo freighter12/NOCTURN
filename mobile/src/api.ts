@@ -14,7 +14,7 @@ export type Track = {
   video?: boolean;
 };
 
-export type CardKind = "album" | "playlist" | "artist" | "song";
+export type CardKind = "album" | "playlist" | "artist" | "song" | "mine";
 
 export type Card = {
   kind: CardKind;
@@ -54,7 +54,16 @@ export type ArtistPage = {
   shelves: Shelf[];
 };
 
-export type Lyrics = { lines: { ms: number; text: string }[]; plain: string; instrumental: boolean };
+export type Lyrics = { text: string; synced: [number, string][]; words: [number, string][][]; approx: boolean; instrumental: boolean };
+
+export type ImportResult = {
+  title: string;
+  source: string;
+  url: string;
+  artwork?: string | null;
+  tracks: Track[];
+  missing: { title: string; artist: string }[];
+};
 
 export type Stream = { url: string; availableAtMs?: number | null };
 
@@ -80,6 +89,7 @@ export const api = {
     cached(`l:${t.videoId}`, 24 * 3600_000, () =>
       invoke<Lyrics | null>("lyrics_get", { artist: t.artist, title: t.title, album: t.album ?? null, durationMs: t.durationMs ?? null }),
     ),
+  importPlaylist: (link: string) => invoke<ImportResult>("import_playlist", { link }),
   stream: (videoId: string) => invoke<Stream>("yt_stream", { videoId }),
   libraryLoad: () => invoke<string>("library_load"),
   librarySave: (json: string) => invoke<void>("library_save", { json }),

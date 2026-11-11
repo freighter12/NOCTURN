@@ -8,6 +8,7 @@ export type Route =
   | { kind: "root" }
   | { kind: "collection"; id: string; seed?: Card }
   | { kind: "artist"; id: string; seed?: Card }
+  | { kind: "mine"; id: string }
   | { kind: "liked" }
   | { kind: "recent" }
   | { kind: "saved"; what: "albums" | "playlists" | "artists" };
@@ -29,6 +30,7 @@ export type AppCtx = {
   openCard(c: Card): void;
   openActions(t: Track): void;
   openQueue(): void;
+  openImport(): void;
   toast(text: string): void;
 };
 
