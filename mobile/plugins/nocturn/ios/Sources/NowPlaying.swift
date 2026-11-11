@@ -34,7 +34,7 @@ struct NowPlayingView: View {
       PlaybackControls(engine: engine, signal: signal)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background { Backdrop(image: engine.artworkImage) }
+    .background { ThemeBackground(engine: engine) }
     .offset(y: max(0, dragDown))
     .preferredColorScheme(.dark)
   }

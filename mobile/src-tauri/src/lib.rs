@@ -55,9 +55,30 @@ async fn yt_stream(video_id: String) -> Result<yt::Stream, String> {
     yt::stream(&video_id).await
 }
 
+/// Lyrics are saved on the phone once found, so they also show offline
+/// (downloaded songs) and load instantly the next time.
 #[tauri::command]
-async fn lyrics_get(artist: String, title: String, album: Option<String>, duration_ms: Option<i64>) -> Result<Option<lyrics::Lyrics>, String> {
-    lyrics::get(&artist, &title, album.as_deref(), duration_ms).await
+async fn lyrics_get(app: tauri::AppHandle, artist: String, title: String, album: Option<String>, duration_ms: Option<i64>) -> Result<Option<lyrics::Lyrics>, String> {
+    let path = lyrics_cache_path(&app, &artist, &title, duration_ms);
+    if let Some(hit) = path.as_ref().and_then(|p| std::fs::read_to_string(p).ok()).and_then(|s| serde_json::from_str::<lyrics::Lyrics>(&s).ok()) {
+        return Ok(Some(hit));
+    }
+    let found = lyrics::get(&artist, &title, album.as_deref(), duration_ms).await?;
+    if let (Some(p), Some(l)) = (&path, &found) {
+        if let Ok(json) = serde_json::to_string(l) {
+            let _ = std::fs::write(p, json);
+        }
+    }
+    Ok(found)
+}
+
+fn lyrics_cache_path(app: &tauri::AppHandle, artist: &str, title: &str, duration_ms: Option<i64>) -> Option<PathBuf> {
+    use std::hash::{Hash, Hasher};
+    let dir = app.path().app_data_dir().ok()?.join("lyrics");
+    std::fs::create_dir_all(&dir).ok()?;
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (artist.to_lowercase(), title.to_lowercase(), duration_ms.map(|d| d / 2000)).hash(&mut h);
+    Some(dir.join(format!("{:016x}.json", h.finish())))
 }
 
 #[tauri::command]

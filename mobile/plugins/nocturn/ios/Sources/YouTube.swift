@@ -37,8 +37,9 @@ enum YouTubeError: LocalizedError {
 actor YouTube {
   static let shared = YouTube()
 
-  private let safariUA =
+  static let safariUA =
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
+  private var safariUA: String { YouTube.safariUA }
   private let visionVersion = "1.02"
   private var visitor: String?
   private var visitorFetched = Date.distantPast

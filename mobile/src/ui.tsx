@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 import { fmtTime, type Card, type Track } from "./api";
 import { library, useLibrary } from "./library";
+import { offline, useDownloads } from "./downloads";
 import { useApp } from "./state";
 
 // ---------------------------------------------------------------- icons (SF Symbols-like)
@@ -26,6 +27,9 @@ const paths: Record<string, string> = {
   note: "M18 3v11.5a3.5 3.5 0 11-2-3.2V7l-7 1.6v7.9a3.5 3.5 0 11-2-3.2V5.5z",
   home: "M12 3.2l8.5 7V20a1 1 0 01-1 1h-5v-6h-5v6h-5a1 1 0 01-1-1v-9.8z",
   stack: "M4 8h16v12H4zM6 5h12v2H6zM8 2h8v2H8z",
+  download: "M12 3a1 1 0 011 1v9.6l3.3-3.3a1 1 0 111.4 1.4l-5 5a1 1 0 01-1.4 0l-5-5a1 1 0 111.4-1.4l3.3 3.3V4a1 1 0 011-1zM5 19h14a1 1 0 010 2H5a1 1 0 010-2z",
+  settings: "M4 6h9.2a2.6 2.6 0 014.6 0H20v2h-2.2a2.6 2.6 0 01-4.6 0H4zm0 5h2.2a2.6 2.6 0 014.6 0H20v2h-9.2a2.6 2.6 0 01-4.6 0H4zm0 5h9.2a2.6 2.6 0 014.6 0H20v2h-2.2a2.6 2.6 0 01-4.6 0H4z",
+  trash: "M9 3h6l1 2h4v2H4V5h4zM6 9h12l-1 11a1 1 0 01-1 1H8a1 1 0 01-1-1z",
 };
 
 export function Icon({ name, size = 22, className }: { name: keyof typeof paths | string; size?: number; className?: string }) {
@@ -60,6 +64,8 @@ export function Art({ src, size, round, radius = 8, className }: { src?: string 
 export function TrackRow({ track, list, index, number, onPlay }: { track: Track; list: Track[]; index: number; number?: number; onPlay?: () => void }) {
   const app = useApp();
   const current = app.player.track?.videoId === track.videoId;
+  useDownloads();
+  const saved = offline.has(track.videoId);
   const { fired, ...press } = useLongPress(() => app.openActions(track));
   return (
     <div className={`row ${current ? "current" : ""}`} {...press}>
@@ -72,6 +78,7 @@ export function TrackRow({ track, list, index, number, onPlay }: { track: Track;
         <span className="row-text">
           <span className="row-title">{track.title}</span>
           <span className="row-sub">
+            {saved && <Icon name="download" size={13} className="dl-mark" />}
             {track.explicit && <span className="explicit">E</span>}
             {track.artist}
             {track.album && number === undefined ? ` · ${track.album}` : ""}

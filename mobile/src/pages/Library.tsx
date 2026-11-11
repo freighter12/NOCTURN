@@ -1,4 +1,6 @@
 import { useState } from "react";
+import type { Track } from "../api";
+import { fmtBytes, offline, useDownloads } from "../downloads";
 import { library, useLibrary } from "../library";
 import { useApp } from "../state";
 import { Art, Icon, PageHeader, Shelf, Tile, TrackRow, totalTime } from "../ui";
@@ -6,11 +8,19 @@ import { Art, Icon, PageHeader, Shelf, Tile, TrackRow, totalTime } from "../ui";
 export default function LibraryPage() {
   const app = useApp();
   const lib = useLibrary();
+  const dl = useDownloads();
   const empty = !lib.mine.length && !lib.liked.length && !lib.albums.length && !lib.playlists.length && !lib.artists.length;
 
   return (
     <div className="library">
-      <PageHeader title="Library" />
+      <PageHeader
+        title="Library"
+        right={
+          <button className="nav-btn" aria-label="Settings" onClick={() => app.push({ kind: "settings" })}>
+            <Icon name="settings" size={20} />
+          </button>
+        }
+      />
       <nav className="lib-links">
         <button onClick={app.openImport}>
           <span className="lib-icon import">
@@ -25,6 +35,13 @@ export default function LibraryPage() {
           </span>
           <span className="lib-label">Liked Songs</span>
           <span className="lib-count">{lib.liked.length || ""}</span>
+        </button>
+        <button onClick={() => app.push({ kind: "downloads" })}>
+          <span className="lib-icon">
+            <Icon name="download" size={18} />
+          </span>
+          <span className="lib-label">Downloads</span>
+          <span className="lib-count">{dl.active ? "Downloading…" : dl.tracks.length || ""}</span>
         </button>
         <button onClick={() => app.push({ kind: "recent" })}>
           <span className="lib-icon">
@@ -110,7 +127,7 @@ export function MinePage({ id }: { id: string }) {
         <h1>{p.title}</h1>
         <p className="col-sub">{[`${p.tracks.length} songs`, time, p.source ? `from ${p.source}` : ""].filter(Boolean).join(" · ")}</p>
       </header>
-      {p.tracks.length > 0 && <PlayButtons onPlay={() => app.playList(p.tracks, 0)} onShuffle={() => app.playList(p.tracks, 0, { shuffle: true })} />}
+      {p.tracks.length > 0 && <PlayButtons tracks={p.tracks} onPlay={() => app.playList(p.tracks, 0)} onShuffle={() => app.playList(p.tracks, 0, { shuffle: true })} />}
       {p.tracks.map((t, i) => (
         <TrackRow key={t.videoId} track={t} list={p.tracks} index={i} />
       ))}
@@ -161,7 +178,7 @@ export function LikedPage() {
   return (
     <div>
       <PageHeader title="Liked Songs" onBack={app.back} />
-      {lib.liked.length > 0 && <PlayButtons onPlay={() => app.playList(lib.liked, 0)} onShuffle={() => app.playList(lib.liked, 0, { shuffle: true })} />}
+      {lib.liked.length > 0 && <PlayButtons tracks={lib.liked} onPlay={() => app.playList(lib.liked, 0)} onShuffle={() => app.playList(lib.liked, 0, { shuffle: true })} />}
       {lib.liked.map((t, i) => (
         <TrackRow key={t.videoId} track={t} list={lib.liked} index={i} />
       ))}
@@ -205,15 +222,112 @@ export function SavedPage({ what }: { what: "albums" | "playlists" | "artists" }
   );
 }
 
-export function PlayButtons({ onPlay, onShuffle }: { onPlay: () => void; onShuffle: () => void }) {
+export function PlayButtons({ onPlay, onShuffle, tracks }: { onPlay: () => void; onShuffle: () => void; tracks?: Track[] }) {
   return (
-    <div className="play-buttons">
+    <div className={`play-buttons ${tracks ? "with-dl" : ""}`}>
       <button className="glass-pill" onClick={onPlay}>
         <Icon name="play" size={18} /> Play
       </button>
       <button className="glass-pill" onClick={onShuffle}>
         <Icon name="shuffle" size={18} /> Shuffle
       </button>
+      {tracks && <DownloadButton tracks={tracks} />}
+    </div>
+  );
+}
+
+/** Saves a whole album/playlist on the phone. Shows a ring while it works. */
+function DownloadButton({ tracks }: { tracks: Track[] }) {
+  const app = useApp();
+  useDownloads();
+  const { saved, waiting } = offline.count(tracks);
+  const all = saved === tracks.length;
+  const pct = tracks.length ? saved / tracks.length : 0;
+  const label = all ? "Downloaded" : waiting ? `Downloading, ${saved} of ${tracks.length}` : "Download";
+  return (
+    <button
+      className={`glass-round dl-btn ${all ? "done" : ""}`}
+      aria-label={label}
+      onClick={() => {
+        if (all) {
+          app.toast("All downloaded — plays without internet");
+          return;
+        }
+        if (waiting) {
+          app.toast(`Downloading… ${saved} of ${tracks.length} done`);
+          return;
+        }
+        offline
+          .add(tracks)
+          .then(() => app.toast(`Downloading ${tracks.length - saved} songs`))
+          .catch((e) => app.toast(String(e)));
+      }}
+    >
+      {waiting > 0 && (
+        <svg className="dl-ring" viewBox="0 0 36 36" aria-hidden="true">
+          <circle cx="18" cy="18" r="16" pathLength="100" strokeDasharray={`${Math.max(4, pct * 100)} 100`} />
+        </svg>
+      )}
+      <Icon name={all ? "check" : "download"} size={20} />
+    </button>
+  );
+}
+
+export function DownloadsPage() {
+  const app = useApp();
+  const dl = useDownloads();
+  const [confirm, setConfirm] = useState(false);
+  const left = dl.pending.length + (dl.active ? 1 : 0);
+  return (
+    <div>
+      <PageHeader title="Downloads" onBack={app.back} />
+      {left > 0 && (
+        <div className="dl-status">
+          <span className="spinner" />
+          <span>
+            Downloading {left} {left === 1 ? "song" : "songs"}… {Math.round(dl.progress * 100)}%
+          </span>
+        </div>
+      )}
+      {dl.failed.length > 0 && <p className="dl-failed">{dl.failed.length} couldn't be downloaded. Try again from the song's menu.</p>}
+      {dl.tracks.length > 0 && <PlayButtons onPlay={() => app.playList(dl.tracks, 0)} onShuffle={() => app.playList(dl.tracks, 0, { shuffle: true })} />}
+      {dl.tracks.map((t, i) => (
+        <TrackRow key={t.videoId} track={t} list={dl.tracks} index={i} />
+      ))}
+      {!dl.tracks.length && !left && (
+        <div className="empty-state">
+          <Icon name="download" size={40} />
+          <h3>No downloads yet</h3>
+          <p>Tap the download button on a playlist or album, or “Download” in a song's menu. Downloaded songs play with no internet.</p>
+        </div>
+      )}
+      {dl.tracks.length > 0 && (
+        <div className="danger-zone">
+          {confirm ? (
+            <>
+              <span>Remove all {dl.tracks.length}?</span>
+              <button
+                className="pill danger"
+                onClick={() => {
+                  offline.removeAll();
+                  setConfirm(false);
+                  app.toast("Downloads removed");
+                }}
+              >
+                Remove
+              </button>
+              <button className="pill" onClick={() => setConfirm(false)}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button className="link danger" onClick={() => setConfirm(true)}>
+              Remove All Downloads ({fmtBytes(dl.bytes)})
+            </button>
+          )}
+        </div>
+      )}
+      <div className="bottom-space" />
     </div>
   );
 }

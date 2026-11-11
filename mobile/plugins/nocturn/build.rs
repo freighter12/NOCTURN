@@ -21,6 +21,12 @@ const COMMANDS: &[&str] = &[
     "haptic",
     "replace_upcoming",
     "set_ai_shuffle",
+    "download",
+    "remove_downloads",
+    "get_downloads",
+    "get_settings",
+    "set_theme",
+    "set_live_lyrics",
     "register_listener",
     "remove_listener",
 ];

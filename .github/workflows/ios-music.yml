@@ -70,6 +70,9 @@ jobs:
           npx tauri ios init --ci
           npx tauri icon app-icon.svg -o src-tauri/icons
 
+      - name: Add the live lyrics widget
+        run: ruby scripts/add-widget.rb
+
       - name: Build the app (unsigned)
         run: npx tauri ios build --ci --no-sign --target aarch64 --build-number ${{ github.run_number }}
 

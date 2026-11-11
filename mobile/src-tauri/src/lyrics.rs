@@ -15,7 +15,7 @@ use crate::textmatch::{artists_overlap, clean_title, title_sim};
 
 const API: &str = "https://lrclib.net/api";
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Lyrics {
     pub text: String,

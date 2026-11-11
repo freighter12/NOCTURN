@@ -11,7 +11,9 @@ export type Route =
   | { kind: "mine"; id: string }
   | { kind: "liked" }
   | { kind: "recent" }
-  | { kind: "saved"; what: "albums" | "playlists" | "artists" };
+  | { kind: "saved"; what: "albums" | "playlists" | "artists" }
+  | { kind: "downloads" }
+  | { kind: "settings" };
 
 export type AppCtx = {
   tab: TabId;

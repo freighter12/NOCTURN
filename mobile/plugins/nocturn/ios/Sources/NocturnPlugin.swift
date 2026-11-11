@@ -58,6 +58,27 @@ class HapticArgs: Decodable {
   let style: String?
 }
 
+class DownloadArgs: Decodable {
+  let tracks: [TrackDTO]
+}
+
+class RemoveDownloadsArgs: Decodable {
+  let ids: [String]?
+  let all: Bool?
+}
+
+class ThemeArgs: Decodable {
+  let theme: String
+  /// base64 JPEG, only when a new photo was picked
+  let photo: String?
+}
+
+struct SettingsResult: Encodable {
+  let theme: String
+  let photo: String?
+  let liveLyrics: Bool
+}
+
 // MARK: events to the web side
 
 struct TabEvent: Encodable {
@@ -86,6 +107,10 @@ class NocturnPlugin: Plugin {
         ChromeController.shared.onAction = { [weak self] kind, value in
           try? self?.trigger("action", data: ActionEvent(kind: kind, value: value))
         }
+        Downloads.shared.onChange = { [weak self] state in
+          try? self?.trigger("downloads", data: state)
+        }
+        LiveLyrics.shared.cleanUp()
         ChromeController.shared.install(webview: webview)
         // Simulator screenshot tests: SIMCTL_CHILD_NOCTURN_DEMO=nowplaying
         if ProcessInfo.processInfo.environment["NOCTURN_DEMO"] == "nowplaying" {
@@ -185,6 +210,52 @@ class NocturnPlugin: Plugin {
       PlayerEngine.shared.lyricsPlain = a.plain ?? ""
       PlayerEngine.shared.lyricsTrackId = a.videoId
     }
+  }
+
+  // MARK: downloads
+
+  @objc public func download(_ invoke: Invoke) throws {
+    let a = try invoke.parseArgs(DownloadArgs.self)
+    onMain(invoke) { Downloads.shared.add(a.tracks) }
+  }
+
+  @objc public func removeDownloads(_ invoke: Invoke) throws {
+    let a = try invoke.parseArgs(RemoveDownloadsArgs.self)
+    onMain(invoke) {
+      if a.all == true {
+        Downloads.shared.removeAll()
+      } else {
+        Downloads.shared.remove(a.ids ?? [])
+      }
+    }
+  }
+
+  @objc public func getDownloads(_ invoke: Invoke) {
+    DispatchQueue.main.async {
+      let s = MainActor.assumeIsolated { Downloads.shared.state() }
+      invoke.resolve(s)
+    }
+  }
+
+  // MARK: settings (theme, live lyrics)
+
+  @objc public func getSettings(_ invoke: Invoke) {
+    DispatchQueue.main.async {
+      let s = MainActor.assumeIsolated {
+        SettingsResult(theme: ThemeStore.shared.theme, photo: ThemeStore.shared.photoBase64(), liveLyrics: LiveLyrics.shared.enabled)
+      }
+      invoke.resolve(s)
+    }
+  }
+
+  @objc public func setTheme(_ invoke: Invoke) throws {
+    let a = try invoke.parseArgs(ThemeArgs.self)
+    onMain(invoke) { ThemeStore.shared.set(a.theme, photo: a.photo) }
+  }
+
+  @objc public func setLiveLyrics(_ invoke: Invoke) throws {
+    let a = try invoke.parseArgs(AutoplayArgs.self)
+    onMain(invoke) { LiveLyrics.shared.setEnabled(a.on) }
   }
 
   // MARK: chrome

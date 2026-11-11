@@ -513,3 +513,135 @@ h1, h2, h3, p { margin: 0; }
 .danger-zone { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 26px var(--gutter) 0; color: var(--ink-1); font-size: 15px; }
 .link.danger { color: #ee8a8a; }
 .pill.danger { background: rgba(208, 59, 59, 0.85); color: #fff; }
+
+/* ---------------------------------------------------------------- themes
+   On the iPhone the background (moving artwork / lunar / black / photo) is
+   drawn natively behind a see-through page (Themes.swift). */
+html.native, html.native body { background: transparent; }
+
+/* ---------------------------------------------------------------- downloads */
+
+.dl-mark { color: var(--moon); opacity: 0.85; flex: none; }
+.play-buttons.with-dl { grid-template-columns: 1fr 1fr 48px; }
+.glass-round {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--ink-0);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+.dl-btn.done { color: var(--moon); }
+.dl-ring { position: absolute; inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); transform: rotate(-90deg); }
+.dl-ring circle { fill: none; stroke: var(--moon); stroke-width: 2.5; stroke-linecap: round; transition: stroke-dasharray 0.4s var(--ease); }
+.dl-status { display: flex; align-items: center; gap: 10px; padding: 6px var(--gutter) 0; color: var(--ink-1); font-size: 15px; }
+.dl-failed { color: #e7a0a0; font-size: 14px; padding: 8px var(--gutter) 0; }
+.link.danger, .set-row.danger b { color: #ff6b6b; }
+
+/* ---------------------------------------------------------------- settings */
+
+.set-head { font: 600 13px/1 var(--font); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); padding: 26px var(--gutter) 10px; }
+.theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 0 var(--gutter); }
+.theme-card { display: grid; gap: 3px; min-width: 0; }
+.theme-card b { font-size: 15px; margin-top: 6px; }
+.theme-card small { font-size: 12.5px; color: var(--ink-2); line-height: 1.3; }
+.theme-preview {
+  position: relative;
+  display: block;
+  aspect-ratio: 3 / 4;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s var(--ease), box-shadow 0.2s;
+}
+.theme-card.on .theme-preview { box-shadow: 0 0 0 2.5px var(--moon), 0 10px 28px rgba(0, 0, 0, 0.35); }
+.theme-card:active .theme-preview { transform: scale(0.97); }
+.th-artwork {
+  background:
+    radial-gradient(circle at 25% 25%, #7b4fd6 0, transparent 55%),
+    radial-gradient(circle at 80% 35%, #e0705a 0, transparent 50%),
+    radial-gradient(circle at 40% 85%, #2f6fd0 0, transparent 55%),
+    #120f22;
+  background-size: 160% 160%;
+  animation: th-drift 9s ease-in-out infinite alternate;
+}
+@keyframes th-drift { from { background-position: 0% 0%; } to { background-position: 100% 100%; } }
+.th-lunar {
+  background:
+    radial-gradient(1px 1px at 20% 30%, #fff 50%, transparent),
+    radial-gradient(1px 1px at 60% 55%, rgba(255, 255, 255, 0.8) 50%, transparent),
+    radial-gradient(1px 1px at 35% 75%, rgba(255, 255, 255, 0.7) 50%, transparent),
+    radial-gradient(1px 1px at 85% 80%, rgba(255, 255, 255, 0.6) 50%, transparent),
+    radial-gradient(1px 1px at 12% 60%, rgba(255, 255, 255, 0.7) 50%, transparent),
+    linear-gradient(180deg, #0d1022, #05060c 60%, #000);
+}
+.th-moon {
+  position: absolute;
+  top: 14%;
+  right: 16%;
+  width: 22%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #eceef4;
+  box-shadow: 0 0 18px 4px rgba(210, 220, 255, 0.25), inset -6px -2px 0 rgba(0, 0, 0, 0.12);
+}
+.th-black { background: #000; }
+.th-photo { background: linear-gradient(160deg, #23252c, #121318); display: grid; place-items: center; }
+.th-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: blur(3px) brightness(0.8); transform: scale(1.08); }
+.th-add { font-size: 34px; font-weight: 300; color: var(--ink-1); }
+.th-check {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--moon);
+  color: #0b0b0e;
+}
+.set-link { display: block; padding: 14px var(--gutter) 0; font-size: 15px; }
+.set-group { margin: 0 var(--gutter); border-radius: 14px; background: rgba(255, 255, 255, 0.06); border: 0.5px solid var(--line); overflow: hidden; }
+.set-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 10px 16px; }
+.set-row + .set-row { border-top: 0.5px solid var(--line); }
+.set-row > span:first-child { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.set-row b { font-weight: 500; font-size: 16px; }
+.set-row small { color: var(--ink-2); font-size: 13px; line-height: 1.35; }
+.set-actions { display: flex; gap: 8px; }
+.chev { transform: rotate(180deg); color: var(--ink-3); flex: none; }
+.set-about { text-align: center; color: var(--ink-3); font-size: 13px; padding: 28px var(--gutter) 0; }
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  position: relative;
+  width: 51px;
+  height: 31px;
+  margin: 0;
+  border-radius: 16px;
+  background: rgba(120, 120, 128, 0.36);
+  transition: background 0.2s;
+  cursor: pointer;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+  transition: transform 0.22s var(--ease);
+}
+.switch:checked { background: #34c759; }
+.switch:checked::after { transform: translateX(20px); }

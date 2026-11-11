@@ -56,7 +56,7 @@ export default function CollectionPage({ id, seed }: { id: string; seed?: Card }
         {c && <p className="col-sub">{[c.subtitle, totalTime(c.tracks) && !c.subtitle.includes("minute") ? totalTime(c.tracks) : ""].filter(Boolean).join(" · ")}</p>}
       </header>
 
-      {c && c.tracks.length > 0 && <PlayButtons onPlay={() => app.playList(c.tracks, 0)} onShuffle={() => app.playList(c.tracks, 0, { shuffle: true })} />}
+      {c && c.tracks.length > 0 && <PlayButtons tracks={c.tracks} onPlay={() => app.playList(c.tracks, 0)} onShuffle={() => app.playList(c.tracks, 0, { shuffle: true })} />}
       {error && <ErrorBox text={error} retry={load} />}
       {!c && !error && <Loading />}
       {c?.tracks.map((t, i) => (

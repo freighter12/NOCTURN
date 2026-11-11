@@ -22,6 +22,12 @@ permissions = [
   "allow-haptic",
   "allow-replace-upcoming",
   "allow-set-ai-shuffle",
+  "allow-download",
+  "allow-remove-downloads",
+  "allow-get-downloads",
+  "allow-get-settings",
+  "allow-set-theme",
+  "allow-set-live-lyrics",
   "allow-register-listener",
   "allow-remove-listener",
 ]

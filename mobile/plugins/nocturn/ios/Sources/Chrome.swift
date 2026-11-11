@@ -57,6 +57,11 @@ final class ChromeController: NSObject, UITabBarControllerDelegate {
     self.webVC = root
     window.overrideUserInterfaceStyle = .dark
     window.backgroundColor = UIColor(red: 0.03, green: 0.03, blue: 0.04, alpha: 1)
+    // see-through web view: the theme background is drawn natively behind it
+    webview.isOpaque = false
+    webview.backgroundColor = .clear
+    webview.scrollView.backgroundColor = .clear
+    root.view.backgroundColor = .clear
 
     webview.isOpaque = false
     webview.backgroundColor = .clear
@@ -222,6 +227,15 @@ final class HostViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = UIColor(red: 0.03, green: 0.03, blue: 0.04, alpha: 1)
+    // the theme background (Library › Settings › Theme), under the web view
+    let bg = UIHostingController(rootView: ThemeBackground(engine: PlayerEngine.shared, strong: true))
+    bg.view.backgroundColor = .clear
+    bg.view.isUserInteractionEnabled = false
+    addChild(bg)
+    bg.view.frame = view.bounds
+    bg.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    view.insertSubview(bg.view, at: 0)
+    bg.didMove(toParent: self)
   }
 
   override func viewWillAppear(_ animated: Bool) {

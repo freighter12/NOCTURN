@@ -38,6 +38,8 @@ final class PlayerEngine {
   private(set) var autoplay = true
   private(set) var lastError: String?
   private(set) var artworkImage: UIImage?
+  /// Strong colours from the artwork, for the "moving artwork" background.
+  private(set) var palette: [UIColor] = []
   var lyricItems: [LyricItem] = []
   var lyricsTrackId: String?
   var lyricsApprox = false
@@ -249,6 +251,7 @@ final class PlayerEngine {
     demoStart = Date().addingTimeInterval(-41)
     artworkFor = t.videoId
     artworkImage = PlayerEngine.demoArtwork()
+    palette = Palette.colors(from: artworkImage!)
     let lines = ["(Instrumental intro)", "I been running through the night", "Moonlight on the window glass", "Every city sleeps but I", "Hear the echo of the past", "Hold on, hold on", "Don't let the morning come too soon", "We're the only ones awake", "Dancing underneath the moon", "Hold on, hold on", "The stars are falling into place"]
     var items: [LyricItem] = [LyricItem(kind: "gap", start: 0, end: 12_000, text: "", words: [], estimated: nil, sungEnd: nil)]
     var start = 12_000.0
@@ -317,6 +320,12 @@ final class PlayerEngine {
   }
 
   private func makeItem(for track: TrackDTO) async throws -> AVPlayerItem {
+    // downloaded songs play from the phone, no internet needed
+    if let local = Downloads.shared.audioURL(track.videoId) {
+      let item = AVPlayerItem(asset: AVURLAsset(url: local))
+      item.audioTimePitchAlgorithm = .spectral
+      return item
+    }
     let s = try await YouTube.shared.stream(track.videoId)
     let wait = s.availableAt - Date().timeIntervalSince1970
     if wait > 0 && wait < 15 {
@@ -436,6 +445,7 @@ final class PlayerEngine {
         self.loading = self.loading || (waiting && self.playing)
         if isPlaying { self.loading = false }
         self.emit(force: false)
+        LiveLyrics.shared.update(self)
       }
     }
     currentItemObserver = player.observe(\.currentItem, options: [.new]) { [weak self] _, _ in
@@ -487,6 +497,7 @@ final class PlayerEngine {
     guard force || Date().timeIntervalSince(lastEmit) >= 1 else { return }
     lastEmit = Date()
     onChange?(state())
+    LiveLyrics.shared.update(self)
   }
 
   // MARK: audio session, lock screen, remote controls
@@ -577,15 +588,25 @@ final class PlayerEngine {
     guard let t = current else { return }
     if artworkFor == t.videoId { return }
     artworkFor = t.videoId
+    if let saved = Downloads.shared.artwork(t.videoId) {
+      setArtwork(saved)
+      return
+    }
     artworkImage = nil
     guard let s = t.artwork, let url = URL(string: s) else { return }
     let id = t.videoId
     Task {
       guard let (data, _) = try? await URLSession.shared.data(from: url), let img = UIImage(data: data) else { return }
       guard self.current?.videoId == id else { return }
-      self.artworkImage = PlayerEngine.squared(img)
-      self.updateNowPlaying()
+      self.setArtwork(PlayerEngine.squared(img))
     }
+  }
+
+  private func setArtwork(_ img: UIImage) {
+    artworkImage = img
+    let colors = Palette.colors(from: img)
+    if !colors.isEmpty { palette = colors }
+    updateNowPlaying()
   }
 
   /// Video thumbnails are 16:9 with bars; crop to the square middle like album art.

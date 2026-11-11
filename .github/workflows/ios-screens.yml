@@ -47,6 +47,9 @@ jobs:
           npx tauri ios init --ci
           npx tauri icon app-icon.svg -o src-tauri/icons
 
+      - name: Add the live lyrics widget
+        run: ruby scripts/add-widget.rb
+
       - name: Build for the simulator
         run: npx tauri ios build --ci --debug --no-sign --target x86_64
 

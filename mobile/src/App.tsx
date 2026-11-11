@@ -6,7 +6,8 @@ import { AppContext, useApp, type AppCtx, type Route, type TabId } from "./state
 import { Art, Icon } from "./ui";
 import Home from "./pages/Home";
 import Search from "./pages/Search";
-import LibraryPage, { LikedPage, MinePage, RecentPage, SavedPage } from "./pages/Library";
+import LibraryPage, { DownloadsPage, LikedPage, MinePage, RecentPage, SavedPage } from "./pages/Library";
+import SettingsPage from "./pages/Settings";
 import CollectionPage from "./pages/Collection";
 import ArtistView from "./pages/Artist";
 import { ActionSheet, ImportSheet, QueueSheet } from "./sheets";
@@ -318,6 +319,8 @@ export default function App() {
   else if (route.kind === "liked") page = <LikedPage />;
   else if (route.kind === "recent") page = <RecentPage />;
   else if (route.kind === "saved") page = <SavedPage what={route.what} />;
+  else if (route.kind === "downloads") page = <DownloadsPage />;
+  else if (route.kind === "settings") page = <SettingsPage />;
   else if (tab === "home") page = <Home />;
   else if (tab === "search") page = <Search />;
   else page = <LibraryPage />;

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorText, type Track } from "./api";
 import { library } from "./library";
+import { offline } from "./downloads";
 import { player } from "./native";
 import { useApp } from "./state";
 import { Art, Bars, Icon } from "./ui";
@@ -72,6 +73,22 @@ export function ActionSheet({ track, onClose }: { track: Track; onClose: () => v
             <Icon name="plus" /> Add to “{p.title}”
           </button>
         ))}
+        {offline.has(track.videoId) ? (
+          <button onClick={act(() => offline.remove([track.videoId]).then(() => app.toast("Download removed")))}>
+            <Icon name="trash" /> Remove Download
+          </button>
+        ) : (
+          <button
+            onClick={act(() =>
+              offline
+                .add([track])
+                .then(() => app.toast("Downloading…"))
+                .catch((e) => app.toast(String(e))),
+            )}
+          >
+            <Icon name="download" /> Download
+          </button>
+        )}
         <button onClick={act(() => app.startRadio(track))}>
           <Icon name="radio" /> Start Radio
         </button>

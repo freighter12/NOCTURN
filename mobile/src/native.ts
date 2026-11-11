@@ -29,6 +29,18 @@ export type NativeLyricItem = {
   sungEnd?: number;
 };
 
+export type DownloadState = {
+  tracks: Track[];
+  pending: string[];
+  active: string | null;
+  progress: number;
+  bytes: number;
+  failed: string[];
+};
+
+export type ThemeName = "artwork" | "lunar" | "black" | "photo";
+export type Settings = { theme: ThemeName; photo: string | null; liveLyrics: boolean };
+
 export type TabSpec = { id: string; title: string; symbol: string; search?: boolean };
 
 export const isNative = /iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -175,6 +187,59 @@ export const player = {
     }
     const l = await addPluginListener("nocturn", "state", cb);
     return () => l.unregister();
+  },
+};
+
+// ---------------------------------------------------------------- downloads + settings
+
+const noDownloads: DownloadState = { tracks: [], pending: [], active: null, progress: 0, bytes: 0, failed: [] };
+const SETTINGS_KEY = "nocturn.settings";
+
+function localSettings(): Settings {
+  try {
+    return { theme: "artwork", photo: null, liveLyrics: true, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") };
+  } catch {
+    return { theme: "artwork", photo: null, liveLyrics: true };
+  }
+}
+
+export const downloads = {
+  add: (tracks: Track[]) => (isNative ? call("download", { tracks: tracks.map(slim) }) : Promise.reject("Downloads work on the iPhone")),
+  remove: (ids: string[]) => (isNative ? call("remove_downloads", { ids }) : Promise.resolve()),
+  removeAll: () => (isNative ? call("remove_downloads", { all: true }) : Promise.resolve()),
+  state: () => (isNative ? call<DownloadState>("get_downloads") : Promise.resolve(noDownloads)),
+  async onChange(cb: (s: DownloadState) => void): Promise<() => void> {
+    if (!isNative) return () => {};
+    const l = await addPluginListener("nocturn", "downloads", cb);
+    return () => l.unregister();
+  },
+};
+
+export const settings = {
+  get: () => (isNative ? call<Settings>("get_settings") : Promise.resolve(localSettings())),
+  /** photo: base64 JPEG (no data: prefix), only when a new one was picked. */
+  setTheme(theme: ThemeName, photo?: string) {
+    if (!isNative) {
+      const cur = localSettings();
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...cur, theme, photo: photo ?? cur.photo }));
+      } catch {
+        /* storage full or blocked */
+      }
+      return Promise.resolve();
+    }
+    return call("set_theme", { theme, photo: photo ?? null });
+  },
+  setLiveLyrics(on: boolean) {
+    if (!isNative) {
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...localSettings(), liveLyrics: on }));
+      } catch {
+        /* ignore */
+      }
+      return Promise.resolve();
+    }
+    return call("set_live_lyrics", { on });
   },
 };
 
