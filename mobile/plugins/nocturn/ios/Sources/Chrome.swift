@@ -160,10 +160,10 @@ final class ChromeController: NSObject, UITabBarControllerDelegate {
         host.didMove(toParent: tabBar)
         accessoryHost = host
       }
-      tabBar.setBottomAccessory(UITabAccessory(contentView: host.view), animated: true)
+      tabBar.bottomAccessory = UITabAccessory(contentView: host.view)
       accessoryShown = true
     } else if !hasTrack && accessoryShown {
-      tabBar.setBottomAccessory(nil, animated: true)
+      tabBar.bottomAccessory = nil
       accessoryShown = false
     }
   }

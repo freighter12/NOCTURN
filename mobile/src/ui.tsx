@@ -39,12 +39,18 @@ export function Icon({ name, size = 22, className }: { name: keyof typeof paths 
 // ---------------------------------------------------------------- artwork
 
 export function Art({ src, size, round, radius = 8, className }: { src?: string | null; size?: number; round?: boolean; radius?: number; className?: string }) {
-  const [ok, setOk] = useState(true);
-  useEffect(() => setOk(true), [src]);
+  // 0 = first try, 1 = retrying once (image hosts sometimes fail a request), 2 = give up
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => setAttempt(0), [src]);
   const style = size ? { width: size, height: size, borderRadius: round ? "50%" : radius } : { borderRadius: round ? "50%" : radius };
+  const url = src && attempt === 1 ? `${src}${src.includes("?") ? "&" : "?"}r=1` : src;
   return (
     <div className={`art ${className ?? ""}`} style={style}>
-      {src && ok ? <img src={src} alt="" loading="lazy" decoding="async" onError={() => setOk(false)} /> : <Icon name="note" size={size ? Math.max(14, size * 0.36) : 28} />}
+      {url && attempt < 2 ? (
+        <img key={attempt} src={url} alt="" loading="lazy" decoding="async" onError={() => setTimeout(() => setAttempt((a) => a + 1), attempt ? 0 : 600)} />
+      ) : (
+        <Icon name="note" size={size ? Math.max(14, size * 0.36) : 28} />
+      )}
     </div>
   );
 }

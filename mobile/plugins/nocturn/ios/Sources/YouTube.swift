@@ -54,11 +54,11 @@ actor YouTube {
     if let hit = cache[videoId], hit.expiresAt - Date().timeIntervalSince1970 > 600 {
       return hit
     }
-    var visitorId = try await visitorId(force: false)
-    var json = try await player(videoId, visitor: visitorId)
+    var visitor = try await visitorId(force: false)
+    var json = try await player(videoId, visitor: visitor)
     if (json["playabilityStatus"] as? [String: Any])?["status"] as? String == "LOGIN_REQUIRED" {
-      visitorId = try await visitorId(force: true)
-      json = try await player(videoId, visitor: visitorId)
+      visitor = try await visitorId(force: true)
+      json = try await player(videoId, visitor: visitor)
     }
     let s = try parseStream(json)
     cache[videoId] = s

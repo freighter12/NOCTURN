@@ -239,7 +239,8 @@ h1, h2, h3, p { margin: 0; }
 
 .home-hero {
   position: relative;
-  padding: 18px var(--gutter) 6px;
+  min-height: 150px;
+  padding: 58px var(--gutter) 6px;
   overflow: hidden;
 }
 .home-hero .sky { position: absolute; inset: -40px 0 0; pointer-events: none; }
@@ -255,10 +256,10 @@ h1, h2, h3, p { margin: 0; }
 @keyframes twinkle { 0%, 100% { opacity: 0; } 45% { opacity: 0.55; } }
 .hero-moon {
   position: absolute;
-  right: -30px;
-  top: -40px;
-  width: 210px;
-  height: 210px;
+  right: -6px;
+  top: -4px;
+  width: 150px;
+  height: 150px;
   opacity: 0.85;
   filter: drop-shadow(0 0 40px rgba(201, 210, 230, 0.2));
   pointer-events: none;

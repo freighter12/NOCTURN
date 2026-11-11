@@ -143,7 +143,7 @@ async fn read_json(res: reqwest::Response, who: &str) -> YtResult<Value> {
 async fn music_post(endpoint: &str, mut body: Value) -> YtResult<Value> {
     body["context"] = json!({ "client": { "clientName": "WEB_REMIX", "clientVersion": MUSIC_CLIENT_VERSION, "hl": "en", "gl": "GB" } });
     let res = client()?
-        .post(format!("{MUSIC_API}/{endpoint}?prettyPrint=false"))
+        .post(format!("{MUSIC_API}/{endpoint}{}prettyPrint=false", if endpoint.contains('?') { "&" } else { "?" }))
         .header("Origin", "https://music.youtube.com")
         .header("Referer", "https://music.youtube.com/")
         .header("Cookie", "CONSENT=YES+1; SOCS=CAI")
@@ -639,7 +639,53 @@ pub async fn collection(id: &str) -> YtResult<Collection> {
         return Err("not a YouTube Music album or playlist".into());
     }
     let browse = if id.starts_with("MPREb_") || id.starts_with("VL") { id.to_string() } else { format!("VL{id}") };
-    Ok(parse_collection(&music_post("browse", json!({ "browseId": browse })).await?, id))
+    let first = music_post("browse", json!({ "browseId": browse })).await?;
+    let mut c = parse_collection(&first, id);
+    // Long playlists come in pages of ~100; follow them (up to ~1,000 songs).
+    let mut token = next_continuation(&first);
+    let mut pages = 0;
+    while let Some(t) = token.take() {
+        pages += 1;
+        if pages > 10 {
+            break;
+        }
+        let req = match &t {
+            Cont::New(tok) => music_post("browse", json!({ "continuation": tok })).await,
+            Cont::Old(tok) => music_post(&format!("browse?ctoken={tok}&continuation={tok}&type=next"), json!({})).await,
+        };
+        let Ok(more) = req else { break };
+        let before = c.tracks.len();
+        let page = parse_collection(&more, id);
+        for tr in page.tracks {
+            if !c.tracks.iter().any(|x| x.video_id == tr.video_id) {
+                c.tracks.push(tr);
+            }
+        }
+        if c.tracks.len() == before {
+            break;
+        }
+        token = next_continuation(&more);
+    }
+    Ok(c)
+}
+
+enum Cont {
+    /// `continuationItemRenderer` → POST browse {"continuation": token}
+    New(String),
+    /// `nextContinuationData` → browse?ctoken=…&type=next
+    Old(String),
+}
+
+/// The "next page" token of a playlist's song list.
+fn next_continuation(v: &Value) -> Option<Cont> {
+    let ok = |t: &str| t.len() < 2000 && t.bytes().all(|b| b.is_ascii_alphanumeric() || b"%-_=".contains(&b));
+    if let Some(t) = find_first(v, "continuationItemRenderer").and_then(|c| c.pointer("/continuationEndpoint/continuationCommand/token")).and_then(Value::as_str) {
+        if ok(t) {
+            return Some(Cont::New(t.to_string()));
+        }
+    }
+    let t = find_first(v, "nextContinuationData")?.get("continuation")?.as_str()?;
+    ok(t).then(|| Cont::Old(t.to_string()))
 }
 
 pub async fn artist(id: &str) -> YtResult<ArtistPage> {
@@ -785,6 +831,16 @@ mod tests {
         let sg = parse_suggestions(&fixture("suggest").unwrap());
         eprintln!("suggestions {sg:?}");
         assert!(!sg.is_empty());
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_long_playlist() {
+        let r = search("top 500 songs of all time playlist").await.unwrap();
+        let p = r.playlists.first().expect("a playlist");
+        let c = collection(&p.id).await.unwrap();
+        eprintln!("{} ({}) -> {} tracks", c.title, c.subtitle, c.tracks.len());
+        assert!(c.tracks.len() > 100, "pages were followed");
     }
 
     #[tokio::test]
