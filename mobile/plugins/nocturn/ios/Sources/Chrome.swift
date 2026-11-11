@@ -5,7 +5,7 @@ import UIKit
 import WebKit
 
 /// One tab as the web side describes it.
-struct TabSpec: Decodable {
+struct TabSpec: Decodable, Equatable {
   let id: String
   let title: String
   let symbol: String
@@ -89,21 +89,28 @@ final class ChromeController: NSObject, UITabBarControllerDelegate {
   // MARK: tabs
 
   func setTabs(_ tabs: [TabSpec], selected: String?) {
+    let changed = tabs != specs
     specs = tabs
     pendingSelect = selected
-    guard installed else { return }
-    rebuildTabs()
+    guard installed, ready else { return }
+    // Same tabs as now (the usual case at startup): nothing to rebuild.
+    if changed { rebuildTabs() }
     if let selected { select(selected) }
   }
 
   func select(_ id: String) {
     pendingSelect = id
-    guard installed, let tab = tabBar.tabs.first(where: { $0.identifier == id }) else { return }
-    tabBar.selectedTab = tab
+    guard installed, ready else { return }
+    let isSearch = specs.first(where: { $0.id == id })?.search == true
+    guard let tab = tabBar.tabs.first(where: { isSearch ? $0 is UISearchTab : $0.identifier == id }) else { return }
+    if tabBar.selectedTab !== tab { tabBar.selectedTab = tab }
     if let host = hosts[id] { embed(into: host) }
   }
 
   private func rebuildTabs() {
+    // A tab's screen can belong to only one tab (UIKit asserts otherwise), so
+    // new tabs get new screens; the web view moves into whichever is shown.
+    hosts.removeAll()
     tabBar.tabs = specs.map { spec in
       let provider: (UITab) -> UIViewController = { [weak self] _ in
         MainActor.assumeIsolated { self?.host(for: spec.id) ?? UIViewController() }
