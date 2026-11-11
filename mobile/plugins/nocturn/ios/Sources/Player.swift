@@ -15,6 +15,9 @@ struct PlayerState: Encodable, Sendable {
   var repeatMode = "off"
   var autoplay = true
   var error: String?
+  var aiShuffle = false
+  /// Songs skipped within 30 s this session (AI Shuffle learns from them).
+  var skipped: [String] = []
 }
 
 /// The music player. Lives entirely on the native side so playback, skipping
@@ -39,6 +42,17 @@ final class PlayerEngine {
   var lyricsTrackId: String?
   var lyricsApprox = false
   var lyricsPlain = ""
+  /// The user's timing nudge for the current song's lyrics (ms; positive = earlier).
+  private(set) var lyricsOffset: Double = 0
+  /// Nocturn's smart shuffle (planned on the web/Rust side, see ai.rs).
+  private(set) var aiShuffle = UserDefaults.standard.bool(forKey: "aiShuffle")
+  /// Waiting for an AI Shuffle plan.
+  var aiBusy = false
+  /// Last AI Shuffle explanation ("Planned 25 songs around …").
+  var aiNote: String?
+  private(set) var skipped: [String] = []
+  /// Screenshot/demo mode (simulator tests): a fake clock instead of real audio.
+  @ObservationIgnored private var demoStart: Date?
 
   var current: TrackDTO? { queue.indices.contains(index) ? queue[index] : nil }
 
@@ -119,6 +133,12 @@ final class PlayerEngine {
 
   func next() {
     guard !queue.isEmpty else { return }
+    // a skip in the first 30 s tells AI Shuffle you didn't want this one
+    if let c = current, positionMs < 30_000 {
+      skipped.removeAll { $0 == c.videoId }
+      skipped.append(c.videoId)
+      if skipped.count > 100 { skipped.removeFirst() }
+    }
     if index + 1 < queue.count {
       load(index: index + 1, autoplay: true, seekMs: nil)
     } else if repeatMode == "all" {
@@ -160,11 +180,52 @@ final class PlayerEngine {
     emit(force: true)
   }
 
+  func setAIShuffle(_ on: Bool) {
+    aiShuffle = on
+    UserDefaults.standard.set(on, forKey: "aiShuffle")
+    aiBusy = on
+    if !on { aiNote = nil }
+    emit(force: true)
+    if on {
+      // don't spin forever if the plan never arrives
+      Task {
+        try? await Task.sleep(nanoseconds: 12_000_000_000)
+        self.aiBusy = false
+      }
+    }
+  }
+
+  /// Replaces everything after the current song (an AI Shuffle plan).
+  func replaceUpcoming(_ tracks: [TrackDTO], note: String?) {
+    aiBusy = false
+    aiNote = note
+    guard index >= 0, index < queue.count else {
+      if !tracks.isEmpty { setQueue(tracks, start: 0, play: true, positionMs: nil) }
+      return
+    }
+    queue = Array(queue[...index]) + tracks.filter { $0.videoId != queue[index].videoId }
+    dropPrepared()
+    prepareNext()
+    emit(force: true)
+  }
+
+  func setLyricsOffset(_ ms: Double?) {
+    lyricsOffset = ms.map { max(-15000, min(15000, $0)) } ?? 0
+    if let id = current?.videoId {
+      UserDefaults.standard.set(lyricsOffset, forKey: "lyrics.offset.\(id)")
+    }
+  }
+
+  private func loadLyricsOffset() {
+    lyricsOffset = current.map { UserDefaults.standard.double(forKey: "lyrics.offset.\($0.videoId)") } ?? 0
+  }
+
   /// Output lag of the current speakers (AirPods/Bluetooth are often 150–250 ms).
   var outputLatencyMs: Double { AVAudioSession.sharedInstance().outputLatency * 1000 }
 
   /// Where the song is as you *hear* it — read straight from the player, for lyrics.
   func lyricClockMs() -> Double {
+    if let d = demoStart { return Date().timeIntervalSince(d) * 1000 }
     let s = player.currentTime().seconds
     return (s.isFinite ? s * 1000 : positionMs) - outputLatencyMs
   }
@@ -172,7 +233,46 @@ final class PlayerEngine {
   func state() -> PlayerState {
     PlayerState(
       playing: playing, loading: loading, index: index, positionMs: positionMs, durationMs: durationMs,
-      queueLength: queue.count, track: current, repeatMode: repeatMode, autoplay: autoplay, error: lastError)
+      queueLength: queue.count, track: current, repeatMode: repeatMode, autoplay: autoplay, error: lastError,
+      aiShuffle: aiShuffle, skipped: skipped)
+  }
+
+  /// Fills the player with a sample song and lyrics, with a fake clock, so
+  /// Now Playing can be screenshotted in the simulator without audio.
+  func startDemo() {
+    let t = TrackDTO(videoId: "demo0000000", title: "A Very Long Song Title That Should Truncate Gracefully (Extended Mix)", artist: "Nocturn Test Artist & Friends", album: "Night Sky", artwork: nil, durationMs: 214_000)
+    queue = [t]
+    index = 0
+    durationMs = 214_000
+    positionMs = 41_000
+    playing = true
+    demoStart = Date().addingTimeInterval(-41)
+    artworkFor = t.videoId
+    artworkImage = PlayerEngine.demoArtwork()
+    let lines = ["(Instrumental intro)", "I been running through the night", "Moonlight on the window glass", "Every city sleeps but I", "Hear the echo of the past", "Hold on, hold on", "Don't let the morning come too soon", "We're the only ones awake", "Dancing underneath the moon", "Hold on, hold on", "The stars are falling into place"]
+    var items: [LyricItem] = [LyricItem(kind: "gap", start: 0, end: 12_000, text: "", words: [], estimated: nil, sungEnd: nil)]
+    var start = 12_000.0
+    for line in lines.dropFirst() {
+      let words = line.split(separator: " ").enumerated().map { i, w in LyricWord(t: start + Double(i) * 420, w: String(w) + " ") }
+      items.append(LyricItem(kind: "line", start: start, end: start + 4_800, text: line, words: words, estimated: true, sungEnd: start + Double(words.count) * 420))
+      start += 4_800
+    }
+    lyricItems = items
+    lyricsTrackId = t.videoId
+    lyricsPlain = lines.joined(separator: "\n")
+    aiShuffle = true
+    aiNote = "Planned 25 songs around this one — 9 new finds"
+  }
+
+  static func demoArtwork() -> UIImage {
+    let size = CGSize(width: 600, height: 600)
+    return UIGraphicsImageRenderer(size: size).image { ctx in
+      let colors = [UIColor(red: 0.35, green: 0.22, blue: 0.62, alpha: 1).cgColor, UIColor(red: 0.95, green: 0.45, blue: 0.35, alpha: 1).cgColor] as CFArray
+      let g = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1])!
+      ctx.cgContext.drawLinearGradient(g, start: .zero, end: CGPoint(x: size.width, y: size.height), options: [])
+      UIColor.white.withAlphaComponent(0.85).setFill()
+      UIBezierPath(ovalIn: CGRect(x: 170, y: 170, width: 260, height: 260)).fill()
+    }
   }
 
   // MARK: loading songs
@@ -191,6 +291,7 @@ final class PlayerEngine {
     playing = play
     updateNowPlaying()
     loadArtwork()
+    loadLyricsOffset()
     emit(force: true)
     let track = queue[i]
     Task {
@@ -350,6 +451,7 @@ final class PlayerEngine {
           self.positionMs = 0
           self.durationMs = self.queue[i].durationMs ?? 0
           self.loadArtwork()
+          self.loadLyricsOffset()
           self.updateNowPlaying()
           self.emit(force: true)
           self.prepareNext()

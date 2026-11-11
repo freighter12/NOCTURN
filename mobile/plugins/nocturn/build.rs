@@ -19,6 +19,8 @@ const COMMANDS: &[&str] = &[
     "set_lyrics",
     "show_now_playing",
     "haptic",
+    "replace_upcoming",
+    "set_ai_shuffle",
     "register_listener",
     "remove_listener",
 ];

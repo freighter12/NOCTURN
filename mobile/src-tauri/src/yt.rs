@@ -27,7 +27,7 @@ pub type YtResult<T> = Result<T, String>;
 
 // ---------------------------------------------------------------- types
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Track {
     pub video_id: String,

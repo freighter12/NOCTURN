@@ -4,6 +4,7 @@
 //! the on-phone library file. Playback, the lock screen and the Liquid Glass
 //! tab bar are native Swift (plugins/nocturn).
 
+pub mod ai;
 pub mod import;
 pub mod lyrics;
 pub mod textmatch;
@@ -64,6 +65,11 @@ async fn import_playlist(app: tauri::AppHandle, link: String) -> Result<import::
     import::import(&app, &link).await
 }
 
+#[tauri::command]
+async fn ai_shuffle(input: ai::Input) -> Result<ai::Plan, String> {
+    ai::shuffle(input).await
+}
+
 // ---- library file (liked songs, saved albums/playlists, your playlists, history)
 
 fn library_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -106,6 +112,7 @@ pub fn run() {
             yt_stream,
             lyrics_get,
             import_playlist,
+            ai_shuffle,
             library_load,
             library_save
         ])

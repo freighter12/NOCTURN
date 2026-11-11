@@ -56,101 +56,103 @@ enum LyricsTiming {
 struct LyricsView: View {
   let engine: PlayerEngine
   @AppStorage("lyrics.wordSync") private var wordSync = true
-  @State private var offset: Double = 0
   @State private var lastUserScroll = Date.distantPast
-  @State private var shownActive = -1
 
   private var mine: Bool { engine.lyricsTrackId == engine.current?.videoId }
   private var items: [LyricItem] { mine ? engine.lyricItems : [] }
-  private var trackId: String { engine.current?.videoId ?? "" }
 
   var body: some View {
-    VStack(spacing: 0) {
-      if !mine {
-        placeholder(icon: "quote.bubble", text: "Looking for lyrics…")
-      } else if items.isEmpty {
-        if engine.lyricsPlain.isEmpty {
-          placeholder(icon: "quote.bubble", text: "No lyrics found for this song")
+    GeometryReader { g in
+      // Big and readable, scaled to the screen: ~27 pt on small iPhones, up to 32 on Pro Max.
+      let size = min(32, max(24, g.size.width * 0.072))
+      Group {
+        if !mine {
+          artworkFallback(text: "Looking for lyrics…", in: g.size)
+        } else if items.isEmpty {
+          if engine.lyricsPlain.isEmpty {
+            artworkFallback(text: "No lyrics for this song", in: g.size)
+          } else {
+            plain(size: size * 0.8)
+          }
         } else {
-          plain
+          synced(size: size)
         }
-      } else {
-        synced
-        controls
       }
-    }
-    .onAppear { offset = Self.savedOffset(trackId) }
-    .onChange(of: trackId) { _, id in
-      offset = Self.savedOffset(id)
-      shownActive = -1
+      .frame(width: g.size.width, height: g.size.height)
     }
   }
 
   // MARK: synced lines
 
-  private var synced: some View {
+  private func synced(size: CGFloat) -> some View {
     ScrollViewReader { proxy in
       // 10× a second is plenty to move between lines; the active line animates every frame.
       TimelineView(.periodic(from: .now, by: 0.1)) { _ in
-        let t = engine.lyricClockMs() + offset
+        let t = engine.lyricClockMs() + engine.lyricsOffset
         let active = LyricsTiming.activeIndex(items, t)
-        ScrollView(showsIndicators: false) {
-          LazyVStack(alignment: .leading, spacing: 20) {
-            Color.clear.frame(height: 90)
+        ScrollView(.vertical, showsIndicators: false) {
+          LazyVStack(alignment: .leading, spacing: size * 0.62) {
+            Color.clear.frame(height: 28)
             ForEach(Array(items.enumerated()), id: \.offset) { i, item in
-              row(item, index: i, active: active)
+              row(item, index: i, active: active, size: size)
                 .id(i)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                  engine.seek(ms: max(0, item.start + engine.outputLatencyMs - offset))
+                  engine.seek(ms: max(0, item.start + engine.outputLatencyMs - engine.lyricsOffset))
                   lastUserScroll = .distantPast
                 }
             }
-            Color.clear.frame(height: 260)
+            Color.clear.frame(height: 160)
           }
-          .padding(.horizontal, 28)
+          .padding(.horizontal, 24)
+          .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollBounceBehavior(.basedOnSize)
         .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in lastUserScroll = Date() })
         .onChange(of: active) { _, a in
-          shownActive = a
-          // Keep the line a little above the middle — unless you're scrolling yourself.
+          // Keep the sung line in the upper third — unless you're scrolling yourself.
           guard a >= 0, Date().timeIntervalSince(lastUserScroll) > 3.5 else { return }
-          withAnimation(.spring(response: 0.55, dampingFraction: 0.9)) {
-            proxy.scrollTo(a, anchor: UnitPoint(x: 0.5, y: 0.32))
+          withAnimation(.spring(response: 0.6, dampingFraction: 0.9)) {
+            proxy.scrollTo(a, anchor: UnitPoint(x: 0.5, y: 0.3))
           }
+        }
+        .onAppear {
+          if active >= 0 { proxy.scrollTo(active, anchor: UnitPoint(x: 0.5, y: 0.3)) }
         }
       }
     }
-    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.12), .init(color: .black, location: 0.82), .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
+    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.08), .init(color: .black, location: 0.88), .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
   }
 
   @ViewBuilder
-  private func row(_ item: LyricItem, index i: Int, active: Int) -> some View {
+  private func row(_ item: LyricItem, index i: Int, active: Int, size: CGFloat) -> some View {
     let distance = active < 0 ? 99 : abs(i - active)
     let scrolling = Date().timeIntervalSince(lastUserScroll) < 3.5
-    let blur: CGFloat = scrolling || i == active ? 0 : (distance == 1 ? 0.6 : distance == 2 ? 1.2 : 2)
+    let blur: CGFloat = scrolling || i == active ? 0 : (distance == 1 ? 0.5 : distance == 2 ? 1.1 : 1.8)
     Group {
       if i == active {
         // every frame for the line being sung
         TimelineView(.animation) { _ in
-          activeRow(item, t: engine.lyricClockMs() + offset)
+          activeRow(item, t: engine.lyricClockMs() + engine.lyricsOffset, size: size)
         }
       } else if item.kind == "gap" {
         GapDots(progress: i < active ? 1 : 0)
       } else {
         Text(item.text)
-          .font(.system(size: 28, weight: .bold))
-          .foregroundStyle(.white.opacity(i < active ? 0.42 : 0.3))
+          .font(.system(size: size, weight: .bold))
+          .foregroundStyle(.white.opacity(i < active ? 0.38 : (distance == 1 ? 0.5 : 0.32)))
       }
     }
+    .fixedSize(horizontal: false, vertical: true)
+    .multilineTextAlignment(.leading)
     .blur(radius: blur)
-    .scaleEffect(i == active ? 1 : 0.97, anchor: .leading)
-    .animation(.easeOut(duration: 0.35), value: active)
+    .scaleEffect(i == active ? 1 : 0.96, anchor: .leading)
+    .animation(.spring(response: 0.45, dampingFraction: 0.85), value: active)
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   @ViewBuilder
-  private func activeRow(_ item: LyricItem, t: Double) -> some View {
+  private func activeRow(_ item: LyricItem, t: Double, size: CGFloat) -> some View {
     if item.kind == "gap" {
       GapDots(progress: LyricsTiming.progress(item, t))
     } else if !item.words.isEmpty && (wordSync || item.estimated != true) {
@@ -159,76 +161,52 @@ struct LyricsView: View {
       item.words.enumerated().reduce(Text("")) { acc, pair in
         let (j, w) = pair
         let p = j < wp.count ? wp[j] : 0
-        return acc + Text(w.w).foregroundStyle(.white.opacity(0.32 + 0.68 * p))
+        return acc + Text(w.w).foregroundStyle(.white.opacity(0.35 + 0.65 * p))
       }
-      .font(.system(size: 28, weight: .bold))
-      .shadow(color: .white.opacity(0.25), radius: 10)
+      .font(.system(size: size, weight: .bold))
+      .shadow(color: .white.opacity(0.28), radius: 12)
     } else {
       Text(item.text)
-        .font(.system(size: 28, weight: .bold))
+        .font(.system(size: size, weight: .bold))
         .foregroundStyle(.white)
-        .shadow(color: .white.opacity(0.25), radius: 10)
+        .shadow(color: .white.opacity(0.28), radius: 12)
     }
   }
 
-  // MARK: plain (not synced)
+  // MARK: plain (not synced) and no lyrics
 
-  private var plain: some View {
-    ScrollView(showsIndicators: false) {
+  private func plain(size: CGFloat) -> some View {
+    ScrollView(.vertical, showsIndicators: false) {
       VStack(alignment: .leading, spacing: 14) {
         Text(engine.lyricsPlain)
-          .font(.system(size: 22, weight: .semibold))
+          .font(.system(size: size, weight: .semibold))
           .foregroundStyle(.white.opacity(0.85))
           .lineSpacing(6)
+          .fixedSize(horizontal: false, vertical: true)
           .textSelection(.enabled)
         Text("Lyrics from LRCLIB (not synced to this version)")
           .font(.footnote)
           .foregroundStyle(.white.opacity(0.45))
       }
-      .padding(.horizontal, 28)
-      .padding(.vertical, 40)
+      .padding(.horizontal, 24)
+      .padding(.vertical, 24)
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
 
-  private func placeholder(icon: String, text: String) -> some View {
-    VStack(spacing: 10) {
-      Image(systemName: icon).font(.largeTitle).foregroundStyle(.white.opacity(0.4))
-      Text(text).foregroundStyle(.white.opacity(0.6))
+  /// No lyrics: show the artwork big instead, so the screen never looks empty.
+  private func artworkFallback(text: String, in size: CGSize) -> some View {
+    VStack(spacing: 16) {
+      ArtworkView(image: engine.artworkImage, corner: 16)
+        .frame(width: max(120, min(size.width - 72, size.height - 70, 340)), height: max(120, min(size.width - 72, size.height - 70, 340)))
+        .scaleEffect(engine.playing ? 1 : 0.92)
+        .shadow(color: .black.opacity(0.45), radius: 28, y: 16)
+        .animation(.spring(response: 0.45, dampingFraction: 0.75), value: engine.playing)
+      Text(text)
+        .font(.subheadline)
+        .foregroundStyle(.white.opacity(0.55))
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-  }
-
-  // MARK: timing controls (same as the desktop: Words/Lines, Later / In time / Earlier)
-
-  private var controls: some View {
-    HStack(spacing: 8) {
-      Text(engine.lyricsApprox ? "≈ Approx. synced" : "LRCLIB")
-        .font(.caption)
-        .foregroundStyle(.white.opacity(0.45))
-        .lineLimit(1)
-      Spacer(minLength: 4)
-      Button(wordSync ? "Words" : "Lines") { wordSync.toggle() }
-      Divider().frame(height: 14).overlay(.white.opacity(0.2))
-      Button("Later") { nudge(-100) }
-      Button(offset == 0 ? "In time" : String(format: "%@%.1f s", offset > 0 ? "+" : "−", abs(offset) / 1000)) { nudge(nil) }
-        .disabled(offset == 0)
-        .monospacedDigit()
-      Button("Earlier") { nudge(100) }
-    }
-    .font(.footnote.weight(.semibold))
-    .buttonStyle(.plain)
-    .foregroundStyle(.white.opacity(0.75))
-    .padding(.horizontal, 28)
-    .padding(.top, 6)
-  }
-
-  private func nudge(_ delta: Double?) {
-    offset = delta.map { max(-15000, min(15000, offset + $0)) } ?? 0
-    UserDefaults.standard.set(offset, forKey: "lyrics.offset.\(trackId)")
-  }
-
-  static func savedOffset(_ id: String) -> Double {
-    UserDefaults.standard.double(forKey: "lyrics.offset.\(id)")
   }
 }
 

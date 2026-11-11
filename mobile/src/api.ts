@@ -65,6 +65,8 @@ export type ImportResult = {
   missing: { title: string; artist: string }[];
 };
 
+export type AIPlan = { upcoming: Track[]; because: string; discoveries: number };
+
 export type Stream = { url: string; availableAtMs?: number | null };
 
 // Small in-memory cache so going back to a page is instant.
@@ -89,6 +91,8 @@ export const api = {
     cached(`l:${t.videoId}`, 24 * 3600_000, () =>
       invoke<Lyrics | null>("lyrics_get", { artist: t.artist, title: t.title, album: t.album ?? null, durationMs: t.durationMs ?? null }),
     ),
+  aiShuffle: (input: { current: Track | null; upcoming: Track[]; recent: Track[]; liked: Track[]; skipped: string[]; count?: number }) =>
+    invoke<AIPlan>("ai_shuffle", { input }),
   importPlaylist: (link: string) => invoke<ImportResult>("import_playlist", { link }),
   stream: (videoId: string) => invoke<Stream>("yt_stream", { videoId }),
   libraryLoad: () => invoke<string>("library_load"),

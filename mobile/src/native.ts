@@ -15,6 +15,8 @@ export type PlayerState = {
   repeatMode: "off" | "all" | "one";
   autoplay: boolean;
   error: string | null;
+  aiShuffle?: boolean;
+  skipped?: string[];
 };
 
 export type NativeLyricItem = {
@@ -147,6 +149,16 @@ export const player = {
     if (!isNative) return Promise.resolve(webPlayer().patch({ repeatMode: mode }));
     return call("set_repeat", { mode });
   },
+  replaceUpcoming(tracks: Track[], note: string) {
+    if (!isNative) {
+      const w = webPlayer();
+      w.queue = [...w.queue.slice(0, w.state.index + 1), ...tracks];
+      w.patch({});
+      return Promise.resolve();
+    }
+    return call("replace_upcoming", { tracks: tracks.map(slim), note });
+  },
+  setAIShuffle: (on: boolean) => (isNative ? call("set_ai_shuffle", { on }) : Promise.resolve()),
   state: () => (isNative ? call<PlayerState>("get_state") : Promise.resolve(webPlayer().state)),
   /** The queue as the stand-in knows it (native keeps its own; the app mirrors it). */
   webQueue: () => (web ? web.queue : []),

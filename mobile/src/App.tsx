@@ -49,6 +49,7 @@ export default function App() {
   const route = stack[stack.length - 1];
   const routeKey = `${tab}:${stack.length}:${JSON.stringify(route).slice(0, 80)}`;
 
+  const aiOn = useRef(false);
   const toast = useCallback((text: string) => {
     setToastText(text);
     clearTimeout(toastTimer.current);
@@ -94,6 +95,30 @@ export default function App() {
 
   const remember = (ts: Track[]) => ts.forEach((t) => known.current.set(t.videoId, t));
 
+  /** AI Shuffle: plan what plays after the current song (src-tauri/src/ai.rs). */
+  const aiPlan = useCallback(
+    (current: Track | null, upcoming: Track[], quiet = false) => {
+      const lib = library.get();
+      api
+        .aiShuffle({ current, upcoming, recent: lib.recent, liked: lib.liked, skipped: ps.skipped ?? [], count: Math.max(25, upcoming.length) })
+        .then((plan) => {
+          remember(plan.upcoming);
+          setQueue((q) => {
+            const i = current ? q.findIndex((t) => t.videoId === current.videoId) : -1;
+            return [...(i >= 0 ? q.slice(0, i + 1) : current ? [current] : []), ...plan.upcoming];
+          });
+          player.replaceUpcoming(plan.upcoming, plan.because);
+          if (!quiet) toast(plan.because);
+        })
+        .catch((e) => {
+          player.replaceUpcoming(upcoming, "");
+          toast(errorText(e));
+        });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ps.skipped, toast],
+  );
+
   const playList = useCallback<AppCtx["playList"]>(
     (tracks, index = 0, opts) => {
       const playable = tracks.filter(Boolean);
@@ -108,8 +133,9 @@ export default function App() {
       setQueue(list);
       player.setQueue(list, start, true).catch((e) => toast(errorText(e)));
       player.haptic("light");
+      if (aiOn.current) aiPlan(list[start], list.slice(start + 1), true);
     },
-    [toast],
+    [toast, aiPlan],
   );
   const playNext = useCallback<AppCtx["playNext"]>(
     (ts) => {
@@ -201,6 +227,10 @@ export default function App() {
     if (ps.error) toast(ps.error);
   }, [ps.error, toast]);
 
+  useEffect(() => {
+    aiOn.current = !!ps.aiShuffle;
+  }, [ps.aiShuffle]);
+
   // native tab bar + Now Playing actions
   useEffect(() => {
     loadLibrary();
@@ -221,7 +251,13 @@ export default function App() {
   useEffect(() => {
     const p = chrome.onAction((kind, value) => {
       const t = ps.track ? (known.current.get(ps.track.videoId) ?? ps.track) : null;
-      if (kind === "queue") setQueueOpen(true);
+      if (kind === "aiShuffle") {
+        aiOn.current = value === "on";
+        if (value === "on") {
+          const i = ps.index;
+          aiPlan(t, i >= 0 ? queue.slice(i + 1) : queue);
+        }
+      } else if (kind === "queue") setQueueOpen(true);
       else if (kind === "save" && t) toast(library.toggleLike(t) ? "Added to Liked Songs" : "Removed from Liked Songs");
       else if (kind === "radio" && t) startRadio(t);
       else if (kind === "artist" && t) {
@@ -235,7 +271,7 @@ export default function App() {
     return () => {
       p.then((f) => f());
     };
-  }, [ps.track, push, startRadio, toast]);
+  }, [ps.track, ps.index, queue, aiPlan, push, startRadio, toast]);
 
   // swipe from the left edge to go back
   useEffect(() => {

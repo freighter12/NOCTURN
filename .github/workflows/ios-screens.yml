@@ -1,0 +1,92 @@
+# Screenshots of Nocturn Music's native screens on several iPhone sizes, in
+# the iOS simulator. The app's demo mode (NOCTURN_DEMO=nowplaying) fills the
+# player with a sample song + synced lyrics and opens Now Playing, so no
+# audio or network is needed. Screenshots are uploaded as an artifact.
+name: iPhone screenshots (simulator)
+
+on:
+  push:
+    paths:
+      - "mobile/plugins/**"
+      - ".github/workflows/ios-screens.yml"
+
+concurrency:
+  group: ios-screens-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screens:
+    runs-on: macos-26-intel
+    timeout-minutes: 75
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Rust for the simulator
+        run: rustup target add x86_64-apple-ios
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mobile/src-tauri -> target
+          key: simulator
+
+      - name: Tools
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      - name: Install packages
+        run: npm ci
+
+      - name: Generate the Xcode project
+        run: |
+          npx tauri ios init --ci
+          npx tauri icon app-icon.svg -o src-tauri/icons
+
+      - name: Build for the simulator
+        run: npx tauri ios build --ci --debug --no-sign --target x86_64
+
+      - name: Screenshot on several iPhones
+        run: |
+          set -uo pipefail
+          APP=$(find src-tauri/gen/apple -name '*.app' -path '*x86_64*' -not -path '*/Payload/*' | head -n 1)
+          [ -z "$APP" ] && APP=$(find src-tauri/gen/apple -name 'Nocturn Music.app' | head -n 1)
+          echo "App: $APP"
+          test -n "$APP"
+          BUNDLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          RUNTIME=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["runtimes"] if x["isAvailable"] and x["platform"]=="iOS"]; print(sorted(r,key=lambda x:[int(p) for p in x["version"].split(".")])[-1]["identifier"])')
+          echo "Runtime: $RUNTIME"
+          mkdir -p ../shots
+          shoot() {
+            local name="$1" type="$2"
+            local udid
+            udid=$(xcrun simctl create "$name" "$type" "$RUNTIME" 2>/dev/null) || { echo "skip $name ($type not available)"; return 0; }
+            xcrun simctl boot "$udid"
+            xcrun simctl bootstatus "$udid" -b >/dev/null
+            xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 || true
+            xcrun simctl install "$udid" "$APP"
+            SIMCTL_CHILD_NOCTURN_DEMO=nowplaying xcrun simctl launch "$udid" "$BUNDLE"
+            sleep 20
+            xcrun simctl io "$udid" screenshot "../shots/${name// /-}-1.png"
+            sleep 6
+            xcrun simctl io "$udid" screenshot "../shots/${name// /-}-2.png"
+            xcrun simctl spawn "$udid" log show --last 2m --predicate 'process == "Nocturn Music"' --style compact > "../shots/${name// /-}-log.txt" 2>/dev/null || true
+            xcrun simctl shutdown "$udid" || true
+          }
+          shoot "iPhone SE" com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation
+          shoot "iPhone 17" com.apple.CoreSimulator.SimDeviceType.iPhone-17
+          shoot "iPhone 17 Pro Max" com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max
+          shoot "iPhone 16e" com.apple.CoreSimulator.SimDeviceType.iPhone-16e
+          ls -la ../shots
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iphone-screenshots
+          path: shots/

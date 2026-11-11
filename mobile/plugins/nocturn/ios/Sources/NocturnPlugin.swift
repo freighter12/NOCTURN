@@ -49,6 +49,11 @@ class LyricsArgs: Decodable {
   let plain: String?
 }
 
+class ReplaceArgs: Decodable {
+  let tracks: [TrackDTO]
+  let note: String?
+}
+
 class HapticArgs: Decodable {
   let style: String?
 }
@@ -82,6 +87,16 @@ class NocturnPlugin: Plugin {
           try? self?.trigger("action", data: ActionEvent(kind: kind, value: value))
         }
         ChromeController.shared.install(webview: webview)
+        // Simulator screenshot tests: SIMCTL_CHILD_NOCTURN_DEMO=nowplaying
+        if ProcessInfo.processInfo.environment["NOCTURN_DEMO"] == "nowplaying" {
+          DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            MainActor.assumeIsolated {
+              PlayerEngine.shared.startDemo()
+              ChromeController.shared.playerChanged()
+              ChromeController.shared.showNowPlaying()
+            }
+          }
+        }
       }
     }
   }
@@ -143,6 +158,16 @@ class NocturnPlugin: Plugin {
   @objc public func jump(_ invoke: Invoke) throws {
     let a = try invoke.parseArgs(JumpArgs.self)
     onMain(invoke) { PlayerEngine.shared.jump(to: a.index) }
+  }
+
+  @objc public func replaceUpcoming(_ invoke: Invoke) throws {
+    let a = try invoke.parseArgs(ReplaceArgs.self)
+    onMain(invoke) { PlayerEngine.shared.replaceUpcoming(a.tracks, note: a.note) }
+  }
+
+  @objc public func setAiShuffle(_ invoke: Invoke) throws {
+    let a = try invoke.parseArgs(AutoplayArgs.self)
+    onMain(invoke) { PlayerEngine.shared.setAIShuffle(a.on) }
   }
 
   @objc public func getState(_ invoke: Invoke) {

@@ -20,6 +20,8 @@ permissions = [
   "allow-set-lyrics",
   "allow-show-now-playing",
   "allow-haptic",
+  "allow-replace-upcoming",
+  "allow-set-ai-shuffle",
   "allow-register-listener",
   "allow-remove-listener",
 ]
