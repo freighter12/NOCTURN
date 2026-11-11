@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "default",
+  "description": "Permissions for the main Nocturn Music window",
+  "windows": ["main"],
+  "platforms": ["iOS", "android"],
+  "permissions": ["core:default"]
+}

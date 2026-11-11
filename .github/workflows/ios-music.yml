@@ -1,0 +1,151 @@
+# Builds Nocturn Music for iPhone on GitHub's Mac machines and publishes an
+# unsigned .ipa for sideloading. SideStore signs it with the user's Apple ID.
+#
+# The newest build is always at:
+#   https://github.com/freighter12/NOCTURN/releases/download/nocturn-music-ios/NocturnMusic.ipa
+# and SideStore can follow updates through the source file:
+#   https://github.com/freighter12/NOCTURN/releases/download/nocturn-music-ios/source.json
+name: iPhone app (Nocturn Music)
+
+on:
+  push:
+    paths:
+      - "mobile/**"
+      - "src/music/**"
+      - ".github/workflows/ios-music.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-music-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RELEASE_TAG: nocturn-music-ios
+  IPA_NAME: NocturnMusic.ipa
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode
+        run: xcodebuild -version && xcrun --sdk iphoneos --show-sdk-version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Rust for iPhone
+        run: rustup target add aarch64-apple-ios
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mobile/src-tauri -> target
+
+      - name: Tools
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      - name: Install packages
+        run: npm ci
+
+      - name: Generate the Xcode project
+        run: |
+          npx tauri ios init --ci
+          npx tauri icon app-icon.svg -o src-tauri/icons
+
+      - name: Build the app (unsigned)
+        run: npx tauri ios build --ci --no-sign --target aarch64 --build-number ${{ github.run_number }}
+
+      - name: Collect the .ipa
+        id: ipa
+        run: |
+          set -euo pipefail
+          IPA=$(find src-tauri/gen/apple/build -name '*.ipa' | head -n 1)
+          test -n "$IPA"
+          mkdir -p out
+          cp "$IPA" "out/$IPA_NAME"
+          # Read the real version numbers out of the app so SideStore's update check matches.
+          mkdir -p peek && (cd peek && unzip -q "../out/$IPA_NAME")
+          PLIST=$(find peek/Payload -maxdepth 2 -name Info.plist | head -n 1)
+          SHORT=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")
+          BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")
+          BUNDLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")
+          SIZE=$(stat -f%z "out/$IPA_NAME")
+          echo "short=$SHORT" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "bundle=$BUNDLE" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          cp src-tauri/icons/ios/AppIcon-512@2x.png out/icon.png
+          echo "Built $BUNDLE $SHORT ($BUILD), $SIZE bytes"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NocturnMusic-ipa
+          path: mobile/out/${{ env.IPA_NAME }}
+
+      - name: Write the SideStore source
+        env:
+          SHORT: ${{ steps.ipa.outputs.short }}
+          BUILD: ${{ steps.ipa.outputs.build }}
+          BUNDLE: ${{ steps.ipa.outputs.bundle }}
+          SIZE: ${{ steps.ipa.outputs.size }}
+          BASE: https://github.com/${{ github.repository }}/releases/download/nocturn-music-ios
+          SHA: ${{ github.sha }}
+        run: |
+          node -e '
+            const e = process.env;
+            const now = new Date().toISOString();
+            const source = {
+              name: "Nocturn",
+              identifier: "app.nocturn.source",
+              subtitle: "Nocturn Music for iPhone",
+              iconURL: e.BASE + "/icon.png",
+              tintColor: "#DFE2E8",
+              apps: [{
+                name: "Nocturn Music",
+                bundleIdentifier: e.BUNDLE,
+                developerName: "NOCTURN",
+                subtitle: "Your music, after dark.",
+                localizedDescription: "Nocturn Music for iPhone.",
+                iconURL: e.BASE + "/icon.png",
+                tintColor: "#DFE2E8",
+                category: "entertainment",
+                versions: [{
+                  version: e.SHORT,
+                  buildVersion: e.BUILD,
+                  date: now,
+                  localizedDescription: "Build " + e.BUILD + " (" + e.SHA.slice(0, 7) + ")",
+                  downloadURL: e.BASE + "/" + process.env.IPA_NAME,
+                  size: Number(e.SIZE),
+                  minOSVersion: "26.0"
+                }],
+                appPermissions: { entitlements: [], privacy: {} }
+              }],
+              news: []
+            };
+            require("fs").writeFileSync("out/source.json", JSON.stringify(source, null, 2));
+          '
+          cat out/source.json
+
+      - name: Publish to the rolling iPhone release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          NOTES="Newest Nocturn Music build for iPhone (sideload with SideStore). Build ${{ steps.ipa.outputs.build }} from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}."
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --prerelease --title "Nocturn Music for iPhone" --notes "$NOTES"
+          else
+            gh release create "$RELEASE_TAG" --prerelease --target "$GITHUB_SHA" --title "Nocturn Music for iPhone" --notes "$NOTES"
+          fi
+          gh release upload "$RELEASE_TAG" "out/$IPA_NAME" out/source.json out/icon.png --clobber
