@@ -1,4 +1,4 @@
-// Trailer mode (simulator only: SIMCTL_CHILD_NOCTURN_DEMO=trailer). The
+// Trailer mode (simulator only: SIMCTL_CHILD_NOCTURN_DEMO=trailer, recorded by ios-trailer.yml). The
 // native side runs a timeline (Trailer.swift) and tells the web side what to
 // show. Everything here is made up: invented songs and artists, cover art
 // drawn on the fly, no account, no network, nothing personal.
