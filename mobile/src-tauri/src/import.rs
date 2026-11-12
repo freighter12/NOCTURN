@@ -378,7 +378,9 @@ fn extra_versions(want: &str, cand: &str) -> bool {
 /// different song, version or performer.
 fn score(want: &RemoteTrack, c: &Track) -> Option<f64> {
     let raw_want = lower_words(&want.title);
-    let raw_cand = lower_words(&c.title);
+    // Fan uploads of unreleased songs label them "(Unreleased)", "OG", "CDQ",
+    // "Best Version"…: not a different version of the song, so not checked.
+    let raw_cand = strip_upload_labels(&lower_words(&c.title));
     if extra_versions(&raw_want, &raw_cand) || TRIBUTE.iter().any(|w| has_word(&raw_cand, w) && !has_word(&raw_want, w)) {
         return None;
     }
@@ -395,11 +397,22 @@ fn score(want: &RemoteTrack, c: &Track) -> Option<f64> {
         }
     }
     let wt = clean_title(&want.title);
-    let ct = clean_title(title);
+    let mut ct = strip_upload_labels(&clean_title(title));
     if wt.is_empty() || ct.is_empty() {
         return None;
     }
-    let sim = title_sim(&wt, &ct);
+    let mut sim = title_sim(&wt, &ct);
+    // "Someone Else - Song (Unreleased)": the part after the dash may be the song
+    if c.video && !named_artist {
+        if let Some((_, t)) = c.title.split_once(" - ") {
+            let alt = strip_upload_labels(&clean_title(t));
+            let alt_sim = title_sim(&wt, &alt);
+            if alt_sim > sim {
+                sim = alt_sim;
+                ct = alt;
+            }
+        }
+    }
     // Every wanted word is in the candidate ("Stay" vs "Stay (with Justin Bieber)" after cleaning).
     let contained = has_word(&ct, &wt);
     let dur = match (want.duration_ms, c.duration_ms) {
@@ -420,11 +433,21 @@ fn score(want: &RemoteTrack, c: &Track) -> Option<f64> {
     }
     // The performer must match: a same-named song by someone else (or a cover
     // band's copy with the same length) is the wrong song.
-    let artist_ok = want.artist.is_empty() || named_artist || artists_overlap(&want.artist, &c.artist);
-    if !artist_ok {
+    // The wanted artist named anywhere in the upload counts too ("Dome (feat. Xirus)").
+    let full = lower_words(&format!("{} {}", c.title, c.artist));
+    let named_in_title = want.artist.split([',', '&']).map(lower_words).any(|a| a.len() > 2 && has_word(&full, &a));
+    let artist_ok = want.artist.is_empty() || named_artist || named_in_title || artists_overlap(&want.artist, &c.artist);
+    // Someone else's upload of an unreleased song (on Spotify under a made-up
+    // name, on YouTube as "Real Artist - Song (Unreleased)"): only when it says
+    // it's unreleased/leaked AND the title is word-for-word the same AND the
+    // length agrees to 3 s. Length alone isn't enough: same-named songs often
+    // share a length by chance.
+    let labelled = ["unreleased", "leak", "leaked", "og", "cdq"].iter().any(|w| has_word(&lower_words(&c.title), w));
+    let reupload = !artist_ok && labelled && ct == wt && dur.is_some_and(|d| d <= 3000);
+    if !artist_ok && !reupload {
         return None;
     }
-    let mut s = sim * 3.0 + 2.0;
+    let mut s = sim * 3.0 + if artist_ok { 2.0 } else { -0.5 };
     if let Some(d) = dur {
         s += if d <= 2000 { 1.5 } else if d <= 5000 { 0.8 } else { 0.0 } - d as f64 / 1000.0 / 8.0;
     }
@@ -447,8 +470,19 @@ fn score(want: &RemoteTrack, c: &Track) -> Option<f64> {
     Some(s)
 }
 
+/// Labels fan uploads add that don't change which recording it is.
+const UPLOAD_LABELS: &[&str] = &["best version", "full song", "unreleased", "leaked", "leak", "og", "cdq", "hq", "hd", "official audio", "audio", "lyrics", "lyric video"];
+
+fn strip_upload_labels(s: &str) -> String {
+    let mut t = format!(" {s} ");
+    for w in UPLOAD_LABELS {
+        t = t.replace(&format!(" {w} "), " ");
+    }
+    t.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// Phrases karaoke and tribute releases put in their titles.
-const TRIBUTE: &[&str] = &["made popular by", "originally performed by", "in the style of", "made famous by", "as performed by", "tribute to", "made popular", "originally by"];
+const TRIBUTE: &[&str] = &["type beat", "made popular by", "originally performed by", "in the style of", "made famous by", "as performed by", "tribute to", "made popular", "originally by"];
 
 /// The best YouTube Music song for a track from another service, if any is close enough.
 fn pick(want: &RemoteTrack, candidates: &[Track]) -> Option<Track> {
@@ -491,7 +525,15 @@ pub(crate) async fn find(want: &RemoteTrack) -> Option<Track> {
     let first = artists.first().copied().unwrap_or("");
     // Results vary between searches, so try the words both ways round before
     // settling for a video (some songs are only on YouTube as videos).
-    let tries = [(format!("{title} {first}"), yt::SONGS), (format!("{first} {title}"), yt::SONGS), (format!("{first} {title}"), yt::VIDEOS)];
+    let tries = [
+        (format!("{title} {first}"), yt::SONGS),
+        (format!("{first} {title}"), yt::SONGS),
+        (format!("{first} {title}"), yt::VIDEOS),
+        // the artist name may be one only Spotify knows (re-uploads, leaks)
+        (title.to_string(), yt::VIDEOS),
+        // unreleased songs on Spotify under a made-up name
+        (format!("{title} unreleased"), yt::VIDEOS),
+    ];
     for (q, filter) in tries {
         let Ok(r) = yt::search_filtered(&q, filter).await else { continue };
         let found: Vec<Track> = r.top.as_ref().and_then(top_track).into_iter().chain(r.songs).chain(r.videos).filter(|t| (filter == yt::VIDEOS) == t.video).collect();
@@ -664,6 +706,25 @@ mod tests {
         assert_eq!(pick(&w3, &[t("Blinding Lights", "The Weeknd", 202, true), t("Blinding Lights", "The Weeknd", 200, false)]).unwrap().video, false);
     }
 
+    #[test]
+    fn reuploads_need_evidence() {
+        let w = RemoteTrack { title: "Late Night Thoughts".into(), artist: "Divinity, Xcozse".into(), duration_ms: Some(217_000), explicit: None };
+        // the real artist's unreleased upload, same title and length: yes
+        assert!(pick(&w, &[t("Juice WRLD - Late Night Thoughts (Unreleased)", "Juicy999", 218, true)]).is_some());
+        // same title and length but nothing says it's the same recording: no
+        let f = RemoteTrack { title: "Friends".into(), artist: "Haerted".into(), duration_ms: Some(204_000), explicit: None };
+        assert!(pick(&f, &[t("Marshmello & Anne-Marie - FRIENDS (Lyrics)", "7clouds", 203, true)]).is_none());
+        // words in another order are another song
+        let m = RemoteTrack { title: "Me & You".into(), artist: "Xirus".into(), duration_ms: Some(147_000), explicit: None };
+        assert!(pick(&m, &[t("you & me (unreleased)", "Someone", 147, true)]).is_none());
+        // the wanted artist named in the title counts as the artist
+        let d = RemoteTrack { title: "Dome".into(), artist: "Xirus".into(), duration_ms: Some(166_000), explicit: None };
+        assert!(pick(&d, &[t("Dome (feat. Xirus)", "mxnmxn", 168, false)]).is_some());
+        // type beats are never the song
+        let p = RemoteTrack { title: "Perky Conversations".into(), artist: "TopWRLD".into(), duration_ms: Some(181_000), explicit: None };
+        assert!(pick(&p, &[t("[FREE] Juice WRLD Type Beat 2024 - \"Perky Conversations\"", "NGHT RYD", 179, true)]).is_none());
+    }
+
     /// cargo test --lib live_match_report -- --ignored --nocapture
     #[tokio::test]
     #[ignore]
@@ -705,5 +766,6 @@ mod tests {
         assert!(ok >= 8);
     }
 }
+
 
 
