@@ -668,6 +668,12 @@ pub struct Session {
     pub shuffle: bool,
     /// off, all, one
     pub repeat: String,
+    /// Playing when saved (for carrying on from the same spot on the phone).
+    #[serde(default)]
+    pub playing: bool,
+    /// When it was saved (Unix ms), set here.
+    #[serde(default)]
+    pub saved_at: i64,
 }
 
 pub fn session(db: &Db) -> Session {
@@ -679,6 +685,7 @@ pub fn save_session(db: &Db, mut s: Session) -> AppResult<()> {
     if !["off", "all", "one"].contains(&s.repeat.as_str()) {
         s.repeat = "off".into();
     }
+    s.saved_at = chrono::Utc::now().timestamp_millis();
     db.set_setting(SESSION_KEY, &s)
 }
 

@@ -240,6 +240,56 @@ pub async fn pull(app: &AppHandle, p: &Pairing) -> Result<Pulled, String> {
     Ok(Pulled { device: if lib.device.is_empty() { p.name.clone() } else { lib.device }, playlists, liked })
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PcNow {
+    track: Option<SyncTrack>,
+    #[serde(default)]
+    position_ms: i64,
+    #[serde(default)]
+    playing: bool,
+    #[serde(default)]
+    age_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NowPlaying {
+    pub track: Option<Track>,
+    pub position_ms: i64,
+    pub playing: bool,
+    pub age_ms: i64,
+}
+
+/// What the PC is playing (peek), or take it over (the PC pauses).
+pub async fn now(p: &Pairing, take: bool) -> Result<NowPlaying, String> {
+    let url = format!("{}/sync/{}", base(p)?, if take { "take" } else { "now" });
+    let req = if take { client(10)?.post(url) } else { client(6)?.get(url) };
+    let res = req.bearer_auth(&p.key).send().await.map_err(|e| explain(e, p))?;
+    let n: PcNow = check(res).await?.json().await.map_err(|_| "your PC sent something unexpected".to_string())?;
+    let track = match n.track {
+        Some(t) => match t.video_id.as_deref().filter(|v| yt::valid_video_id(v)) {
+            Some(v) => Some(Track {
+                video_id: v.to_string(),
+                title: t.title.clone(),
+                artist: t.artist.clone(),
+                artist_id: None,
+                album: (!t.album.is_empty()).then(|| t.album.clone()),
+                album_id: None,
+                duration_ms: t.duration_ms,
+                artwork: Some(art(v)),
+                explicit: false,
+                video: false,
+            }),
+            // a file on the PC: the same song from YouTube Music (only when taking over)
+            None if take => import::find(&RemoteTrack { title: t.title, artist: t.artist, duration_ms: t.duration_ms, explicit: None }).await,
+            None => Some(Track { video_id: String::new(), title: t.title, artist: t.artist, artist_id: None, album: None, album_id: None, duration_ms: t.duration_ms, artwork: None, explicit: false, video: false }),
+        },
+        None => None,
+    };
+    Ok(NowPlaying { track, position_ms: n.position_ms, playing: n.playing, age_ms: n.age_ms })
+}
+
 /// Send the phone's playlists and liked songs to the PC.
 pub async fn push(p: &Pairing, lib: &SyncLibrary) -> Result<Pushed, String> {
     let res = client(120)?.post(format!("{}/sync/push", base(p)?)).bearer_auth(&p.key).json(lib).send().await.map_err(|e| explain(e, p))?;

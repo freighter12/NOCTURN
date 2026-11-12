@@ -1445,6 +1445,8 @@ export interface MusicSession {
   position_ms: number;
   shuffle: boolean;
   repeat: "off" | "all" | "one";
+  /** playing when saved (the iPhone can carry on from here) */
+  playing?: boolean;
 }
 
 /** Playback and artwork URLs served by the backend's media protocol. */

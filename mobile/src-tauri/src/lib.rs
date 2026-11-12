@@ -135,6 +135,11 @@ async fn sync_pull(app: tauri::AppHandle, pairing: sync::Pairing) -> Result<sync
 }
 
 #[tauri::command]
+async fn sync_now(pairing: sync::Pairing, take: bool) -> Result<sync::NowPlaying, String> {
+    sync::now(&pairing, take).await
+}
+
+#[tauri::command]
 async fn sync_push(pairing: sync::Pairing, library: sync::SyncLibrary) -> Result<sync::Pushed, String> {
     sync::push(&pairing, &library).await
 }
@@ -192,6 +197,7 @@ pub fn run() {
             sync_hello,
             sync_pull,
             sync_push,
+            sync_now,
             library_load,
             library_save
         ])

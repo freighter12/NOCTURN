@@ -628,6 +628,8 @@ h1, h2, h3, p { margin: 0; }
 .update-x { flex: none; width: 44px; height: 44px; display: grid; place-items: center; color: var(--ink-2); }
 @keyframes update-in { from { opacity: 0; transform: translateY(-120%); } }
 :root[data-motion="off"] .update-banner { animation: none; }
+.handoff-banner .update-main { padding-left: 12px; }
+.handoff-banner .update-main small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
 .update-card { padding: 14px 16px; display: grid; gap: 4px; }
 .update-card small { color: var(--ink-2); font-size: 13px; }
 .update-card ol { margin: 10px 0 0; padding-left: 20px; color: var(--ink-1); font-size: 14px; line-height: 1.55; }

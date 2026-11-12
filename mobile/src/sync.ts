@@ -12,13 +12,19 @@ type SyncTrack = { title: string; artist: string; album: string; durationMs?: nu
 type Pulled = { device: string; playlists: { id: string; name: string; tracks: Track[]; missing: { title: string; artist: string }[] }[]; liked: Track[] };
 type Pushed = { device: string; playlists: number; songs: number };
 
+export type NowPlaying = { track: Track | null; positionMs: number; playing: boolean; ageMs: number };
+
 export type SyncState = {
   busy: boolean;
   progress: { done: number; total: number } | null;
   error: string | null;
+  /** the PC was just playing this: "Continue on iPhone" */
+  handoff: NowPlaying | null;
 };
 
-let state: SyncState = { busy: false, progress: null, error: null };
+/** the PC song last carried on or hidden */
+let handledTitle = "";
+let state: SyncState = { busy: false, progress: null, error: null, handoff: null };
 const subs = new Set<() => void>();
 const set = (p: Partial<SyncState>) => {
   state = { ...state, ...p };
@@ -85,12 +91,48 @@ export const sync = {
     }
   },
 
+  /** Is the PC playing (or was it, in the last half hour)? Offers to carry on here. */
+  async checkHandoff() {
+    const s = library.get().sync;
+    if (!s) return;
+    try {
+      const n = await invoke<NowPlaying>("sync_now", { pairing: s.pairing, take: false });
+      const recent = n.playing || n.ageMs < 30 * 60_000;
+      // once carried on (or hidden), a paused PC song isn't offered again
+      const handled = !n.playing && !!n.track && n.track.title === handledTitle;
+      set({ handoff: n.track && recent && !handled ? n : null });
+    } catch {
+      set({ handoff: null }); // PC not around: nothing to offer
+    }
+  },
+
+  /** Carry on here: the PC pauses and hands over the song and where it was. */
+  async takeOver(): Promise<NowPlaying | null> {
+    const s = library.get().sync;
+    if (!s) return null;
+    handledTitle = state.handoff?.track?.title ?? handledTitle;
+    set({ handoff: null });
+    const r = await invoke<NowPlaying>("sync_now", { pairing: s.pairing, take: true });
+    if (r.track) handledTitle = r.track.title;
+    return r;
+  },
+
+  dismissHandoff() {
+    handledTitle = state.handoff?.track?.title ?? handledTitle;
+    set({ handoff: null });
+  },
+
   /** Quietly, a few seconds after the app opens, when paired and allowed. */
   startup() {
     if (!isNative) return;
+    setTimeout(() => sync.checkHandoff(), 2500);
     setTimeout(() => {
       const s = library.get().sync;
       if (s?.auto) sync.run({ quiet: true }).catch(() => {});
     }, 6000);
+    // coming back to the app later also checks
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") sync.checkHandoff();
+    });
   },
 };

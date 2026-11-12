@@ -177,13 +177,13 @@ const webPlayer = () => (web ??= new WebPlayer());
 // ---------------------------------------------------------------- API
 
 export const player = {
-  setQueue(tracks: Track[], index = 0, play = true) {
+  setQueue(tracks: Track[], index = 0, play = true, positionMs?: number) {
     if (!isNative) {
       const w = webPlayer();
       w.queue = [...tracks];
       return w.load(index, play);
     }
-    return call("set_queue", { tracks: tracks.map(slim), index, play });
+    return call("set_queue", { tracks: tracks.map(slim), index, play, ...(positionMs ? { positionMs } : {}) });
   },
   insert(tracks: Track[], next: boolean) {
     if (!isNative) {

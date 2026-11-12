@@ -28,7 +28,7 @@ export type AppCtx = {
   player: PlayerState;
   /** Songs the app sent to the player, in order (the player may add radio songs after these). */
   queue: Track[];
-  playList(tracks: Track[], index?: number, opts?: { shuffle?: boolean }): void;
+  playList(tracks: Track[], index?: number, opts?: { shuffle?: boolean; positionMs?: number }): void;
   playNext(t: Track[]): void;
   addToQueue(t: Track[]): void;
   startRadio(t: Track): void;

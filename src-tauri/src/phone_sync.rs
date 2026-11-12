@@ -175,6 +175,7 @@ pub fn reset_key(db: &Db) -> AppResult<SyncInfo> {
 /// Start the server if sync is on (at start-up, or when switched on).
 pub fn start(app: AppHandle) {
     let Some(st) = app.try_state::<Arc<AppState>>().map(|s| s.inner().clone()) else { return };
+    let _ = APP.set(app.clone());
     if !st.db.get_setting::<bool>(ENABLED).ok().flatten().unwrap_or(false) || RUNNING.swap(true, Ordering::SeqCst) {
         return;
     }
@@ -226,6 +227,51 @@ fn respond(s: &mut TcpStream, code: u16, body: &str) -> std::io::Result<()> {
     s.flush()
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NowPlaying {
+    pub track: Option<SyncTrack>,
+    /// Where the song is now (moved on by the time since it was saved, while playing).
+    pub position_ms: i64,
+    pub playing: bool,
+    /// How long ago the PC last played it.
+    pub age_ms: i64,
+}
+
+/// The PC's current song from the saved session (saved every 10 s while playing).
+pub fn now_playing(db: &Db) -> AppResult<NowPlaying> {
+    let s = music::session(db);
+    let none = NowPlaying { track: None, position_ms: 0, playing: false, age_ms: 0 };
+    let Some(&id) = s.queue.get(s.index) else { return Ok(none) };
+    let Some(t) = music::tracks(db)?.into_iter().find(|t| t.id == id) else { return Ok(none) };
+    let path = music_import::local_paths(db)?.into_iter().find(|(i, _)| *i == id).map(|(_, p)| p);
+    let age = if s.saved_at > 0 { (chrono::Utc::now().timestamp_millis() - s.saved_at).max(0) } else { i64::MAX / 2 };
+    let mut pos = s.position_ms.max(0);
+    if s.playing {
+        pos += age;
+    }
+    if t.duration_ms > 0 {
+        pos = pos.min(t.duration_ms - 1000).max(0);
+    }
+    let track = SyncTrack {
+        title: t.title.clone(),
+        artist: t.artist.clone(),
+        album: t.album.clone(),
+        duration_ms: (t.duration_ms > 0).then_some(t.duration_ms),
+        video_id: path.as_deref().and_then(|p| p.strip_prefix("youtube:")).filter(|v| valid_video_id(v)).map(String::from),
+    };
+    Ok(NowPlaying { track: Some(track), position_ms: pos, playing: s.playing, age_ms: age })
+}
+
+/// The app, so a request can tell the window to pause.
+static APP: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
+
+fn take_over() {
+    if let Some(app) = APP.get() {
+        let _ = app.emit("phone-took-over", ());
+    }
+}
+
 fn handle(db: &Db, notify: &dyn Fn(&LastSync), mut stream: TcpStream) -> std::io::Result<()> {
     let _ = stream.set_nonblocking(false);
     stream.set_read_timeout(Some(Duration::from_secs(20)))?;
@@ -263,6 +309,15 @@ fn handle(db: &Db, notify: &dyn Fn(&LastSync), mut stream: TcpStream) -> std::io
     let result: AppResult<String> = match (method.as_str(), path.as_str()) {
         ("GET", "/sync/hello") => Ok(serde_json::json!({ "app": "NOCTURN", "name": pc_name(), "version": env!("CARGO_PKG_VERSION") }).to_string()),
         ("GET", "/sync/library") => export(db).and_then(|l| Ok(serde_json::to_string(&l)?)),
+        // what's playing, so the phone can carry on from the same spot
+        ("GET", "/sync/now") => now_playing(db).and_then(|n| Ok(serde_json::to_string(&n)?)),
+        // the phone is taking over: tell the PC to pause
+        ("POST", "/sync/take") => now_playing(db).and_then(|n| {
+            if n.track.is_some() {
+                take_over();
+            }
+            Ok(serde_json::to_string(&n)?)
+        }),
         ("POST", "/sync/push") => serde_json::from_slice::<SyncLibrary>(&body)
             .map_err(|_| AppError::Invalid("that wasn't a library".into()))
             .and_then(|lib| receive(db, lib))
@@ -374,7 +429,7 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         let sdb = db.clone();
         std::thread::spawn(move || {
-            for s in listener.incoming().take(4).flatten() {
+            for s in listener.incoming().take(5).flatten() {
                 let _ = handle(&sdb, &|_: &LastSync| {}, s);
             }
         });
@@ -401,8 +456,16 @@ mod tests {
         let names: Vec<String> = music::playlists(&db).unwrap().into_iter().map(|p| p.name).collect();
         assert!(names.contains(&"Gym".to_string()));
         assert!(music::tracks(&db).unwrap().iter().any(|t| t.liked && t.title == "Starboy"));
+        let took: NowPlaying = http.post(format!("{base}/sync/take")).bearer_auth(&k).send().await.unwrap().json().await.unwrap();
+        assert!(took.track.is_none()); // nothing was playing yet
         // the phone's own playlist isn't sent back to it
         assert_eq!(export(&db).unwrap().playlists.len(), 1);
+
+        // carrying on: the PC was playing Blinding Lights 30 s in, saved 2 s ago
+        music::save_session(&db, music::Session { queue: vec![id], index: 0, position_ms: 30_000, shuffle: false, repeat: "off".into(), playing: true, saved_at: 0 }).unwrap();
+        let now = now_playing(&db).unwrap();
+        assert_eq!(now.track.as_ref().and_then(|t| t.video_id.as_deref()), Some("fHI8X4OXluQ"));
+        assert!(now.playing && now.position_ms >= 30_000 && now.position_ms < 35_000);
     }
 
     #[test]

@@ -795,6 +795,28 @@ function PCSync() {
       <button className="glass-pill wide sync-cta" disabled={st.busy} onClick={run}>
         {st.busy ? "Syncing…" : "Sync Now"}
       </button>
+      <Group note="When your PC is playing something, opening Nocturn offers to carry on here from the same spot (your PC pauses).">
+        <button
+          className="set-row"
+          disabled={st.busy}
+          onClick={async () => {
+            try {
+              const r = await sync.takeOver();
+              if (r?.track?.videoId) {
+                app.playList([r.track], 0, { positionMs: r.positionMs });
+                app.toast(`Carrying on with ${r.track.title}`);
+              } else app.toast("Nothing is playing on your PC");
+            } catch (e) {
+              app.toast(String(e).replace(/^Error: /, ""));
+            }
+          }}
+        >
+          <span>
+            <b>Continue from PC</b>
+            <small>Play what your PC is playing, from the same spot</small>
+          </span>
+        </button>
+      </Group>
       <Group note="Your PC's playlists show up in Library › Your Playlists, marked PC. Playlists you make or import here go to your PC. Liked songs are added both ways, never removed.">
         <Toggle title="Sync When Nocturn Opens" on={s.auto} set={(on) => library.setSync({ ...s, auto: on })} />
       </Group>

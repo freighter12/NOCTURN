@@ -287,6 +287,18 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // The iPhone carried on with what was playing here: pause.
+  const pauseRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    const un = listen("phone-took-over", () => {
+      pauseRef.current();
+      toast({ tone: "info", title: "Carrying on on your iPhone", detail: "Paused here so the music doesn't play twice." });
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, [toast]);
+
   // The iPhone sent its playlists and liked songs (Music › Sources › Sync with iPhone).
   useEffect(() => {
     const un = listen<{ device: string; playlists: number; songs: number }>("phone-sync", (e) => {
@@ -433,7 +445,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   // Persist the session a moment after changes, and every 10 s while playing.
   useEffect(() => {
     if (!restored.current) return;
-    const save = () => music.saveSession({ queue, index, position_ms: Math.round(deck().el.currentTime * 1000), shuffle, repeat }).catch(() => {});
+    const save = () => music.saveSession({ queue, index, position_ms: Math.round(deck().el.currentTime * 1000), shuffle, repeat, playing }).catch(() => {});
     const t = window.setTimeout(save, 600);
     const iv = playing ? window.setInterval(save, 10_000) : undefined;
     return () => {
@@ -644,6 +656,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     },
     [deck, applyVolume, finishOutgoing],
   );
+  pauseRef.current = () => fadeOutAndPause(1.5);
 
   // Cancel a fade-out if the user presses play again.
   useEffect(() => {

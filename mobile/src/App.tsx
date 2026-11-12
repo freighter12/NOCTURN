@@ -13,7 +13,7 @@ import CollectionPage from "./pages/Collection";
 import ArtistView from "./pages/Artist";
 import { ActionSheet, ImportSheet, QueueSheet } from "./sheets";
 import { buildLabel, updates, useUpdates } from "./update";
-import { sync } from "./sync";
+import { sync, useSync } from "./sync";
 import { buildItems } from "@shared/lyricsTiming";
 
 const TABS: { id: TabId; title: string; symbol: string; search?: boolean }[] = [
@@ -34,6 +34,43 @@ function shuffled<T>(a: T[]): T[] {
     [b[i], b[j]] = [b[j], b[i]];
   }
   return b;
+}
+
+/** "Continue on iPhone": the PC was just playing something; carry on from the same spot. */
+function HandoffBanner() {
+  const app = useApp();
+  const st = useSync();
+  const h = st.handoff;
+  if (!h?.track) return null;
+  // already listening here and the PC is only paused: nothing to carry on
+  if (app.player.playing && !h.playing) return null;
+  const pc = library.get().sync?.pairing.name ?? "your PC";
+  return (
+    <div className="update-banner handoff-banner" role="status">
+      <button
+        className="update-main"
+        onClick={async () => {
+          const r = await sync.takeOver().catch((e) => {
+            app.toast(String(e).replace(/^Error: /, ""));
+            return null;
+          });
+          if (r?.track?.videoId) app.playList([r.track], 0, { positionMs: r.positionMs });
+          else if (r) app.toast("That song couldn't be found here");
+        }}
+      >
+        <Art src={h.track.artwork} size={40} radius={8} />
+        <span>
+          <b>Continue on iPhone</b>
+          <small>
+            {h.track.title} · {h.playing ? `playing on ${pc}` : `paused on ${pc}`}
+          </small>
+        </span>
+      </button>
+      <button className="update-x" aria-label="Hide" onClick={() => sync.dismissHandoff()}>
+        <Icon name="close" size={16} />
+      </button>
+    </div>
+  );
 }
 
 /** "Update available" across the top; tap for the steps in Settings › About. */
@@ -192,7 +229,7 @@ export default function App() {
       }
       remember(list);
       setQueue(list);
-      player.setQueue(list, start, true).catch((e) => toast(errorText(e)));
+      player.setQueue(list, start, true, opts?.positionMs).catch((e) => toast(errorText(e)));
       player.haptic("light");
       if (aiOn.current) aiPlan(list[start], list.slice(start + 1), true);
     },
@@ -406,6 +443,7 @@ export default function App() {
       {queueOpen && <QueueSheet onClose={() => setQueueOpen(false)} />}
       {importOpen && <ImportSheet onClose={() => setImportOpen(false)} />}
       {introDone && <UpdateBanner />}
+      {introDone && <HandoffBanner />}
       {toastText && <div className="toast">{toastText}</div>}
     </AppContext.Provider>
   );
