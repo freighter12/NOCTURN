@@ -13,7 +13,9 @@ export type Route =
   | { kind: "recent" }
   | { kind: "saved"; what: "albums" | "playlists" | "artists" }
   | { kind: "downloads" }
-  | { kind: "settings" };
+  | { kind: "settings"; section?: SettingsSection };
+
+export type SettingsSection = "appearance" | "home" | "playback" | "lyrics" | "downloads" | "history" | "about";
 
 export type AppCtx = {
   tab: TabId;
@@ -34,6 +36,8 @@ export type AppCtx = {
   openQueue(): void;
   openImport(): void;
   toast(text: string): void;
+  /** Turns AI Shuffle on/off and, when on, plans what plays next. */
+  setAIShuffle(on: boolean): void;
 };
 
 export const AppContext = createContext<AppCtx | null>(null);

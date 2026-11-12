@@ -308,8 +308,17 @@ export default function App() {
       openQueue: () => setQueueOpen(true),
       openImport: () => setImportOpen(true),
       toast,
+      setAIShuffle: (on: boolean) => {
+        aiOn.current = on;
+        player.setAIShuffle(on).then(() => {
+          if (!on) return;
+          const t = ps.track ? (known.current.get(ps.track.videoId) ?? ps.track) : null;
+          const i = ps.index;
+          aiPlan(t, i >= 0 ? queue.slice(i + 1) : queue);
+        });
+      },
     }),
-    [tab, route, stack.length, push, back, selectTab, ps, queue, playList, playNext, addToQueue, startRadio, openCard, toast],
+    [tab, route, stack.length, push, back, selectTab, ps, queue, playList, playNext, addToQueue, startRadio, openCard, toast, aiPlan],
   );
 
   let page: ReactNode;
@@ -320,7 +329,7 @@ export default function App() {
   else if (route.kind === "recent") page = <RecentPage />;
   else if (route.kind === "saved") page = <SavedPage what={route.what} />;
   else if (route.kind === "downloads") page = <DownloadsPage />;
-  else if (route.kind === "settings") page = <SettingsPage />;
+  else if (route.kind === "settings") page = <SettingsPage key={route.section ?? "root"} section={route.section} />;
   else if (tab === "home") page = <Home />;
   else if (tab === "search") page = <Search />;
   else page = <LibraryPage />;

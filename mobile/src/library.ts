@@ -1,6 +1,8 @@
 // Your library, kept on the phone (library.json in the app's data folder).
 import { useSyncExternalStore } from "react";
 import { api, type Card, type Track } from "./api";
+import type { HomePrefs } from "./greeting";
+import { setHapticsOn } from "./native";
 
 export type MyPlaylist = {
   id: string;
@@ -22,6 +24,10 @@ export type Library = {
   artists: Card[];
   recent: Track[]; // recently played, newest first
   searches: string[];
+  /** Settings › Home Screen (see greeting.ts) */
+  home?: Partial<HomePrefs>;
+  /** small app preferences kept with the library */
+  prefs?: { haptics?: boolean };
 };
 
 const blank: Library = { version: 1, mine: [], liked: [], albums: [], playlists: [], artists: [], recent: [], searches: [] };
@@ -54,6 +60,7 @@ export async function loadLibrary() {
   try {
     const parsed = JSON.parse(await api.libraryLoad());
     lib = { ...blank, ...parsed, version: 1 };
+    setHapticsOn(lib.prefs?.haptics ?? true);
   } catch {
     lib = blank;
   }
@@ -112,5 +119,15 @@ export const library = {
   },
   clearSearches() {
     set({ ...lib, searches: [] });
+  },
+  clearRecent() {
+    set({ ...lib, recent: [] });
+  },
+  setHome(patch: Partial<HomePrefs> | null) {
+    set({ ...lib, home: patch === null ? {} : { ...lib.home, ...patch } });
+  },
+  setHaptics(on: boolean) {
+    setHapticsOn(on);
+    set({ ...lib, prefs: { ...lib.prefs, haptics: on } });
   },
 };

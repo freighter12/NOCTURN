@@ -38,10 +38,31 @@ export type DownloadState = {
   failed: string[];
 };
 
-export type ThemeName = "artwork" | "lunar" | "black" | "photo";
-export type Settings = { theme: ThemeName; photo: string | null; liveLyrics: boolean };
+export type ThemeName = "artwork" | "lunar" | "aurora" | "nebula" | "synthwave" | "ocean" | "snow" | "fireflies" | "black" | "photo";
+export type Settings = {
+  theme: ThemeName;
+  photo: string | null;
+  liveLyrics: boolean;
+  /** background motion: 0.5 slow, 1 normal, 1.8 fast */
+  speed: number;
+  /** darkening behind text: 0 lighter, 1 normal, 2 darker */
+  dim: number;
+  /** background frozen */
+  still: boolean;
+  autoplay: boolean;
+  aiShuffle: boolean;
+};
+export const defaultSettings: Settings = {
+  theme: "artwork", photo: null, liveLyrics: true, speed: 1, dim: 1, still: false, autoplay: true, aiShuffle: false,
+};
 
 export type TabSpec = { id: string; title: string; symbol: string; search?: boolean };
+
+let hapticsOn = true;
+/** Settings › Playback › Haptics. */
+export function setHapticsOn(on: boolean) {
+  hapticsOn = on;
+}
 
 export const isNative = /iPhone|iPad|iPod/.test(navigator.userAgent);
 
@@ -178,7 +199,7 @@ export const player = {
     isNative ? call("set_lyrics", { videoId, ...data }) : Promise.resolve(),
   showNowPlaying: () => (isNative ? call("show_now_playing") : Promise.resolve()),
   haptic: (style: "light" | "medium" | "heavy" | "select" | "success" = "light") =>
-    isNative ? call("haptic", { style }).catch(() => {}) : Promise.resolve(),
+    isNative && hapticsOn ? call("haptic", { style }).catch(() => {}) : Promise.resolve(),
   async onState(cb: (s: PlayerState) => void): Promise<() => void> {
     if (!isNative) {
       const w = webPlayer();
@@ -197,9 +218,17 @@ const SETTINGS_KEY = "nocturn.settings";
 
 function localSettings(): Settings {
   try {
-    return { theme: "artwork", photo: null, liveLyrics: true, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") };
+    return { ...defaultSettings, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") };
   } catch {
-    return { theme: "artwork", photo: null, liveLyrics: true };
+    return { ...defaultSettings };
+  }
+}
+
+function saveLocal(patch: Partial<Settings>) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...localSettings(), ...patch }));
+  } catch {
+    /* storage full or blocked */
   }
 }
 
@@ -216,7 +245,20 @@ export const downloads = {
 };
 
 export const settings = {
-  get: () => (isNative ? call<Settings>("get_settings") : Promise.resolve(localSettings())),
+  get: () =>
+    isNative ? call<Settings>("get_settings").then((s) => ({ ...defaultSettings, ...s })) : Promise.resolve(localSettings()),
+  setLook(look: { speed?: number; dim?: number; still?: boolean }) {
+    if (!isNative) return Promise.resolve(saveLocal(look));
+    return call("set_look", look);
+  },
+  setAutoplay(on: boolean) {
+    if (!isNative) return Promise.resolve(saveLocal({ autoplay: on }));
+    return call("set_autoplay", { on });
+  },
+  setAIShuffle(on: boolean) {
+    if (!isNative) return Promise.resolve(saveLocal({ aiShuffle: on }));
+    return call("set_ai_shuffle", { on });
+  },
   /** photo: base64 JPEG (no data: prefix), only when a new one was picked. */
   setTheme(theme: ThemeName, photo?: string) {
     if (!isNative) {

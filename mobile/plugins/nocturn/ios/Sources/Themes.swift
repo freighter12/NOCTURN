@@ -319,7 +319,9 @@ struct AuroraSky: View {
             let steps = 40
             for i in 0...steps {
               let fx = Double(i) / Double(steps)
-              let y = b.height + 0.07 * sin(fx * 5 + t * b.speed + b.phase) + 0.035 * sin(fx * 11 - t * b.speed * 1.7 + b.phase * 2)
+              let w1: Double = sin(fx * 5 + t * b.speed + b.phase)
+              let w2: Double = sin(fx * 11 - t * b.speed * 1.7 + b.phase * 2)
+              let y: Double = b.height + 0.07 * w1 + 0.035 * w2
               let pt = CGPoint(x: fx * w, y: y * h)
               if i == 0 { top.move(to: pt) } else { top.addLine(to: pt) }
             }
@@ -465,13 +467,16 @@ struct NightOcean: View {
         for i in 0..<layers {
           let fi = Double(i)
           let base = 0.47 + fi * 0.085
-          let amp = 5 + fi * 4
-          let waves = 1.5 + fi * 0.35
-          let speed = 0.25 + fi * 0.12
+          let amp: Double = 5 + fi * 4
+          let waves: Double = 1.5 + fi * 0.35
+          let speed: Double = 0.25 + fi * 0.12
+          let k: Double = 2 * Double.pi * waves
           var crest = Path()
           for s in 0...48 {
             let x = Double(s) / 48
-            let y = base * h + amp * sin(x * 2 * .pi * waves + t * speed + fi * 1.3) + amp * 0.4 * sin(x * 2 * .pi * waves * 2.3 - t * speed * 1.4 + fi)
+            let a1: Double = sin(x * k + t * speed + fi * 1.3)
+            let a2: Double = sin(x * k * 2.3 - t * speed * 1.4 + fi)
+            let y: Double = base * h + amp * a1 + amp * 0.4 * a2
             let pt = CGPoint(x: x * w, y: y)
             if s == 0 { crest.move(to: pt) } else { crest.addLine(to: pt) }
           }
@@ -480,7 +485,8 @@ struct NightOcean: View {
           water.addLine(to: CGPoint(x: 0, y: h))
           water.closeSubpath()
           let shade = fi / Double(layers - 1)
-          c.fill(water, with: .color(rgb(0.04 + 0.03 * (1 - shade), 0.15 - 0.09 * shade, 0.3 - 0.19 * shade)))
+          let waterColor = rgb(0.04 + 0.03 * (1 - shade), 0.15 - 0.09 * shade, 0.3 - 0.19 * shade)
+          c.fill(water, with: .color(waterColor))
           c.stroke(crest, with: .color(.white.opacity(0.05 + 0.06 * (1 - shade))), lineWidth: 1)
         }
 
@@ -489,9 +495,11 @@ struct NightOcean: View {
           let fj = Double(j)
           let y = h * (0.5 + fj * 0.028)
           let flicker = 0.5 + 0.5 * sin(t * 2.3 + fj * 1.7)
-          let half = w * 0.025 * (1 + fj * 0.18) * (0.5 + 0.5 * flicker)
+          let grow: Double = 1 + fj * 0.18
+          let half: Double = w * 0.025 * grow * (0.5 + 0.5 * flicker)
+          let gx: Double = mx - half + 6 * sin(t + fj)
           c.fill(
-            Path(roundedRect: CGRect(x: mx - half + 6 * sin(t + fj), y: y, width: half * 2, height: 2), cornerRadius: 1),
+            Path(roundedRect: CGRect(x: gx, y: y, width: half * 2, height: 2), cornerRadius: 1),
             with: .color(rgb(0.85, 0.9, 1).opacity(0.1 + 0.18 * flicker)))
         }
       }
@@ -527,10 +535,11 @@ struct Snowfall: View {
         for f in Snowfall.flakes {
           let fall = (f.y + t * f.speed).truncatingRemainder(dividingBy: 1)
           let y = fall * (h + 20) - 10
-          let x = f.x * w + sin(t * 0.6 * f.sway + f.phase) * 7 * f.r
+          let sway: Double = sin(t * 0.6 * f.sway + f.phase)
+          let x: Double = f.x * w + sway * 7 * f.r
           c.fill(
             Path(ellipseIn: CGRect(x: x - f.r, y: y - f.r, width: f.r * 2, height: f.r * 2)),
-            with: .color(.white.opacity(0.3 + 0.55 * (f.r / 3))))
+            with: .color(Color.white.opacity(0.3 + 0.55 * (f.r / 3))))
         }
       }
     }
@@ -562,8 +571,10 @@ struct Fireflies: View {
           Path(CGRect(origin: .zero, size: size)),
           with: verticalGradient([rgb(0.01, 0.03, 0.05), rgb(0.02, 0.07, 0.07), rgb(0.03, 0.09, 0.05)], from: 0, to: size.height))
         for f in Fireflies.flies {
-          let x = (f.x + f.ax * sin(t * f.fx + f.phase)) * w
-          let y = (f.y + f.ay * cos(t * f.fy + f.phase * 1.3)) * h
+          let dx: Double = f.ax * sin(t * f.fx + f.phase)
+          let dy: Double = f.ay * cos(t * f.fy + f.phase * 1.3)
+          let x: Double = (f.x + dx) * w
+          let y: Double = (f.y + dy) * h
           let on = max(0, sin(t * f.pulse + f.phase))
           let b = 0.12 + 0.88 * on * on
           let glow = 16.0
