@@ -29,6 +29,12 @@ permissions = [
   "allow-set-theme",
   "allow-set-live-lyrics",
   "allow-set-look",
+  "allow-set-audio",
+  "allow-set-crossfade",
+  "allow-set-lyrics-look",
+  "allow-get-stats",
+  "allow-clear-stats",
+  "allow-scan-qr",
   "allow-register-listener",
   "allow-remove-listener",
 ]

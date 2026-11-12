@@ -193,6 +193,13 @@ final class ChromeController: NSObject, UITabBarControllerDelegate {
     }
   }
 
+  /// The screen on top (for sheets like the QR scanner).
+  func topViewController() -> UIViewController? {
+    var top: UIViewController? = installed ? tabBar : UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
+    while let p = top?.presentedViewController { top = p }
+    return top
+  }
+
   func showNowPlaying() {
     guard installed, nowPlaying == nil, PlayerEngine.shared.current != nil else { return }
     let view = NowPlayingView(

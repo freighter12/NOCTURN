@@ -26,8 +26,17 @@ export type Library = {
   searches: string[];
   /** Settings › Home Screen (see greeting.ts) */
   home?: Partial<HomePrefs>;
+  /** paired PC (Settings › PC Sync) */
+  sync?: SyncSettings;
   /** small app preferences kept with the library */
   prefs?: { haptics?: boolean; motion?: Motion };
+};
+
+export type SyncSettings = {
+  pairing: { host: string; port: number; key: string; name: string };
+  /** sync a few seconds after the app opens */
+  auto: boolean;
+  last?: { at: number; pulled: number; pushed: number; liked: number };
 };
 
 /** page animations: Settings › Appearance */
@@ -124,6 +133,28 @@ export const library = {
   },
   addToPlaylist(id: string, t: Track) {
     set({ ...lib, mine: lib.mine.map((p) => (p.id === id && !p.tracks.some((x) => x.videoId === t.videoId) ? { ...p, tracks: [...p.tracks, t] } : p)) });
+  },
+  setSync(s: SyncSettings | null) {
+    const next = { ...lib };
+    if (s) next.sync = s;
+    else delete next.sync;
+    set(next);
+  },
+  /** The PC's playlists (one phone playlist each, kept up to date) and its liked songs (added, never removed). */
+  mergeFromPC(playlists: { id: string; name: string; tracks: Track[]; missing: { title: string; artist: string }[] }[], liked: Track[]) {
+    const fromPC = new Map(playlists.map((p) => [`pc:${p.id}`, p]));
+    const kept = lib.mine
+      .filter((p) => !p.id.startsWith("pc:") || fromPC.has(p.id))
+      .map((p) => {
+        const pc = fromPC.get(p.id);
+        return pc ? { ...p, title: pc.name, tracks: pc.tracks, missing: pc.missing, artwork: pc.tracks[0]?.artwork ?? p.artwork } : p;
+      });
+    const added = playlists
+      .filter((p) => !lib.mine.some((m) => m.id === `pc:${p.id}`) && p.tracks.length)
+      .map((p) => ({ id: `pc:${p.id}`, title: p.name, source: "PC", artwork: p.tracks[0]?.artwork, tracks: p.tracks, missing: p.missing, created: Date.now() }));
+    const have = new Set(lib.liked.map((t) => t.videoId));
+    const newLiked = liked.filter((t) => !have.has(t.videoId));
+    set({ ...lib, mine: [...added, ...kept], liked: [...lib.liked, ...newLiked] });
   },
   clearSearches() {
     set({ ...lib, searches: [] });

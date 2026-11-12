@@ -3,11 +3,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { fmtBytes, offline, useDownloads } from "../downloads";
 import { DAY_PARTS, defaultHome, greetingText, homePrefs, type HomePrefs } from "../greeting";
 import { library, useLibrary, type Motion } from "../library";
-import { defaultSettings, settings, type IntroMode, type LyricsLook, type Refresh, type Settings, type ThemeName } from "../native";
+import { defaultSettings, player, settings, stats, type IntroMode, type LyricsLook, type Refresh, type Settings, type ThemeName } from "../native";
 import { useApp, type SettingsSection } from "../state";
 import { Icon, PageHeader } from "../ui";
 import { HomeHero } from "./Home";
 import { buildLabel, updates, useUpdates } from "../update";
+import { sync, useSync } from "../sync";
 
 /** The season the Seasons background shows right now (northern hemisphere, like the phone side). */
 function seasonNow(): { name: string; id: ThemeName } {
@@ -61,6 +62,7 @@ const SECTIONS: { id: SettingsSection; title: string; icon: string; tint: string
   { id: "lyrics", title: "Lyrics", icon: "mic", tint: "#ff375f" },
   { id: "downloads", title: "Downloads", icon: "download", tint: "#0a84ff" },
   { id: "history", title: "History", icon: "clock", tint: "#64d2ff" },
+  { id: "sync", title: "PC Sync", icon: "pc", tint: "#5e5ce6" },
   { id: "about", title: "About", icon: "info", tint: "#8e8e93" },
 ];
 
@@ -193,6 +195,7 @@ export default function SettingsPage({ section }: { section?: SettingsSection })
   else if (section === "lyrics") body = <Lyrics />;
   else if (section === "downloads") body = <Downloads />;
   else if (section === "history") body = <History />;
+  else if (section === "sync") body = <PCSync />;
   else if (section === "about") body = <About />;
   else body = <Root />;
   return (
@@ -217,10 +220,11 @@ function Root() {
     lyrics: s ? [LYRIC_COLORS.find((c) => c.v === s.lyrics?.color)?.label ?? "White", LYRIC_STYLES.find((x) => x.v === s.lyrics?.style)?.label ?? "Fill"].join(" · ") : "",
     downloads: dl.tracks.length ? `${dl.tracks.length} songs · ${fmtBytes(dl.bytes)}` : "None yet",
     history: `${lib.recent.length} recently played`,
+    sync: lib.sync ? `Paired with ${lib.sync.pairing.name}` : "Not paired",
     about: "Version and resets",
   };
   const go = (id: SettingsSection) => app.push({ kind: "settings", section: id });
-  const groups: SettingsSection[][] = [["appearance", "home"], ["playback", "lyrics"], ["downloads", "history"], ["about"]];
+  const groups: SettingsSection[][] = [["appearance", "home"], ["playback", "lyrics"], ["sync"], ["downloads", "history"], ["about"]];
   return (
     <>
       {groups.map((g, gi) => (
@@ -653,6 +657,7 @@ function Downloads() {
 function History() {
   const app = useApp();
   const lib = useLibrary();
+  const [confirmStats, setConfirmStats] = useState(false);
   return (
     <Group note="This only clears the lists on this phone. Your liked songs and playlists stay.">
       <button
@@ -681,8 +686,129 @@ function History() {
           <small>{lib.searches.length} searches</small>
         </span>
       </button>
+      <button
+        className={`set-row danger ${confirmStats ? "confirm" : ""}`}
+        onClick={() => {
+          if (!confirmStats) return setConfirmStats(true);
+          stats.clear().then(() => app.toast("Listening stats cleared")).catch((e) => app.toast(String(e)));
+          setConfirmStats(false);
+        }}
+      >
+        <span>
+          <b>{confirmStats ? "Tap Again to Clear Your Stats" : "Clear Listening Stats"}</b>
+          <small>Starts Nocturn Wrapped from zero</small>
+        </span>
+      </button>
     </Group>
   );
+}
+
+function PCSync() {
+  const app = useApp();
+  const lib = useLibrary();
+  const st = useSync();
+  const [pairing, setPairing] = useState(false);
+  const s = lib.sync;
+
+  const pair = async () => {
+    setPairing(true);
+    try {
+      const p = await sync.pair();
+      player.haptic("success");
+      app.toast(`Paired with ${p.name}`);
+      await sync.run().then((r) => r && app.toast(syncSummary(r)));
+    } catch (e) {
+      const msg = String(e);
+      if (!/cancel/i.test(msg)) app.toast(msg.replace(/^Error: /, ""));
+    } finally {
+      setPairing(false);
+    }
+  };
+  const run = () =>
+    sync
+      .run()
+      .then((r) => {
+        if (!r) return;
+        player.haptic("success");
+        app.toast(syncSummary(r));
+      })
+      .catch(() => {});
+
+  if (!s) {
+    return (
+      <>
+        <div className="sync-hero">
+          <span className="sync-icon">
+            <Icon name="pc" size={30} />
+          </span>
+          <b>Your music on your PC and your iPhone</b>
+          <p>Playlists and liked songs sync between Nocturn here and NOCTURN on your PC, over your own Wi-Fi. No account, nothing online.</p>
+        </div>
+        <Group title="How to Pair" note="You only pair once. After that, syncing happens by itself when Nocturn opens (or tap Sync Now).">
+          <div className="sync-steps">
+            <p><b>1.</b> On your PC, open NOCTURN › Music › Sources and switch on <b>Sync with iPhone</b>. A QR code appears.</p>
+            <p><b>2.</b> Make sure this iPhone is on the same Wi-Fi as the PC.</p>
+            <p><b>3.</b> Tap <b>Pair with PC</b> and point the camera at the code.</p>
+          </div>
+        </Group>
+        <button className="glass-pill wide sync-cta" disabled={pairing} onClick={pair}>
+          {pairing ? "Pairing…" : "Pair with PC"}
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="sync-hero">
+        <span className="sync-icon on">
+          <Icon name="pc" size={30} />
+        </span>
+        <b>Paired with {s.pairing.name}</b>
+        <p>{s.last ? `Last synced ${new Date(s.last.at).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}` : "Not synced yet"}</p>
+      </div>
+      {st.busy && (
+        <div className="import-progress sync-progress">
+          <div className="bar">
+            <i style={{ width: st.progress?.total ? `${(st.progress.done / st.progress.total) * 100}%` : "10%" }} />
+          </div>
+          <span>{st.progress?.total ? `Finding your PC's songs… ${st.progress.done} of ${st.progress.total}` : `Talking to ${s.pairing.name}…`}</span>
+        </div>
+      )}
+      {st.error && <p className="import-error sync-error">{st.error.replace(/^Error: /, "")}</p>}
+      <button className="glass-pill wide sync-cta" disabled={st.busy} onClick={run}>
+        {st.busy ? "Syncing…" : "Sync Now"}
+      </button>
+      <Group note="Your PC's playlists show up in Library › Your Playlists, marked PC. Playlists you make or import here go to your PC. Liked songs are added both ways, never removed.">
+        <Toggle title="Sync When Nocturn Opens" on={s.auto} set={(on) => library.setSync({ ...s, auto: on })} />
+      </Group>
+      <Group>
+        <button className="set-row" disabled={pairing} onClick={pair}>
+          <span>
+            <b>Pair Again</b>
+            <small>If your PC's address changed or you made a new code</small>
+          </span>
+        </button>
+        <button
+          className="set-row danger"
+          onClick={() => {
+            sync.unpair();
+            app.toast("Unpaired");
+          }}
+        >
+          <span>
+            <b>Unpair</b>
+            <small>Playlists already synced stay on this phone</small>
+          </span>
+        </button>
+      </Group>
+    </>
+  );
+}
+
+function syncSummary(r: { pulled: number; liked: number; pushed: { playlists: number } }): string {
+  const parts = [`${r.pulled} from your PC`, `${r.pushed.playlists} to your PC`];
+  return `Synced: ${parts.join(", ")}${r.liked ? `, ${r.liked} new liked` : ""}`;
 }
 
 function About() {

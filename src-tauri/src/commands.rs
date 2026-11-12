@@ -162,6 +162,26 @@ pub fn music_save_playlist(state: State<'_, Shared>, playlist: crate::music::Pla
     crate::music::save_playlist(&state.db, playlist)
 }
 
+// ---- sync with the iPhone app
+
+#[tauri::command]
+pub async fn phone_sync_info(state: State<'_, Shared>) -> AppResult<crate::phone_sync::SyncInfo> {
+    let st = state.inner().clone();
+    blocking(move || crate::phone_sync::info(&st.db)).await
+}
+
+#[tauri::command]
+pub async fn phone_sync_set_enabled(app: tauri::AppHandle, state: State<'_, Shared>, enabled: bool) -> AppResult<crate::phone_sync::SyncInfo> {
+    let st = state.inner().clone();
+    blocking(move || crate::phone_sync::set_enabled(&app, &st.db, enabled)).await
+}
+
+#[tauri::command]
+pub async fn phone_sync_reset_key(state: State<'_, Shared>) -> AppResult<crate::phone_sync::SyncInfo> {
+    let st = state.inner().clone();
+    blocking(move || crate::phone_sync::reset_key(&st.db)).await
+}
+
 // ---- playlist import
 
 /// Read a playlist from a link (Spotify, YouTube, Deezer) or pasted text and match it to the library.

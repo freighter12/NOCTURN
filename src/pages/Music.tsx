@@ -12,6 +12,7 @@ import { fmtTime, useMusic } from "../music/MusicProvider";
 import { Art } from "../music/Player";
 import { ImportedInfo, ImportPanel } from "../music/Import";
 import { StreamingPanel } from "../music/Streaming";
+import { PhoneSyncPanel } from "../music/PhoneSync";
 import { SmartArt, SmartEditor, useSmartLists } from "../music/SmartLists";
 import type { SmartList } from "../music/smart";
 import { usePrefs } from "../shell/PrefsProvider";
@@ -378,6 +379,7 @@ function Sources() {
         {scanning && <div className="small mt-1"><Spinner /> {scanning}</div>}
       </Panel>
       <StreamingPanel />
+      <PhoneSyncPanel />
       <Note>
         Nocturn Music has no ads. Your own files always come first; streaming is optional and only fills in songs you don't have. Nothing is saved to disk from streams.
       </Note>

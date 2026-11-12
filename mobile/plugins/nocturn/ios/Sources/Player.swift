@@ -323,6 +323,7 @@ final class PlayerEngine {
     durationMs = queue[i].durationMs ?? 0
     loading = true
     lastError = nil
+    ListeningStats.shared.songRestarted()
     finishFade()
     standby.removeAllItems()
     player.removeAllItems()
@@ -585,6 +586,7 @@ final class PlayerEngine {
       MainActor.assumeIsolated {
         guard let self, let item = note.object as? AVPlayerItem, self.itemIndex[ObjectIdentifier(item)] == self.index else { return }
         if self.repeatMode == "one" {
+          ListeningStats.shared.songRestarted()
           self.seek(ms: 0)
           self.player.play()
         } else if self.preparedOnStandby {
@@ -610,6 +612,7 @@ final class PlayerEngine {
         if self.loading && isPlaying { self.loading = false }
         self.loading = self.loading || (waiting && self.playing)
         if isPlaying { self.loading = false }
+        ListeningStats.shared.tick(self.current, playing: isPlaying)
         // crossfade: start the next song when this one is about to end
         if self.preparedOnStandby, self.fadingOut == nil, isPlaying, let len = self.lengthMs(of: self.player.currentItem) {
           let left = (len - self.positionMs) / 1000

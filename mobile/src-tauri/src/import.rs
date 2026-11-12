@@ -160,11 +160,11 @@ async fn resolve_short(input: &str) -> Result<Link, String> {
 }
 
 #[derive(Debug, Clone)]
-struct RemoteTrack {
-    title: String,
-    artist: String,
-    duration_ms: Option<i64>,
-    explicit: Option<bool>,
+pub(crate) struct RemoteTrack {
+    pub(crate) title: String,
+    pub(crate) artist: String,
+    pub(crate) duration_ms: Option<i64>,
+    pub(crate) explicit: Option<bool>,
 }
 
 struct RemoteList {
@@ -485,7 +485,7 @@ fn top_track(card: &yt::Card) -> Option<Track> {
 
 /// Find a track on YouTube Music: songs search first, then a broader search
 /// with every artist (songs missing from the songs filter, official videos).
-async fn find(want: &RemoteTrack) -> Option<Track> {
+pub(crate) async fn find(want: &RemoteTrack) -> Option<Track> {
     let artists: Vec<&str> = want.artist.split([',', '&']).map(str::trim).filter(|a| !a.is_empty()).collect();
     let title = want.title.split(" - ").next().unwrap_or(&want.title).trim();
     let first = artists.first().copied().unwrap_or("");

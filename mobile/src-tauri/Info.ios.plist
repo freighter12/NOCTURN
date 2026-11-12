@@ -27,6 +27,12 @@
 	<!-- Allow 120 Hz (ProMotion) on iPhones that have it; without this iOS caps apps at 60. -->
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<!-- Scanning the QR code NOCTURN on the PC shows, to sync over Wi-Fi. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Nocturn uses the camera only to scan the code your PC shows, so the two can sync over your Wi-Fi.</string>
+	<!-- Talking to NOCTURN on your PC over the home network. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Nocturn connects to NOCTURN on your PC over your Wi-Fi to sync playlists and liked songs.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>

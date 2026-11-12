@@ -13,9 +13,10 @@ export type Route =
   | { kind: "recent" }
   | { kind: "saved"; what: "albums" | "playlists" | "artists" }
   | { kind: "downloads" }
+  | { kind: "stats" }
   | { kind: "settings"; section?: SettingsSection };
 
-export type SettingsSection = "appearance" | "home" | "playback" | "lyrics" | "downloads" | "history" | "about";
+export type SettingsSection = "appearance" | "home" | "playback" | "lyrics" | "sync" | "downloads" | "history" | "about";
 
 export type AppCtx = {
   tab: TabId;

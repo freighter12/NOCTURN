@@ -3,6 +3,7 @@
 // small HTML <audio> stand-in plays instead and the web draws its own tab bar.
 import { addPluginListener, invoke } from "@tauri-apps/api/core";
 import { api, type Track } from "./api";
+import { sampleStats, type StatsFile } from "./stats";
 
 export type PlayerState = {
   playing: boolean;
@@ -277,6 +278,11 @@ export const downloads = {
     const l = await addPluginListener("nocturn", "downloads", cb);
     return () => l.unregister();
   },
+};
+
+export const stats = {
+  get: (): Promise<StatsFile> => (isNative ? call<StatsFile>("get_stats") : Promise.resolve(sampleStats())),
+  clear: () => (isNative ? call("clear_stats") : Promise.resolve()),
 };
 
 export const settings = {

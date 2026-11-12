@@ -28,6 +28,7 @@ mod music_stream;
 mod music_stream_engine;
 mod music_ytm;
 mod music_radio;
+mod phone_sync;
 mod privacy;
 mod report;
 mod error;
@@ -114,6 +115,7 @@ pub fn run() {
             system::scheduler::start(app.handle().clone(), state.clone());
             system::app_profiles::start(app.handle().clone(), state.clone());
             updates::start(app.handle().clone());
+            phone_sync::start(app.handle().clone());
             winddown::start(app.handle().clone(), state.clone());
             // Keep yt-dlp current if streaming is set up (YouTube breaks old versions).
             let upd = state.clone();
@@ -319,6 +321,9 @@ pub fn run() {
             commands::ai_delete_conversation,
             tray::tray_update,
             commands::library_icons,
+            commands::phone_sync_info,
+            commands::phone_sync_set_enabled,
+            commands::phone_sync_reset_key,
             updates::update_check,
             updates::update_install,
         ])

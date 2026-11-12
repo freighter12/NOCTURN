@@ -19,7 +19,7 @@ use crate::db::{now, Db};
 use crate::error::{AppError, AppResult};
 use crate::music;
 
-const MAX_ITEMS: usize = 5000;
+pub(crate) const MAX_ITEMS: usize = 5000;
 const MAX_TEXT: usize = 2 * 1024 * 1024;
 const MAX_BODY: usize = 12 * 1024 * 1024;
 const UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";

@@ -7,6 +7,7 @@
 pub mod ai;
 pub mod import;
 pub mod lyrics;
+pub mod sync;
 pub mod textmatch;
 pub mod yt;
 
@@ -116,6 +117,28 @@ async fn check_update() -> Result<LatestBuild, String> {
     Ok(LatestBuild { version: s("version"), build: s("buildVersion"), date: s("date"), notes: s("localizedDescription") })
 }
 
+// ---- sync with NOCTURN on the PC (sync.rs)
+
+#[tauri::command]
+fn sync_parse_code(code: String) -> Result<sync::Pairing, String> {
+    sync::parse_code(&code)
+}
+
+#[tauri::command]
+async fn sync_hello(pairing: sync::Pairing) -> Result<String, String> {
+    sync::hello(&pairing).await
+}
+
+#[tauri::command]
+async fn sync_pull(app: tauri::AppHandle, pairing: sync::Pairing) -> Result<sync::Pulled, String> {
+    sync::pull(&app, &pairing).await
+}
+
+#[tauri::command]
+async fn sync_push(pairing: sync::Pairing, library: sync::SyncLibrary) -> Result<sync::Pushed, String> {
+    sync::push(&pairing, &library).await
+}
+
 #[tauri::command]
 async fn ai_shuffle(input: ai::Input) -> Result<ai::Plan, String> {
     ai::shuffle(input).await
@@ -165,6 +188,10 @@ pub fn run() {
             import_playlist,
             ai_shuffle,
             check_update,
+            sync_parse_code,
+            sync_hello,
+            sync_pull,
+            sync_push,
             library_load,
             library_save
         ])

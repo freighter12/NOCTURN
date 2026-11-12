@@ -47,6 +47,10 @@ struct LyricsLookResult: Encodable {
   let words: Bool
 }
 
+struct ScanResult: Encodable {
+  let code: String
+}
+
 class CrossfadeArgs: Decodable {
   let seconds: Double
 }
@@ -245,6 +249,38 @@ class NocturnPlugin: Plugin {
       if let v = a.blur { d.set(v, forKey: "lyrics.blur") }
       if let v = a.words { d.set(v, forKey: "lyrics.wordSync") }
     }
+  }
+
+  // MARK: PC sync: scan the QR code on the PC
+
+  @objc public func scanQr(_ invoke: Invoke) {
+    DispatchQueue.main.async {
+      MainActor.assumeIsolated {
+        guard let top = ChromeController.shared.topViewController() else {
+          invoke.reject("The camera can't open right now.")
+          return
+        }
+        QRScanner.scan(from: top) { code, problem in
+          if let code { invoke.resolve(ScanResult(code: code)) } else { invoke.reject(problem ?? "cancelled") }
+        }
+      }
+    }
+  }
+
+  // MARK: listening stats (Nocturn Wrapped)
+
+  @objc public func getStats(_ invoke: Invoke) {
+    DispatchQueue.main.async {
+      let data = MainActor.assumeIsolated { () -> StatsFile in
+        ListeningStats.shared.save()
+        return ListeningStats.shared.data
+      }
+      invoke.resolve(data)
+    }
+  }
+
+  @objc public func clearStats(_ invoke: Invoke) {
+    onMain(invoke) { ListeningStats.shared.clear() }
   }
 
   @objc public func setCrossfade(_ invoke: Invoke) throws {

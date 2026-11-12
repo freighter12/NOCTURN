@@ -28,6 +28,12 @@ const COMMANDS: &[&str] = &[
     "set_theme",
     "set_live_lyrics",
     "set_look",
+    "set_audio",
+    "set_crossfade",
+    "set_lyrics_look",
+    "get_stats",
+    "clear_stats",
+    "scan_qr",
     "register_listener",
     "remove_listener",
 ];

@@ -287,6 +287,18 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // The iPhone sent its playlists and liked songs (Music › Sources › Sync with iPhone).
+  useEffect(() => {
+    const un = listen<{ device: string; playlists: number; songs: number }>("phone-sync", (e) => {
+      reload();
+      reloadPlaylists();
+      toast({ tone: "good", title: `Synced with ${e.payload.device}`, detail: `${e.payload.playlists} playlist${e.payload.playlists === 1 ? "" : "s"} and ${e.payload.songs} songs from your phone.` });
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, [reload, reloadPlaylists, toast]);
+
   // Measure the whole local library once, in the background.
   const backfilled = useRef(false);
   useEffect(() => {

@@ -43,6 +43,13 @@ export default function LibraryPage() {
           <span className="lib-label">Downloads</span>
           <span className="lib-count">{dl.active ? "Downloading…" : dl.tracks.length || ""}</span>
         </button>
+        <button onClick={() => app.push({ kind: "stats" })}>
+          <span className="lib-icon wrapped">
+            <Icon name="chart" size={18} />
+          </span>
+          <span className="lib-label">Nocturn Wrapped</span>
+          <span className="lib-count">Your stats</span>
+        </button>
         <button onClick={() => app.push({ kind: "recent" })}>
           <span className="lib-icon">
             <Icon name="note" size={18} />

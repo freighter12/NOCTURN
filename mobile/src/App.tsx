@@ -8,10 +8,12 @@ import Home from "./pages/Home";
 import Search from "./pages/Search";
 import LibraryPage, { DownloadsPage, LikedPage, MinePage, RecentPage, SavedPage } from "./pages/Library";
 import SettingsPage from "./pages/Settings";
+import StatsPage from "./pages/Stats";
 import CollectionPage from "./pages/Collection";
 import ArtistView from "./pages/Artist";
 import { ActionSheet, ImportSheet, QueueSheet } from "./sheets";
 import { buildLabel, updates, useUpdates } from "./update";
+import { sync } from "./sync";
 import { buildItems } from "@shared/lyricsTiming";
 
 const TABS: { id: TabId; title: string; symbol: string; search?: boolean }[] = [
@@ -105,6 +107,7 @@ export default function App() {
     };
   }, []);
   useEffect(() => updates.startupCheck(), []);
+  useEffect(() => sync.startup(), []);
   const toast = useCallback((text: string) => {
     setToastText(text);
     clearTimeout(toastTimer.current);
@@ -387,6 +390,7 @@ export default function App() {
   else if (route.kind === "recent") page = <RecentPage />;
   else if (route.kind === "saved") page = <SavedPage what={route.what} />;
   else if (route.kind === "downloads") page = <DownloadsPage />;
+  else if (route.kind === "stats") page = <StatsPage />;
   else if (route.kind === "settings") page = <SettingsPage key={route.section ?? "root"} section={route.section} />;
   else if (tab === "home") page = <Home />;
   else if (tab === "search") page = <Search />;
