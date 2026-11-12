@@ -852,3 +852,6 @@ header.home-hero:not(.preview):active .hero-title { opacity: 0.7; }
 @media (prefers-reduced-motion: reduce) {
   .theme-preview, .theme-preview *, .theme-preview::after { animation-play-state: paused !important; }
 }
+.seg button { text-align: center; }
+.home-hero.with-moon .hero-title { padding-right: 96px; }
+.home-hero.preview.with-moon .hero-title { padding-right: 76px; font-size: 30px; }

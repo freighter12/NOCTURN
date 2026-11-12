@@ -14,7 +14,7 @@ export function HomeHero({ prefs, onEdit, preview }: { prefs: HomePrefs; onEdit?
     return () => clearInterval(id);
   }, []);
   return (
-    <header className={`home-hero ${prefs.big ? "big" : ""} ${preview ? "preview" : ""}`} onClick={onEdit} aria-label={onEdit ? "Edit greeting" : undefined}>
+    <header className={`home-hero ${prefs.big ? "big" : ""} ${preview ? "preview" : ""} ${prefs.moon ? "with-moon" : ""}`} onClick={onEdit} aria-label={onEdit ? "Edit greeting" : undefined}>
       {prefs.stars && (
         <div className="sky" aria-hidden="true">
           {Array.from({ length: 16 }, (_, i) => (
