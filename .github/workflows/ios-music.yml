@@ -13,6 +13,9 @@ on:
       - "mobile/**"
       - "src/music/**"
       - ".github/workflows/ios-music.yml"
+      # trailer-mode files only matter to the trailer recording (ios-trailer.yml)
+      - "!mobile/src/trailer.ts"
+      - "!mobile/plugins/nocturn/ios/Sources/Trailer.swift"
   workflow_dispatch:
     inputs:
       runner:
