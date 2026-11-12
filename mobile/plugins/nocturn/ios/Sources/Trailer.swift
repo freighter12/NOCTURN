@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import WebKit
 
 // Trailer mode, for recording the app in the simulator (never on a phone):
 //   SIMCTL_CHILD_NOCTURN_DEMO=trailer xcrun simctl launch …
@@ -20,12 +21,30 @@ enum Trailer {
     if let c = color { UserDefaults.standard.set(c, forKey: "lyrics.color") }
   }
 
-  static func run() {
+  /// Waits until the web side has its trailer listener (it sets
+  /// window.__nocturnTrailerReady), then starts the timeline. On a slow
+  /// simulator the page can take many seconds to load, and steps sent before
+  /// that are lost.
+  static func run(webview: WKWebView) {
+    webview.evaluateJavaScript("window.__nocturnTrailerReady === true") { result, _ in
+      MainActor.assumeIsolated {
+        if (result as? Bool) == true {
+          start()
+        } else {
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            MainActor.assumeIsolated { run(webview: webview) }
+          }
+        }
+      }
+    }
+  }
+
+  private static func start() {
     BeatMeter.synthetic = true
     look(theme: "artwork", style: "fill", color: "white")
     UserDefaults.standard.set(true, forKey: "lyrics.wordSync")
     let steps: [(Double, () -> Void)] = [
-      (0.4, { web("setup") }),
+      (0.0, { web("setup") }),
       (3.6, { ChromeController.shared.select("home"); web("home") }),
       (5.6, { web("scroll:300") }),
       (7.4, { web("scroll:0") }),

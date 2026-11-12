@@ -175,6 +175,10 @@ export default function App() {
         window.scrollTo({ top: 0 });
       } else if (value.startsWith("scroll:")) window.scrollTo({ top: Number(value.slice(7)), behavior: "smooth" });
     });
+    // the native timeline waits for this before its first step
+    off.then(() => {
+      (window as { __nocturnTrailerReady?: boolean }).__nocturnTrailerReady = true;
+    });
     return () => {
       off.then((f) => f());
     };

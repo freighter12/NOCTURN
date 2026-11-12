@@ -174,7 +174,7 @@ class NocturnPlugin: Plugin {
         LiveLyrics.shared.cleanUp()
         ChromeController.shared.install(webview: webview)
         // Simulator trailer recording: SIMCTL_CHILD_NOCTURN_DEMO=trailer
-        if Trailer.on { Trailer.run() }
+        if Trailer.on { Trailer.run(webview: webview) }
         // Simulator screenshot tests: SIMCTL_CHILD_NOCTURN_DEMO=nowplaying
         if ProcessInfo.processInfo.environment["NOCTURN_DEMO"] == "nowplaying" {
           DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {

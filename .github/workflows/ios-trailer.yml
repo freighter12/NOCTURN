@@ -15,8 +15,8 @@ on:
   workflow_dispatch:
     inputs:
       runner:
-        description: "macos-26-intel (usually free) or macos-26 (Apple Silicon)"
-        default: macos-26-intel
+        description: "macos-26 (Apple Silicon: smooth) or macos-26-intel (renders at ~1 fps)"
+        default: macos-26
 
 concurrency:
   group: ios-trailer-${{ github.ref }}
@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   record:
-    runs-on: ${{ inputs.runner || 'macos-26-intel' }}
+    runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 75
     defaults:
       run:
@@ -118,7 +118,8 @@ jobs:
           REC=$!
           sleep 1.5
           SIMCTL_CHILD_NOCTURN_DEMO=trailer xcrun simctl launch "$UDID" "$BUNDLE"
-          sleep 63
+          # the timeline (~62 s) starts once the page has loaded
+          sleep 85
           kill -INT "$REC"
           wait "$REC" || true
           xcrun simctl io "$UDID" screenshot ../trailer/end.png || true
