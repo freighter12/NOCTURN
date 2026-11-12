@@ -74,6 +74,7 @@ class ThemeArgs: Decodable {
 }
 
 class LookArgs: Decodable {
+  let intro: String?
   let speed: Double?
   let dim: Int?
   let still: Bool?
@@ -88,6 +89,8 @@ struct SettingsResult: Encodable {
   let still: Bool
   let autoplay: Bool
   let aiShuffle: Bool
+  let intro: String
+  let introPlaying: Bool
 }
 
 // MARK: events to the web side
@@ -256,7 +259,8 @@ class NocturnPlugin: Plugin {
         SettingsResult(
           theme: ThemeStore.shared.theme, photo: ThemeStore.shared.photoBase64(), liveLyrics: LiveLyrics.shared.enabled,
           speed: ThemeStore.shared.speed, dim: ThemeStore.shared.dim, still: ThemeStore.shared.still,
-          autoplay: PlayerEngine.shared.autoplay, aiShuffle: PlayerEngine.shared.aiShuffle)
+          autoplay: PlayerEngine.shared.autoplay, aiShuffle: PlayerEngine.shared.aiShuffle,
+          intro: Intro.mode, introPlaying: Intro.playing)
       }
       invoke.resolve(s)
     }
@@ -269,7 +273,10 @@ class NocturnPlugin: Plugin {
 
   @objc public func setLook(_ invoke: Invoke) throws {
     let a = try invoke.parseArgs(LookArgs.self)
-    onMain(invoke) { ThemeStore.shared.setLook(speed: a.speed, dim: a.dim, still: a.still) }
+    onMain(invoke) {
+      ThemeStore.shared.setLook(speed: a.speed, dim: a.dim, still: a.still)
+      if let i = a.intro { Intro.setMode(i) }
+    }
   }
 
   @objc public func setLiveLyrics(_ invoke: Invoke) throws {

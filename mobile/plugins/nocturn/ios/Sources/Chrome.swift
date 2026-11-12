@@ -89,6 +89,8 @@ final class ChromeController: NSObject, UITabBarControllerDelegate {
     if let id = pendingSelect { select(id) }
     if let host = tabBar.selectedViewController as? HostViewController { embed(into: host) }
     playerChanged()
+    Intro.onDone = { [weak self] in self?.onAction?("intro", "done") }
+    Intro.show(over: tabBar)
   }
 
   // MARK: tabs
@@ -157,6 +159,8 @@ final class ChromeController: NSObject, UITabBarControllerDelegate {
     }
     if let sv = webview?.scrollView {
       host.setContentScrollView(sv, for: .bottom)
+      // no dark fade under the tab bar: just the Liquid Glass over the page
+      sv.bottomEdgeEffect.isHidden = true
     }
   }
 

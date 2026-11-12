@@ -89,7 +89,8 @@ struct ThemeBackground: View {
   var body: some View {
     let store = ThemeStore.shared
     let k: Double = store.dim == 0 ? 0.55 : (store.dim == 2 ? 1.4 : 1)
-    let base: [Double] = strong ? [0.45, 0.6, 0.75] : [0.18, 0.38, 0.66]
+    // tab pages: even all the way down, so nothing looks like a dark bar behind the tab bar
+    let base: [Double] = strong ? [0.48, 0.52, 0.5] : [0.18, 0.38, 0.66]
     let shade = base.map { Color.black.opacity(min(0.92, $0 * k)) }
     GeometryReader { g in
       ZStack {
