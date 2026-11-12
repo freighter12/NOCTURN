@@ -73,10 +73,21 @@ class ThemeArgs: Decodable {
   let photo: String?
 }
 
+class LookArgs: Decodable {
+  let speed: Double?
+  let dim: Int?
+  let still: Bool?
+}
+
 struct SettingsResult: Encodable {
   let theme: String
   let photo: String?
   let liveLyrics: Bool
+  let speed: Double
+  let dim: Int
+  let still: Bool
+  let autoplay: Bool
+  let aiShuffle: Bool
 }
 
 // MARK: events to the web side
@@ -242,7 +253,10 @@ class NocturnPlugin: Plugin {
   @objc public func getSettings(_ invoke: Invoke) {
     DispatchQueue.main.async {
       let s = MainActor.assumeIsolated {
-        SettingsResult(theme: ThemeStore.shared.theme, photo: ThemeStore.shared.photoBase64(), liveLyrics: LiveLyrics.shared.enabled)
+        SettingsResult(
+          theme: ThemeStore.shared.theme, photo: ThemeStore.shared.photoBase64(), liveLyrics: LiveLyrics.shared.enabled,
+          speed: ThemeStore.shared.speed, dim: ThemeStore.shared.dim, still: ThemeStore.shared.still,
+          autoplay: PlayerEngine.shared.autoplay, aiShuffle: PlayerEngine.shared.aiShuffle)
       }
       invoke.resolve(s)
     }
@@ -251,6 +265,11 @@ class NocturnPlugin: Plugin {
   @objc public func setTheme(_ invoke: Invoke) throws {
     let a = try invoke.parseArgs(ThemeArgs.self)
     onMain(invoke) { ThemeStore.shared.set(a.theme, photo: a.photo) }
+  }
+
+  @objc public func setLook(_ invoke: Invoke) throws {
+    let a = try invoke.parseArgs(LookArgs.self)
+    onMain(invoke) { ThemeStore.shared.setLook(speed: a.speed, dim: a.dim, still: a.still) }
   }
 
   @objc public func setLiveLyrics(_ invoke: Invoke) throws {

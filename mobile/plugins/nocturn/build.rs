@@ -27,6 +27,7 @@ const COMMANDS: &[&str] = &[
     "get_settings",
     "set_theme",
     "set_live_lyrics",
+    "set_look",
     "register_listener",
     "remove_listener",
 ];

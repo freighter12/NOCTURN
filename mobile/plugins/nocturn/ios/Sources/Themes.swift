@@ -2,19 +2,31 @@ import Observation
 import SwiftUI
 import UIKit
 
-/// The background theme, chosen in Library › Settings.
-///   artwork – the song's colours slowly drifting (default)
-///   lunar   – night sky, stars and tonight's real moon phase
-///   black   – pure black
-///   photo   – a picture of your own, blurred and darkened
+/// The background theme, chosen in Settings › Appearance.
+///   artwork   – the song's colours slowly drifting (default)
+///   lunar     – night sky, stars and tonight's real moon phase
+///   aurora    – northern lights rippling over a starry sky
+///   nebula    – deep-space clouds of colour with stars
+///   synthwave – a striped sunset sun over a neon grid rushing toward you
+///   ocean     – night waves under the moon
+///   snow      – gentle snowfall
+///   fireflies – glowing fireflies drifting in the dark
+///   black     – pure black
+///   photo     – a picture of your own, blurred and darkened
 @MainActor
 @Observable
 final class ThemeStore {
   static let shared = ThemeStore()
-  static let names = ["artwork", "lunar", "black", "photo"]
+  static let names = ["artwork", "lunar", "aurora", "nebula", "synthwave", "ocean", "snow", "fireflies", "black", "photo"]
 
   private(set) var theme: String
   private(set) var photo: UIImage?
+  /// How fast the background moves: 0.5 slow, 1 normal, 1.8 fast.
+  private(set) var speed: Double
+  /// How much the background is darkened behind text: 0 lighter, 1 normal, 2 darker.
+  private(set) var dim: Int
+  /// Freeze the movement (saves a little battery).
+  private(set) var still: Bool
 
   private let photoURL: URL = {
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -23,8 +35,12 @@ final class ThemeStore {
   }()
 
   private init() {
-    let saved = UserDefaults.standard.string(forKey: "theme") ?? "artwork"
+    let d = UserDefaults.standard
+    let saved = d.string(forKey: "theme") ?? "artwork"
     theme = ThemeStore.names.contains(saved) ? saved : "artwork"
+    speed = d.object(forKey: "theme.speed") as? Double ?? 1
+    dim = d.object(forKey: "theme.dim") as? Int ?? 1
+    still = d.bool(forKey: "theme.still")
     photo = UIImage(contentsOfFile: photoURL.path)
   }
 
@@ -38,6 +54,22 @@ final class ThemeStore {
     if next == "photo" && photo == nil { next = "artwork" }
     theme = next
     UserDefaults.standard.set(next, forKey: "theme")
+  }
+
+  func setLook(speed newSpeed: Double?, dim newDim: Int?, still newStill: Bool?) {
+    let d = UserDefaults.standard
+    if let v = newSpeed {
+      speed = min(3, max(0.2, v))
+      d.set(speed, forKey: "theme.speed")
+    }
+    if let v = newDim {
+      dim = min(2, max(0, v))
+      d.set(dim, forKey: "theme.dim")
+    }
+    if let v = newStill {
+      still = v
+      d.set(v, forKey: "theme.still")
+    }
   }
 
   func photoBase64() -> String? {
@@ -56,11 +88,26 @@ struct ThemeBackground: View {
 
   var body: some View {
     let store = ThemeStore.shared
+    let k: Double = store.dim == 0 ? 0.55 : (store.dim == 2 ? 1.4 : 1)
+    let base: [Double] = strong ? [0.45, 0.6, 0.75] : [0.18, 0.38, 0.66]
+    let shade = base.map { Color.black.opacity(min(0.92, $0 * k)) }
     GeometryReader { g in
       ZStack {
         switch store.theme {
         case "lunar":
           LunarSky()
+        case "aurora":
+          AuroraSky()
+        case "nebula":
+          NebulaSky()
+        case "synthwave":
+          SynthwaveSky()
+        case "ocean":
+          NightOcean()
+        case "snow":
+          Snowfall()
+        case "fireflies":
+          Fireflies()
         case "black":
           Color.black
         case "photo":
@@ -69,11 +116,7 @@ struct ThemeBackground: View {
           MovingArtwork(colors: engine.palette.map { Color(uiColor: $0) })
         }
         if store.theme != "black" {
-          LinearGradient(
-            colors: strong
-              ? [.black.opacity(0.45), .black.opacity(0.6), .black.opacity(0.75)]
-              : [.black.opacity(0.18), .black.opacity(0.38), .black.opacity(0.66)],
-            startPoint: .top, endPoint: .bottom)
+          LinearGradient(colors: shade, startPoint: .top, endPoint: .bottom)
         }
       }
       .frame(width: g.size.width, height: g.size.height)
@@ -85,13 +128,77 @@ struct ThemeBackground: View {
   }
 }
 
+// MARK: - shared helpers
+
+enum ThemeClockStart {
+  static let date = Date()
+}
+
+/// The clock every moving background runs on. It follows the speed setting
+/// and stops when "Still Background" is on.
+struct ThemeClock<Content: View>: View {
+  var fps: Double = 24
+  @ViewBuilder var content: (Double) -> Content
+
+  var body: some View {
+    let store = ThemeStore.shared
+    let speed = store.speed
+    TimelineView(.animation(minimumInterval: 1.0 / fps, paused: store.still)) { ctx in
+      content(ctx.date.timeIntervalSince(ThemeClockStart.date) * speed + 40)
+    }
+  }
+}
+
+/// Repeatable random numbers, so the stars are in the same place every launch.
+struct SeededRandom {
+  var seed: UInt64
+  mutating func next() -> Double {
+    seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+    return Double(seed >> 11) / Double(UInt64(1) << 53)
+  }
+}
+
+enum StarField {
+  struct Star {
+    let x: CGFloat, y: CGFloat, r: CGFloat, speed: Double, base: Double
+  }
+
+  static func make(_ count: Int, seed: UInt64) -> [Star] {
+    var rng = SeededRandom(seed: seed)
+    return (0..<count).map { _ in
+      Star(
+        x: CGFloat(rng.next()), y: CGFloat(rng.next()), r: CGFloat(0.35 + rng.next() * 1.15),
+        speed: 0.4 + rng.next() * 1.6, base: 0.2 + rng.next() * 0.6)
+    }
+  }
+
+  static func draw(_ c: GraphicsContext, _ stars: [Star], size: CGSize, t: Double, alpha: Double = 1) {
+    for (i, s) in stars.enumerated() {
+      let tw = 0.5 + 0.5 * sin(t * s.speed + Double(i))
+      let x = s.x * size.width, y = s.y * size.height
+      c.fill(
+        Path(ellipseIn: CGRect(x: x - s.r, y: y - s.r, width: s.r * 2, height: s.r * 2)),
+        with: .color(.white.opacity(alpha * s.base * (0.45 + 0.55 * tw))))
+    }
+  }
+}
+
+func verticalGradient(_ colors: [Color], from y0: CGFloat, to y1: CGFloat) -> GraphicsContext.Shading {
+  .linearGradient(Gradient(colors: colors), startPoint: CGPoint(x: 0, y: y0), endPoint: CGPoint(x: 0, y: y1))
+}
+
+func rgb(_ r: Double, _ g: Double, _ b: Double) -> Color {
+  Color(red: r, green: g, blue: b)
+}
+
+// MARK: - artwork
+
 /// The song's colours, flowing slowly like a lava lamp.
 struct MovingArtwork: View {
   let colors: [Color]
 
   private static let fallback: [Color] = [
-    Color(red: 0.20, green: 0.16, blue: 0.42), Color(red: 0.10, green: 0.20, blue: 0.40),
-    Color(red: 0.34, green: 0.20, blue: 0.46), Color(red: 0.08, green: 0.12, blue: 0.26),
+    rgb(0.20, 0.16, 0.42), rgb(0.10, 0.20, 0.40), rgb(0.34, 0.20, 0.46), rgb(0.08, 0.12, 0.26),
   ]
 
   var body: some View {
@@ -102,8 +209,7 @@ struct MovingArtwork: View {
       c(3), c(1).opacity(0.9), c(0),
       c(2), c(3), c(1),
     ]
-    TimelineView(.animation(minimumInterval: 1.0 / 24)) { ctx in
-      let t = ctx.date.timeIntervalSinceReferenceDate
+    ThemeClock { t in
       MeshGradient(width: 3, height: 3, points: MovingArtwork.points(t), colors: grid, background: .black, smoothsColors: true)
     }
     .id(p.description)
@@ -124,40 +230,19 @@ struct MovingArtwork: View {
   }
 }
 
+// MARK: - lunar
+
 /// Night sky with twinkling stars and tonight's moon.
 struct LunarSky: View {
-  private struct Star {
-    let x: CGFloat, y: CGFloat, r: CGFloat, speed: Double, base: Double
-  }
-
-  private static let stars: [Star] = {
-    var seed: UInt64 = 0x9E37_79B9_7F4A_7C15
-    func rnd() -> Double {
-      seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
-      return Double(seed >> 11) / Double(1 << 53)
-    }
-    return (0..<150).map { _ in
-      Star(x: rnd(), y: rnd(), r: 0.35 + rnd() * 1.15, speed: 0.4 + rnd() * 1.6, base: 0.2 + rnd() * 0.6)
-    }
-  }()
+  private static let stars = StarField.make(150, seed: 0x9E37_79B9_7F4A_7C15)
 
   var body: some View {
-    TimelineView(.animation(minimumInterval: 1.0 / 15)) { ctx in
-      let t = ctx.date.timeIntervalSinceReferenceDate
+    ThemeClock(fps: 15) { t in
       Canvas { c, size in
         c.fill(
           Path(CGRect(origin: .zero, size: size)),
-          with: .linearGradient(
-            Gradient(colors: [Color(red: 0.05, green: 0.06, blue: 0.13), Color(red: 0.02, green: 0.025, blue: 0.06), .black]),
-            startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
-
-        for (i, s) in LunarSky.stars.enumerated() {
-          let tw = 0.5 + 0.5 * sin(t * s.speed + Double(i))
-          let x = s.x * size.width, y = s.y * size.height
-          c.fill(
-            Path(ellipseIn: CGRect(x: x - s.r, y: y - s.r, width: s.r * 2, height: s.r * 2)),
-            with: .color(.white.opacity(s.base * (0.45 + 0.55 * tw))))
-        }
+          with: verticalGradient([rgb(0.05, 0.06, 0.13), rgb(0.02, 0.025, 0.06), .black], from: 0, to: size.height))
+        StarField.draw(c, LunarSky.stars, size: size, t: t)
 
         let r = min(size.width, size.height) * 0.105
         let center = CGPoint(x: size.width * 0.76, y: max(r * 2.2, size.height * 0.13))
@@ -169,7 +254,7 @@ struct LunarSky: View {
             center: center, startRadius: r * 0.8, endRadius: glow))
         // the dark part of the moon, faintly visible (earthshine)
         c.fill(Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)), with: .color(.white.opacity(0.07)))
-        c.fill(LunarSky.litPath(center: center, r: r, phase: LunarSky.moonPhase(ctx.date)), with: .color(Color(red: 0.93, green: 0.94, blue: 0.97)))
+        c.fill(LunarSky.litPath(center: center, r: r, phase: LunarSky.moonPhase(Date())), with: .color(rgb(0.93, 0.94, 0.97)))
       }
     }
   }
@@ -202,6 +287,298 @@ struct LunarSky: View {
     return path
   }
 }
+
+// MARK: - aurora
+
+/// Northern lights: soft ribbons of green, teal and violet rippling over stars.
+struct AuroraSky: View {
+  private struct Band {
+    let color: Color, height: Double, speed: Double, phase: Double
+  }
+
+  private static let stars = StarField.make(110, seed: 0xA5A5_1234_DEAD_BEEF)
+  private static let bands: [Band] = [
+    Band(color: rgb(0.25, 1.0, 0.6), height: 0.27, speed: 0.35, phase: 0),
+    Band(color: rgb(0.1, 0.8, 0.85), height: 0.36, speed: 0.27, phase: 2.1),
+    Band(color: rgb(0.62, 0.35, 1.0), height: 0.2, speed: 0.22, phase: 4.2),
+  ]
+
+  var body: some View {
+    ThemeClock(fps: 20) { t in
+      ZStack {
+        Canvas { c, size in
+          c.fill(
+            Path(CGRect(origin: .zero, size: size)),
+            with: verticalGradient([rgb(0.01, 0.04, 0.08), rgb(0.02, 0.07, 0.11), rgb(0, 0.02, 0.04)], from: 0, to: size.height))
+          StarField.draw(c, AuroraSky.stars, size: size, t: t, alpha: 0.85)
+        }
+        Canvas { c, size in
+          let w = Double(size.width), h = Double(size.height)
+          for b in AuroraSky.bands {
+            var top = Path()
+            let steps = 40
+            for i in 0...steps {
+              let fx = Double(i) / Double(steps)
+              let y = b.height + 0.07 * sin(fx * 5 + t * b.speed + b.phase) + 0.035 * sin(fx * 11 - t * b.speed * 1.7 + b.phase * 2)
+              let pt = CGPoint(x: fx * w, y: y * h)
+              if i == 0 { top.move(to: pt) } else { top.addLine(to: pt) }
+            }
+            let pulse = 0.6 + 0.3 * sin(t * 0.4 + b.phase)
+            // the curtain hanging below the bright edge
+            c.stroke(top.offsetBy(dx: 0, dy: h * 0.07), with: .color(b.color.opacity(0.22 * pulse)), lineWidth: h * 0.14)
+            c.stroke(top, with: .color(b.color.opacity(0.35 * pulse)), lineWidth: h * 0.07)
+            c.stroke(top, with: .color(b.color.opacity(0.7 * pulse)), lineWidth: h * 0.018)
+          }
+        }
+        .blur(radius: 30)
+        .blendMode(.screen)
+      }
+    }
+  }
+}
+
+// MARK: - nebula
+
+/// Deep-space clouds of magenta, indigo and teal, slowly swirling, with stars.
+struct NebulaSky: View {
+  private static let stars = StarField.make(140, seed: 0x1234_5678_9ABC_DEF1)
+  private static let colors: [Color] = [
+    rgb(0.02, 0.01, 0.06), rgb(0.35, 0.08, 0.45), rgb(0.03, 0.02, 0.10),
+    rgb(0.10, 0.12, 0.40), rgb(0.80, 0.24, 0.52), rgb(0.05, 0.30, 0.45),
+    rgb(0.02, 0.02, 0.08), rgb(0.22, 0.05, 0.36), rgb(0.01, 0.01, 0.04),
+  ]
+
+  var body: some View {
+    ThemeClock(fps: 20) { t in
+      ZStack {
+        MeshGradient(width: 3, height: 3, points: MovingArtwork.points(t * 0.8 + 3), colors: NebulaSky.colors, background: .black, smoothsColors: true)
+          .hueRotation(.degrees(22 * sin(t * 0.05)))
+        Canvas { c, size in
+          StarField.draw(c, NebulaSky.stars, size: size, t: t)
+        }
+      }
+    }
+  }
+}
+
+// MARK: - synthwave
+
+/// A striped sunset sun over a neon grid that rushes toward you.
+struct SynthwaveSky: View {
+  private static let stars = StarField.make(70, seed: 0x5EED_0000_1111_2222)
+
+  var body: some View {
+    ThemeClock(fps: 24) { t in
+      Canvas { c, size in
+        let w = size.width, h = size.height
+        let horizon = h * 0.56
+        let haze = rgb(0.78, 0.22, 0.48)
+
+        // sky
+        c.fill(
+          Path(CGRect(x: 0, y: 0, width: w, height: horizon)),
+          with: verticalGradient([rgb(0.05, 0.02, 0.14), rgb(0.27, 0.05, 0.36), haze], from: 0, to: horizon))
+        StarField.draw(c, SynthwaveSky.stars, size: CGSize(width: w, height: horizon * 0.6), t: t, alpha: 0.9)
+
+        // sun, with stripes drifting down through it
+        let r = min(w * 0.3, horizon * 0.42)
+        let sc = CGPoint(x: w / 2, y: horizon - r * 0.4)
+        let glowR = r * 1.9
+        c.fill(
+          Path(ellipseIn: CGRect(x: sc.x - glowR, y: sc.y - glowR, width: glowR * 2, height: glowR * 2)),
+          with: .radialGradient(Gradient(colors: [rgb(1, 0.45, 0.5).opacity(0.35), .clear]), center: sc, startRadius: r * 0.7, endRadius: glowR))
+        var sunLayer = c
+        let sun = Path(ellipseIn: CGRect(x: sc.x - r, y: sc.y - r, width: r * 2, height: r * 2))
+        sunLayer.clip(to: sun)
+        var cut = Path(CGRect(x: sc.x - r, y: sc.y - r, width: r * 2, height: r * 2))
+        let drift = CGFloat((t * 0.12).truncatingRemainder(dividingBy: 1))
+        for i in 0..<7 {
+          let pos = (CGFloat(i) + drift) / 7
+          let y = sc.y + r * pos
+          cut.addRect(CGRect(x: sc.x - r, y: y, width: r * 2, height: r * (0.015 + pos * 0.11)))
+        }
+        sunLayer.fill(
+          cut,
+          with: .linearGradient(
+            Gradient(colors: [rgb(1, 0.88, 0.4), rgb(1, 0.45, 0.45), rgb(0.95, 0.25, 0.6)]),
+            startPoint: CGPoint(x: sc.x, y: sc.y - r), endPoint: CGPoint(x: sc.x, y: sc.y + r)),
+          style: FillStyle(eoFill: true))
+
+        // floor
+        let floorH = h - horizon
+        c.fill(
+          Path(CGRect(x: 0, y: horizon, width: w, height: floorH)),
+          with: verticalGradient([rgb(0.13, 0.02, 0.2), rgb(0.03, 0, 0.07)], from: horizon, to: h))
+        var lines = Path()
+        let phase = (t * 0.55).truncatingRemainder(dividingBy: 1)
+        for k in 0..<20 {
+          let z = Double(k) + 1 - phase
+          guard z > 0.2 else { continue }
+          let y = horizon + floorH * CGFloat(1 / z)
+          if y > h + 4 { continue }
+          lines.move(to: CGPoint(x: 0, y: y))
+          lines.addLine(to: CGPoint(x: w, y: y))
+        }
+        for i in -14...14 {
+          let fi = CGFloat(i)
+          lines.move(to: CGPoint(x: w / 2 + fi * w * 0.015, y: horizon))
+          lines.addLine(to: CGPoint(x: w / 2 + fi * w * 0.2, y: h))
+        }
+        var floorLayer = c
+        floorLayer.clip(to: Path(CGRect(x: 0, y: horizon, width: w, height: floorH)))
+        let neon = rgb(1, 0.3, 0.78)
+        floorLayer.stroke(lines, with: .color(neon.opacity(0.22)), lineWidth: 4)
+        floorLayer.stroke(lines, with: .color(neon.opacity(0.85)), lineWidth: 1.1)
+        floorLayer.fill(
+          Path(CGRect(x: 0, y: horizon, width: w, height: floorH * 0.35)),
+          with: verticalGradient([haze.opacity(0.7), .clear], from: horizon, to: horizon + floorH * 0.35))
+        c.fill(Path(CGRect(x: 0, y: horizon - 1, width: w, height: 2)), with: .color(rgb(1, 0.6, 0.85).opacity(0.8)))
+      }
+    }
+  }
+}
+
+// MARK: - ocean
+
+/// Night waves rolling under a small moon, with moonlight glittering on the water.
+struct NightOcean: View {
+  private static let stars = StarField.make(80, seed: 0x0CEA_0CEA_7777_1111)
+
+  var body: some View {
+    ThemeClock(fps: 24) { t in
+      Canvas { c, size in
+        let w = Double(size.width), h = Double(size.height)
+        c.fill(
+          Path(CGRect(origin: .zero, size: size)),
+          with: verticalGradient([rgb(0.02, 0.03, 0.09), rgb(0.04, 0.08, 0.18), rgb(0.05, 0.12, 0.22)], from: 0, to: size.height * 0.5))
+        StarField.draw(c, NightOcean.stars, size: CGSize(width: w, height: h * 0.42), t: t)
+
+        let mr = w * 0.055
+        let mx = w * 0.27, my = h * 0.17
+        let mc = CGPoint(x: mx, y: my)
+        c.fill(
+          Path(ellipseIn: CGRect(x: mx - mr * 4, y: my - mr * 4, width: mr * 8, height: mr * 8)),
+          with: .radialGradient(Gradient(colors: [rgb(0.8, 0.88, 1).opacity(0.18), .clear]), center: mc, startRadius: mr, endRadius: mr * 4))
+        c.fill(Path(ellipseIn: CGRect(x: mx - mr, y: my - mr, width: mr * 2, height: mr * 2)), with: .color(rgb(0.93, 0.95, 0.98)))
+
+        let layers = 6
+        for i in 0..<layers {
+          let fi = Double(i)
+          let base = 0.47 + fi * 0.085
+          let amp = 5 + fi * 4
+          let waves = 1.5 + fi * 0.35
+          let speed = 0.25 + fi * 0.12
+          var crest = Path()
+          for s in 0...48 {
+            let x = Double(s) / 48
+            let y = base * h + amp * sin(x * 2 * .pi * waves + t * speed + fi * 1.3) + amp * 0.4 * sin(x * 2 * .pi * waves * 2.3 - t * speed * 1.4 + fi)
+            let pt = CGPoint(x: x * w, y: y)
+            if s == 0 { crest.move(to: pt) } else { crest.addLine(to: pt) }
+          }
+          var water = crest
+          water.addLine(to: CGPoint(x: w, y: h))
+          water.addLine(to: CGPoint(x: 0, y: h))
+          water.closeSubpath()
+          let shade = fi / Double(layers - 1)
+          c.fill(water, with: .color(rgb(0.04 + 0.03 * (1 - shade), 0.15 - 0.09 * shade, 0.3 - 0.19 * shade)))
+          c.stroke(crest, with: .color(.white.opacity(0.05 + 0.06 * (1 - shade))), lineWidth: 1)
+        }
+
+        // moonlight glitter on the water, under the moon
+        for j in 0..<16 {
+          let fj = Double(j)
+          let y = h * (0.5 + fj * 0.028)
+          let flicker = 0.5 + 0.5 * sin(t * 2.3 + fj * 1.7)
+          let half = w * 0.025 * (1 + fj * 0.18) * (0.5 + 0.5 * flicker)
+          c.fill(
+            Path(roundedRect: CGRect(x: mx - half + 6 * sin(t + fj), y: y, width: half * 2, height: 2), cornerRadius: 1),
+            with: .color(rgb(0.85, 0.9, 1).opacity(0.1 + 0.18 * flicker)))
+        }
+      }
+    }
+  }
+}
+
+// MARK: - snow
+
+/// Gentle snowfall; closer flakes are bigger and fall faster.
+struct Snowfall: View {
+  private struct Flake {
+    let x: Double, y: Double, r: Double, speed: Double, sway: Double, phase: Double
+  }
+
+  private static let flakes: [Flake] = {
+    var rng = SeededRandom(seed: 0x5A0F_5A0F_1234_9876)
+    return (0..<170).map { _ in
+      let depth = rng.next()
+      return Flake(
+        x: rng.next(), y: rng.next(), r: 0.7 + depth * 2.3, speed: 0.02 + depth * 0.06,
+        sway: 0.5 + rng.next(), phase: rng.next() * 6.28)
+    }
+  }()
+
+  var body: some View {
+    ThemeClock(fps: 30) { t in
+      Canvas { c, size in
+        let w = Double(size.width), h = Double(size.height)
+        c.fill(
+          Path(CGRect(origin: .zero, size: size)),
+          with: verticalGradient([rgb(0.03, 0.05, 0.11), rgb(0.07, 0.1, 0.18), rgb(0.12, 0.15, 0.22)], from: 0, to: size.height))
+        for f in Snowfall.flakes {
+          let fall = (f.y + t * f.speed).truncatingRemainder(dividingBy: 1)
+          let y = fall * (h + 20) - 10
+          let x = f.x * w + sin(t * 0.6 * f.sway + f.phase) * 7 * f.r
+          c.fill(
+            Path(ellipseIn: CGRect(x: x - f.r, y: y - f.r, width: f.r * 2, height: f.r * 2)),
+            with: .color(.white.opacity(0.3 + 0.55 * (f.r / 3))))
+        }
+      }
+    }
+  }
+}
+
+// MARK: - fireflies
+
+/// Warm fireflies drifting and glowing on and off in the dark.
+struct Fireflies: View {
+  private struct Fly {
+    let x: Double, y: Double, ax: Double, ay: Double, fx: Double, fy: Double, phase: Double, pulse: Double
+  }
+
+  private static let flies: [Fly] = {
+    var rng = SeededRandom(seed: 0xF1F1_F1F1_0000_ABCD)
+    return (0..<42).map { _ in
+      Fly(
+        x: 0.1 + rng.next() * 0.8, y: 0.15 + rng.next() * 0.8, ax: 0.04 + rng.next() * 0.1, ay: 0.03 + rng.next() * 0.08,
+        fx: 0.05 + rng.next() * 0.15, fy: 0.05 + rng.next() * 0.15, phase: rng.next() * 6.28, pulse: 0.4 + rng.next() * 0.9)
+    }
+  }()
+
+  var body: some View {
+    ThemeClock(fps: 24) { t in
+      Canvas { c, size in
+        let w = Double(size.width), h = Double(size.height)
+        c.fill(
+          Path(CGRect(origin: .zero, size: size)),
+          with: verticalGradient([rgb(0.01, 0.03, 0.05), rgb(0.02, 0.07, 0.07), rgb(0.03, 0.09, 0.05)], from: 0, to: size.height))
+        for f in Fireflies.flies {
+          let x = (f.x + f.ax * sin(t * f.fx + f.phase)) * w
+          let y = (f.y + f.ay * cos(t * f.fy + f.phase * 1.3)) * h
+          let on = max(0, sin(t * f.pulse + f.phase))
+          let b = 0.12 + 0.88 * on * on
+          let glow = 16.0
+          let center = CGPoint(x: x, y: y)
+          c.fill(
+            Path(ellipseIn: CGRect(x: x - glow, y: y - glow, width: glow * 2, height: glow * 2)),
+            with: .radialGradient(Gradient(colors: [rgb(1, 0.85, 0.35).opacity(0.5 * b), .clear]), center: center, startRadius: 0, endRadius: glow))
+          c.fill(Path(ellipseIn: CGRect(x: x - 1.6, y: y - 1.6, width: 3.2, height: 3.2)), with: .color(rgb(1, 0.96, 0.7).opacity(b)))
+        }
+      }
+    }
+  }
+}
+
+// MARK: - photo
 
 /// Your own picture, blurred so text on top stays readable.
 struct PhotoBackdrop: View {

@@ -28,6 +28,7 @@ permissions = [
   "allow-get-settings",
   "allow-set-theme",
   "allow-set-live-lyrics",
+  "allow-set-look",
   "allow-register-listener",
   "allow-remove-listener",
 ]

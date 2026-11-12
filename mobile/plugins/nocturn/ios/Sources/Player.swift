@@ -35,7 +35,7 @@ final class PlayerEngine {
   private(set) var positionMs: Double = 0
   private(set) var durationMs: Double = 0
   private(set) var repeatMode = "off"
-  private(set) var autoplay = true
+  private(set) var autoplay = UserDefaults.standard.object(forKey: "autoplay") as? Bool ?? true
   private(set) var lastError: String?
   private(set) var artworkImage: UIImage?
   /// Strong colours from the artwork, for the "moving artwork" background.
@@ -179,6 +179,7 @@ final class PlayerEngine {
 
   func setAutoplay(_ on: Bool) {
     autoplay = on
+    UserDefaults.standard.set(on, forKey: "autoplay")
     emit(force: true)
   }
 
