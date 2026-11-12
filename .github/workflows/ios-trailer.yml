@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       runner:
-        description: "macos-26 (Apple Silicon: smooth) or macos-26-intel (renders at ~1 fps)"
+        description: "Apple Silicon (smooth): macos-26 or macos-15. macos-26-intel renders at ~1 fps"
         default: macos-26
 
 concurrency:
@@ -37,6 +37,13 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: mobile/package-lock.json
+
+      # older images (macos-15) carry Xcode 26 next to their default one
+      - name: Use the newest Xcode
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          [ -n "$X" ] && sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
 
       - name: Pick the simulator architecture
         id: arch
