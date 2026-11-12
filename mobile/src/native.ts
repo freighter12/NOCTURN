@@ -63,10 +63,14 @@ export type Settings = {
   refresh: Refresh;
   /** the screen's top refresh rate (120 on ProMotion iPhones) */
   maxFps: number;
+  /** the background glows with the beat */
+  pulse: boolean;
   /** keep playing alongside other apps' sound */
   mixWithOthers: boolean;
   /** start again after another app or a call is done with the sound */
   autoResume: boolean;
+  /** loud songs turned down so songs play at a similar volume */
+  levelling: boolean;
   /** how synced lyrics look in Now Playing */
   lyrics: LyricsLook;
   /** seconds one song fades into the next (0 = off, gapless) */
@@ -84,12 +88,14 @@ export type LyricsLook = {
   blur: boolean;
   /** word by word (off = whole lines light up) */
   words: boolean;
+  /** lyrics in another language get your language under each line */
+  translate: boolean;
 };
 export type Refresh = "auto" | "120" | "saver";
 export const defaultSettings: Settings = {
   theme: "artwork", photo: null, liveLyrics: true, speed: 1, dim: 1, still: false, autoplay: true, aiShuffle: false,
-  intro: "full", introPlaying: false, refresh: "auto", maxFps: 60, mixWithOthers: false, autoResume: true, crossfade: 0, version: "", build: "",
-  lyrics: { color: "white", style: "fill", size: 1, align: "left", blur: true, words: true },
+  intro: "full", introPlaying: false, refresh: "auto", maxFps: 60, pulse: true, mixWithOthers: false, autoResume: true, levelling: true, crossfade: 0, version: "", build: "",
+  lyrics: { color: "white", style: "fill", size: 1, align: "left", blur: true, words: true, translate: true },
 };
 
 export type TabSpec = { id: string; title: string; symbol: string; search?: boolean };
@@ -288,7 +294,7 @@ export const stats = {
 export const settings = {
   get: () =>
     isNative ? call<Settings>("get_settings").then((s) => ({ ...defaultSettings, ...s })) : Promise.resolve(localSettings()),
-  setLook(look: { speed?: number; dim?: number; still?: boolean; intro?: IntroMode; refresh?: Refresh }) {
+  setLook(look: { speed?: number; dim?: number; still?: boolean; intro?: IntroMode; refresh?: Refresh; pulse?: boolean }) {
     if (!isNative) return Promise.resolve(saveLocal(look));
     return call("set_look", look);
   },
@@ -300,8 +306,8 @@ export const settings = {
     if (!isNative) return Promise.resolve(saveLocal({ crossfade: seconds }));
     return call("set_crossfade", { seconds });
   },
-  setAudio(a: { mix?: boolean; resume?: boolean }) {
-    if (!isNative) return Promise.resolve(saveLocal({ ...(a.mix != null && { mixWithOthers: a.mix }), ...(a.resume != null && { autoResume: a.resume }) }));
+  setAudio(a: { mix?: boolean; resume?: boolean; level?: boolean }) {
+    if (!isNative) return Promise.resolve(saveLocal({ ...(a.mix != null && { mixWithOthers: a.mix }), ...(a.resume != null && { autoResume: a.resume }), ...(a.level != null && { levelling: a.level }) }));
     return call("set_audio", a);
   },
   setAutoplay(on: boolean) {

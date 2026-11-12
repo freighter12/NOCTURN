@@ -33,6 +33,9 @@
 	<!-- Talking to NOCTURN on your PC over the home network. -->
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Nocturn connects to NOCTURN on your PC over your Wi-Fi to sync playlists and liked songs.</string>
+	<!-- Saving a lyric card to Photos (Share › Save Image). -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Nocturn saves lyric cards you choose to keep to your photos.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>

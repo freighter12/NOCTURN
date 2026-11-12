@@ -1,4 +1,6 @@
+import NaturalLanguage
 import SwiftUI
+import Translation
 
 // Lyrics in Now Playing — the desktop app's lyrics, natively.
 //
@@ -129,7 +131,13 @@ struct LyricsView: View {
   @AppStorage("lyrics.size") private var sizeScale = 1.0
   @AppStorage("lyrics.align") private var align = "left"
   @AppStorage("lyrics.blur") private var blurOthers = true
+  @AppStorage("lyrics.translate") private var translate = true
   @State private var lastUserScroll = Date.distantPast
+  /// Lyrics in another language: Apple's on-device translation, line by line.
+  @State private var translation: TranslationSession.Configuration?
+  @State private var translated: [String: String] = [:]
+  @State private var translatedFor: String?
+  @State private var card: LyricCardRequest?
 
   private var accent: Color { LyricsLook.accent(colorName, palette: engine.palette) }
   private var centered: Bool { align == "center" }
@@ -158,6 +166,43 @@ struct LyricsView: View {
       }
       .frame(width: g.size.width, height: g.size.height)
     }
+    .onAppear { planTranslation() }
+    .onChange(of: engine.lyricsTrackId) { _, _ in planTranslation() }
+    .onChange(of: translate) { _, _ in planTranslation() }
+    .translationTask(translation) { session in
+      let id = engine.lyricsTrackId
+      let lines = Array(Set(engine.lyricItems.filter { $0.kind == "line" }.map(\.text).filter { !$0.isEmpty }))
+      guard !lines.isEmpty else { return }
+      let requests = lines.map { TranslationSession.Request(sourceText: $0, clientIdentifier: $0) }
+      guard let responses = try? await session.translations(from: requests), id == engine.lyricsTrackId else { return }
+      var out: [String: String] = [:]
+      for r in responses {
+        if let k = r.clientIdentifier, r.targetText.lowercased() != k.lowercased() { out[k] = r.targetText }
+      }
+      translated = out
+      translatedFor = id
+    }
+    .sheet(item: $card) { req in
+      LyricCardSheet(request: req)
+    }
+  }
+
+  /// Translate when the song's lyrics are in a language other than the phone's.
+  private func planTranslation() {
+    translated = [:]
+    translatedFor = nil
+    translation = nil
+    guard translate, mine, !engine.lyricItems.isEmpty else { return }
+    let text = engine.lyricItems.filter { $0.kind == "line" }.map(\.text).joined(separator: "\n")
+    guard let lang = NLLanguageRecognizer.dominantLanguage(for: text), lang != .undetermined else { return }
+    let mineLang = Locale.current.language.languageCode?.identifier ?? "en"
+    guard Locale.Language(identifier: lang.rawValue).languageCode?.identifier != mineLang else { return }
+    translation = TranslationSession.Configuration(source: Locale.Language(identifier: lang.rawValue), target: nil)
+  }
+
+  private func translationOf(_ item: LyricItem) -> String? {
+    guard translate, translatedFor == engine.lyricsTrackId, item.kind == "line" else { return nil }
+    return translated[item.text]
   }
 
   // MARK: synced lines
@@ -187,6 +232,13 @@ struct LyricsView: View {
                       lastUserScroll = .distantPast
                     } label: {
                       Label("Sync to This Line", systemImage: "metronome")
+                    }
+                  }
+                  if item.kind == "line" {
+                    Button {
+                      card = LyricCardRequest(line: item.text, translation: translationOf(item), title: engine.current?.title ?? "", artist: engine.current?.artist ?? "", artwork: engine.artworkImage, palette: engine.palette)
+                    } label: {
+                      Label("Share as Card", systemImage: "square.and.arrow.up")
                     }
                   }
                   if engine.lyricsOffset != 0 {
@@ -225,18 +277,26 @@ struct LyricsView: View {
     let distance = active < 0 ? 99 : abs(i - active)
     let scrolling = Date().timeIntervalSince(lastUserScroll) < 3.5
     let blur: CGFloat = !blurOthers || scrolling || i == active ? 0 : (distance == 1 ? 0.5 : distance == 2 ? 1.1 : 1.8)
-    Group {
-      if i == active {
-        // every frame for the line being sung
-        TimelineView(.animation) { _ in
-          activeRow(item, t: engine.lyricClockMs() + engine.lyricsOffset, size: size)
+    VStack(alignment: hAlign, spacing: size * 0.18) {
+      Group {
+        if i == active {
+          // every frame for the line being sung
+          TimelineView(.animation) { _ in
+            activeRow(item, t: engine.lyricClockMs() + engine.lyricsOffset, size: size)
+          }
+        } else if item.kind == "gap" {
+          GapDots(progress: i < active ? 1 : 0)
+        } else {
+          Text(item.text)
+            .font(.system(size: size, weight: .bold))
+            .foregroundStyle(.white.opacity(i < active ? 0.38 : (distance == 1 ? 0.5 : 0.32)))
         }
-      } else if item.kind == "gap" {
-        GapDots(progress: i < active ? 1 : 0)
-      } else {
-        Text(item.text)
-          .font(.system(size: size, weight: .bold))
-          .foregroundStyle(.white.opacity(i < active ? 0.38 : (distance == 1 ? 0.5 : 0.32)))
+      }
+      if let tr = translationOf(item) {
+        // the line in your language, smaller, under the original
+        Text(tr)
+          .font(.system(size: size * 0.56, weight: .semibold))
+          .foregroundStyle(.white.opacity(i == active ? 0.72 : 0.36))
       }
     }
     .fixedSize(horizontal: false, vertical: true)

@@ -79,6 +79,13 @@ final class PlayerEngine {
   private var standby: AVQueuePlayer { decks[1 - active] }
   /// Crossfade length in seconds (0 = off: songs follow on without a gap).
   private(set) var crossfade = UserDefaults.standard.object(forKey: "crossfade") as? Double ?? 0
+  /// Volume levelling: loud songs are turned down to YouTube's reference
+  /// loudness, so one song isn't much louder than the next.
+  private(set) var levelling = UserDefaults.standard.object(forKey: "audio.level") as? Bool ?? true
+  /// How loud each song is (dB above YouTube's reference), remembered so
+  /// downloaded songs are levelled too.
+  @ObservationIgnored private var loudness: [String: Double] = UserDefaults.standard.dictionary(forKey: "audio.loudness") as? [String: Double] ?? [:]
+  @ObservationIgnored private var itemSong: [ObjectIdentifier: String] = [:]
   /// The prepared next song waits on the standby player (crossfade) rather than behind the current one.
   @ObservationIgnored private var preparedOnStandby = false
   @ObservationIgnored private var fadeTimer: Timer?
@@ -202,6 +209,26 @@ final class PlayerEngine {
     dropPrepared()
     prepareNext()
     emit(force: true)
+  }
+
+  func setLevelling(_ on: Bool) {
+    levelling = on
+    UserDefaults.standard.set(on, forKey: "audio.level")
+    if fadingOut == nil { player.volume = gain(player.currentItem) }
+  }
+
+  func rememberLoudness(_ id: String, _ db: Double) {
+    guard loudness[id] != db else { return }
+    loudness[id] = db
+    if loudness.count > 3000 { loudness.removeAll() }  // a cache, not a record
+    UserDefaults.standard.set(loudness, forKey: "audio.loudness")
+  }
+
+  /// The volume for a song: loud songs turned down to the reference (never
+  /// up: the player can't go past full volume, and quiet masters stay as made).
+  private func gain(_ item: AVPlayerItem?) -> Float {
+    guard levelling, let item, let id = itemSong[ObjectIdentifier(item)], let db = loudness[id], db > 0 else { return 1 }
+    return Float(pow(10, -min(db, 15) / 20))
   }
 
   func setCrossfade(_ seconds: Double) {
@@ -342,6 +369,7 @@ final class PlayerEngine {
         let item = try await self.makeItem(for: track)
         guard token == self.loadToken else { return }
         self.itemIndex[ObjectIdentifier(item)] = i
+        self.player.volume = self.gain(item)
         self.player.insert(item, after: nil)
         if let ms = seekMs, ms > 0 {
           _ = await item.seek(to: CMTime(seconds: ms / 1000, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
@@ -383,17 +411,22 @@ final class PlayerEngine {
     // downloaded songs play from the phone, no internet needed
     if let local = Downloads.shared.audioURL(track.videoId) {
       let item = AVPlayerItem(asset: AVURLAsset(url: local))
+      itemSong[ObjectIdentifier(item)] = track.videoId
+      if ThemeStore.shared.pulse { BeatMeter.attach(to: item) }
       item.audioTimePitchAlgorithm = .spectral
       capLength(item, seconds: MP4Length.seconds(of: local))
       return item
     }
     let s = try await YouTube.shared.stream(track.videoId)
+    if let db = s.loudnessDb { rememberLoudness(track.videoId, db) }
     let wait = s.availableAt - Date().timeIntervalSince1970
     if wait > 0 && wait < 15 {
       try await Task.sleep(nanoseconds: UInt64((wait + 0.25) * 1_000_000_000))
     }
     let asset = AVURLAsset(url: s.url)
     let item = AVPlayerItem(asset: asset)
+    itemSong[ObjectIdentifier(item)] = track.videoId
+    if ThemeStore.shared.pulse { BeatMeter.attach(to: item) }
     item.preferredForwardBufferDuration = 30
     item.audioTimePitchAlgorithm = .spectral
     capLength(item, seconds: s.durationMs.map { $0 / 1000 })
@@ -463,7 +496,7 @@ final class PlayerEngine {
     preparedNext = nil
     preparedOnStandby = false
     activateSession()
-    player.volume = seconds > 0.05 ? 0 : 1
+    player.volume = seconds > 0.05 ? 0 : gain(player.currentItem)
     player.play()
     observeStatus(player.currentItem)
     if seconds > 0.05 {
@@ -483,8 +516,8 @@ final class PlayerEngine {
 
   private func fadeStep() {
     let x = min(1, Date().timeIntervalSince(fadeStart) / max(0.1, fadeLength))
-    player.volume = Float(sin(x * .pi / 2))
-    fadingOut?.volume = Float(cos(x * .pi / 2))
+    player.volume = Float(sin(x * .pi / 2)) * gain(player.currentItem)
+    fadingOut?.volume = Float(cos(x * .pi / 2)) * gain(fadingOut?.currentItem)
     if x >= 1 { finishFade() }
   }
 
@@ -497,12 +530,13 @@ final class PlayerEngine {
     out.pause()
     out.removeAllItems()
     out.volume = 1
-    player.volume = 1
+    player.volume = gain(player.currentItem)
     prepareNext()
   }
 
   /// The player moved on to song `i` (end of a song, or a crossfade).
   private func didMove(to i: Int) {
+    if fadingOut == nil { player.volume = gain(player.currentItem) }
     index = i
     positionMs = 0
     durationMs = queue[i].durationMs ?? 0

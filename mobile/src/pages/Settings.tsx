@@ -269,7 +269,7 @@ function Appearance() {
     }
   };
 
-  const look = (p: { speed?: number; dim?: number; still?: boolean; intro?: IntroMode; refresh?: Refresh }) => {
+  const look = (p: { speed?: number; dim?: number; still?: boolean; intro?: IntroMode; refresh?: Refresh; pulse?: boolean }) => {
     patch(p);
     settings.setLook(p).catch((e) => app.toast(String(e)));
   };
@@ -314,6 +314,7 @@ function Appearance() {
           <Segmented value={SPEEDS.find((x) => x.v === s?.speed)?.v ?? 1} options={SPEEDS} set={(v) => look({ speed: v, still: false })} />
         </div>
         <Toggle title="Still Background" on={s?.still ?? false} set={(on) => look({ still: on })} />
+        <Toggle title="Beat Pulse" sub="The background glows with the beat of the song. Starts with the next song." on={s?.pulse ?? true} set={(on) => look({ pulse: on })} />
       </Group>
 
       <Group
@@ -477,6 +478,17 @@ function Playback() {
           />
         </div>
       </Group>
+      <Group note="Turns loud songs down to the same level as the rest, so you're not reaching for the volume between songs.">
+        <Toggle
+          title="Volume Levelling"
+          sub="Every song at a similar loudness."
+          on={s?.levelling ?? true}
+          set={(on) => {
+            patch({ levelling: on });
+            settings.setAudio({ level: on }).catch((e) => app.toast(String(e)));
+          }}
+        />
+      </Group>
       <Group
         title="Other Apps"
         note="With Play Alongside on, opening the camera, a video or a game won't stop your music: both play together. While it's on, iPhone hides the music controls on the lock screen. The mini player in the app still works."
@@ -590,9 +602,13 @@ function Lyrics() {
         <Toggle title="Soften Other Lines" sub="Lines that aren't being sung are slightly blurred." on={look.blur} set={(on) => set({ blur: on })} />
       </Group>
 
+      <Group title="Translation" note="Songs in another language show the line in your language underneath, translated on your iPhone by Apple. The first time, iPhone may ask to download that language.">
+        <Toggle title="Translate Lyrics" on={look.translate ?? true} set={(on) => set({ translate: on })} />
+      </Group>
+
       <Group
         title="Timing"
-        note="Lyrics running early or late on a song? In Now Playing, press and hold the line you're hearing and choose Sync to This Line. Nocturn remembers it for that song."
+        note="Lyrics running early or late on a song? In Now Playing, press and hold the line you're hearing and choose Sync to This Line. Nocturn remembers it for that song. Hold a line and choose Share as Card to make a picture of it for your story."
       >
         <Toggle
           title="Live Lyrics in the Dynamic Island"

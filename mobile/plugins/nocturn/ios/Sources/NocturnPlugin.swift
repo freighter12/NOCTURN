@@ -36,6 +36,7 @@ class LyricsLookArgs: Decodable {
   let align: String?
   let blur: Bool?
   let words: Bool?
+  let translate: Bool?
 }
 
 struct LyricsLookResult: Encodable {
@@ -45,6 +46,7 @@ struct LyricsLookResult: Encodable {
   let align: String
   let blur: Bool
   let words: Bool
+  let translate: Bool
 }
 
 struct ScanResult: Encodable {
@@ -58,6 +60,7 @@ class CrossfadeArgs: Decodable {
 class AudioArgs: Decodable {
   let mix: Bool?
   let resume: Bool?
+  let level: Bool?
 }
 
 class JumpArgs: Decodable {
@@ -110,6 +113,7 @@ class LookArgs: Decodable {
   let dim: Int?
   let still: Bool?
   let refresh: String?
+  let pulse: Bool?
 }
 
 struct SettingsResult: Encodable {
@@ -125,8 +129,10 @@ struct SettingsResult: Encodable {
   let introPlaying: Bool
   let refresh: String
   let maxFps: Int
+  let pulse: Bool
   let mixWithOthers: Bool
   let autoResume: Bool
+  let levelling: Bool
   let crossfade: Double
   let lyrics: LyricsLookResult
   /// This build's numbers (CFBundleShortVersionString / CFBundleVersion).
@@ -235,7 +241,8 @@ class NocturnPlugin: Plugin {
     return LyricsLookResult(
       color: d.string(forKey: "lyrics.color") ?? "white", style: d.string(forKey: "lyrics.style") ?? "fill",
       size: d.object(forKey: "lyrics.size") as? Double ?? 1, align: d.string(forKey: "lyrics.align") ?? "left",
-      blur: d.object(forKey: "lyrics.blur") as? Bool ?? true, words: d.object(forKey: "lyrics.wordSync") as? Bool ?? true)
+      blur: d.object(forKey: "lyrics.blur") as? Bool ?? true, words: d.object(forKey: "lyrics.wordSync") as? Bool ?? true,
+      translate: d.object(forKey: "lyrics.translate") as? Bool ?? true)
   }
 
   @objc public func setLyricsLook(_ invoke: Invoke) throws {
@@ -248,6 +255,7 @@ class NocturnPlugin: Plugin {
       if let v = a.align, ["left", "center"].contains(v) { d.set(v, forKey: "lyrics.align") }
       if let v = a.blur { d.set(v, forKey: "lyrics.blur") }
       if let v = a.words { d.set(v, forKey: "lyrics.wordSync") }
+      if let v = a.translate { d.set(v, forKey: "lyrics.translate") }
     }
   }
 
@@ -290,7 +298,10 @@ class NocturnPlugin: Plugin {
 
   @objc public func setAudio(_ invoke: Invoke) throws {
     let a = try invoke.parseArgs(AudioArgs.self)
-    onMain(invoke) { PlayerEngine.shared.setAudio(mix: a.mix, resume: a.resume) }
+    onMain(invoke) {
+      PlayerEngine.shared.setAudio(mix: a.mix, resume: a.resume)
+      if let l = a.level { PlayerEngine.shared.setLevelling(l) }
+    }
   }
 
   @objc public func setAutoplay(_ invoke: Invoke) throws {
@@ -365,8 +376,9 @@ class NocturnPlugin: Plugin {
           speed: ThemeStore.shared.speed, dim: ThemeStore.shared.dim, still: ThemeStore.shared.still,
           autoplay: PlayerEngine.shared.autoplay, aiShuffle: PlayerEngine.shared.aiShuffle,
           intro: Intro.mode, introPlaying: Intro.playing,
-          refresh: ThemeStore.shared.refresh, maxFps: ThemeStore.maxFps,
+          refresh: ThemeStore.shared.refresh, maxFps: ThemeStore.maxFps, pulse: ThemeStore.shared.pulse,
           mixWithOthers: PlayerEngine.shared.mixWithOthers, autoResume: PlayerEngine.shared.autoResume,
+          levelling: PlayerEngine.shared.levelling,
           crossfade: PlayerEngine.shared.crossfade,
           lyrics: NocturnPlugin.lyricsLook(),
           version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
@@ -384,7 +396,7 @@ class NocturnPlugin: Plugin {
   @objc public func setLook(_ invoke: Invoke) throws {
     let a = try invoke.parseArgs(LookArgs.self)
     onMain(invoke) {
-      ThemeStore.shared.setLook(speed: a.speed, dim: a.dim, still: a.still, refresh: a.refresh)
+      ThemeStore.shared.setLook(speed: a.speed, dim: a.dim, still: a.still, refresh: a.refresh, pulse: a.pulse)
       if let i = a.intro { Intro.setMode(i) }
     }
   }

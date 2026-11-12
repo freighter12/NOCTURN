@@ -169,6 +169,8 @@ final class Downloads {
 
   private func fetch(_ t: TrackDTO) async throws -> Int {
     let s = try await YouTube.shared.stream(t.videoId)
+    // so the downloaded copy is levelled like the streamed one
+    if let db = s.loudnessDb { PlayerEngine.shared.rememberLoudness(t.videoId, db) }
     let wait = s.availableAt - Date().timeIntervalSince1970
     if wait > 0 && wait < 15 {
       try await Task.sleep(nanoseconds: UInt64((wait + 0.25) * 1_000_000_000))

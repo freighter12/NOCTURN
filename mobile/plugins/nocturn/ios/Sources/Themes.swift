@@ -36,6 +36,8 @@ final class ThemeStore {
   /// How smoothly backgrounds move: "auto" (each theme's own pace),
   /// "120" (every frame on ProMotion screens) or "saver" (half the frames).
   private(set) var refresh: String
+  /// The background glows with the beat (BeatPulse.swift).
+  private(set) var pulse: Bool
   /// The screen's top refresh rate (120 on ProMotion iPhones, else 60).
   static var maxFps: Int { UIScreen.main.maximumFramesPerSecond }
 
@@ -53,6 +55,7 @@ final class ThemeStore {
     dim = d.object(forKey: "theme.dim") as? Int ?? 1
     still = d.bool(forKey: "theme.still")
     refresh = d.string(forKey: "theme.refresh") ?? "auto"
+    pulse = d.object(forKey: "theme.pulse") as? Bool ?? true
     photo = UIImage(contentsOfFile: photoURL.path)
   }
 
@@ -68,8 +71,12 @@ final class ThemeStore {
     UserDefaults.standard.set(next, forKey: "theme")
   }
 
-  func setLook(speed newSpeed: Double?, dim newDim: Int?, still newStill: Bool?, refresh newRefresh: String? = nil) {
+  func setLook(speed newSpeed: Double?, dim newDim: Int?, still newStill: Bool?, refresh newRefresh: String? = nil, pulse newPulse: Bool? = nil) {
     let d = UserDefaults.standard
+    if let v = newPulse {
+      pulse = v
+      d.set(v, forKey: "theme.pulse")
+    }
     if let v = newRefresh, ["auto", "120", "saver"].contains(v) {
       refresh = v
       d.set(v, forKey: "theme.refresh")
@@ -158,6 +165,9 @@ struct ThemeBackground: View {
         }
         if store.theme != "black" {
           LinearGradient(colors: shade, startPoint: .top, endPoint: .bottom)
+        }
+        if store.pulse && !store.still {
+          BeatPulseLayer(engine: engine)
         }
       }
       .frame(width: g.size.width, height: g.size.height)
