@@ -5,3 +5,4 @@
 ios/.build
 ios/.swiftpm
 ios/Package.resolved
+/Cargo.lock

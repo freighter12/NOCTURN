@@ -139,8 +139,21 @@ octurn-updater.key, outside the repo — back it up; public key in tauri.conf.js
 - ✅ Separate Tauri 2 app in mobile/, GitHub macOS build → unsigned .ipa + SideStore source on the rolling nocturn-music-ios pre-release
 - ✅ YouTube Music on the phone (search, home, albums, artists, playlists, radio; visionOS audio links), native player with background audio and lock screen, Liquid Glass tab bar + mini player + Now Playing
 - ✅ Desktop-style synced lyrics and playlist import by link (Spotify, Deezer, YouTube, YouTube Music)
-- 🟡 Launch crashes in builds 3–5 fixed; build 0.1.0.6 not yet confirmed on the phone
-- ⬜ Device test: playback, lock screen, lyrics, import; SideStore sign-in (−80045) on the user's phone
+- ✅ Launch crashes fixed; builds through 0.1.0.24 confirmed on the user's iPhone 14 Pro (themes, settings, greeting, start-up/page animations, real song lengths)
+
+### Feature round (user's list, 2026-11-12)
+
+- ✅ Import limit: Spotify's public page shows 100 songs; pasting song links copied in the Spotify app (Ctrl+A, Ctrl+C) imports any number, PC and phone. Phone also takes "Artist - Title" lists and CSV
+- ✅ Right songs: phone matching uses the desktop's rules (no covers/karaoke/remixes, artist and length must agree, top result + official videos); 151/151 correct on two live playlists. PC no longer accepts another artist's same-named song from an official channel
+- ✅ 120 Hz: ProMotion enabled (CADisableMinimumFrameDurationOnPhone); Settings › Appearance › Smoothness (Auto / 120 Hz / Battery Saver)
+- ✅ 11 new animated backgrounds + Seasons (blossom / golden hour / leaves / Christmas by month)
+- ✅ Crossfade (Off–12 s): two players, equal-power fade, same-album songs stay gapless
+- ✅ Nocturn Wrapped: native listening log, Library › Nocturn Wrapped (week/month/year/all time)
+- ✅ PC sync with a QR code: PC Music › Sources › Sync with iPhone (port 47821, LAN + key only); phone Settings › PC Sync (camera scanner, Sync Now, auto on open). End-to-end server test passes (reqwest client, like the phone)
+- ✅ Lyrics: colour, Fill/Glow/Bounce/Rise, size, alignment, blur; press and hold a line › Sync to This Line; synced LRCLIB entries preferred over plain exact ones (phone + PC)
+- ✅ Update banner (checks the SideStore source.json) + steps in Settings › About
+- ✅ Play alongside other apps (mixWithOthers; hides lock-screen controls) + carry on after interruptions
+- ⬜ On-device test of all of the above (user); the PC side needs a new PC release (0.6.0) to reach the installed app
 
 ## Phase 6 — Testing and release
 

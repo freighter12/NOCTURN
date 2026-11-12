@@ -32,3 +32,13 @@ Phone plugged in, then `python -m pymobiledevice3 crash pull <folder> --match No
 - Build 0.1.0.6 is the current one. Builds 3–5 crashed on launch (adding Tauri's view controller to a tab while it was still the window root; then UIKit's assert on reused tab screens) — both fixed; **0.1.0.6 is not yet confirmed on the phone.**
 - SideStore on the user's phone can't sign in (Apple error −80045; fix = turn off On-Device Anisette, SideStore (New) server, Fetch + Save as Overrides, Reset adi.pb) and needs LocalDevVPN connected to use its pairing file.
 - Not yet tested on a device: background playback, lock screen, tab bar minimizing, Now Playing, lyrics view, import on the phone.
+
+## Added 2026-11-12 (afternoon)
+
+- **Crossfade** (`Player.swift`): two `AVQueuePlayer`s; with crossfade on, the next song waits silently on the standby player and the two swap with an equal-power fade. Same-album songs stay gapless.
+- **Listening log** (`Stats.swift` → Application Support/stats.json) and **Nocturn Wrapped** (`src/stats.ts`, `src/pages/Stats.tsx`).
+- **PC sync** (`src-tauri/src/sync.rs`, `src/sync.ts`, `QRScanner.swift`; PC side `src-tauri/src/phone_sync.rs` in the desktop app). The QR code is JSON `{"t":"nocturn-sync","v":1,"h":ip,"p":47821,"k":key,"n":name}`; both sides accept only private addresses.
+- **Lyrics looks** (`Lyrics.swift`, UserDefaults `lyrics.color/style/size/align/blur`) and long-press **Sync to This Line**.
+- **Backgrounds**: 11 new + Seasons (`Themes.swift`).
+- **Smoothness** (`theme.refresh`), **Play Alongside Other Apps** (`audio.mix`), **Carry On After Interruptions** (`audio.resume`), **update banner** (`src/update.ts`, Rust `check_update` reads source.json).
+- New Swift commands must be added to `plugins/nocturn/build.rs` **and** `permissions/default.toml`, or the web side gets "not allowed".
