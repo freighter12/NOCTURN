@@ -1,6 +1,7 @@
 // Nocturn Wrapped: listening time, top songs and artists, from the log the
 // native player keeps (plugins/nocturn/ios/Sources/Stats.swift).
 import type { Track } from "./api";
+import { demoTracks } from "./trailer";
 
 export type StatsSong = { ms: number; plays: number };
 export type StatsDay = { ms: number; hours: number[]; songs: Record<string, StatsSong> };
@@ -176,18 +177,9 @@ export function hourLabel(h: number): { time: string; kind: string } {
 
 /** A believable sample for testing the screens on a computer (the phone uses real data). */
 export function sampleStats(): StatsFile {
-  const songs: [string, string, string][] = [
-    ["s1", "Blinding Lights", "The Weeknd"],
-    ["s2", "Sweater Weather", "The Neighbourhood"],
-    ["s3", "Do I Wanna Know?", "Arctic Monkeys"],
-    ["s4", "Starboy", "The Weeknd, Daft Punk"],
-    ["s5", "Circles", "Post Malone"],
-    ["s6", "Another Love", "Tom Odell"],
-    ["s7", "SICKO MODE", "Travis Scott"],
-    ["s8", "Pink + White", "Frank Ocean"],
-  ];
+  const songs: [string, string, string][] = demoTracks.slice(0, 8).map((t) => [t.videoId, t.title, t.artist]);
   const tracks: StatsFile["tracks"] = {};
-  songs.forEach(([id, title, artist]) => (tracks[id] = { title, artist }));
+  demoTracks.slice(0, 8).forEach((t) => (tracks[t.videoId] = { title: t.title, artist: t.artist, artwork: t.artwork }));
   const days: StatsFile["days"] = {};
   const now = new Date();
   for (let i = 0; i < 70; i++) {

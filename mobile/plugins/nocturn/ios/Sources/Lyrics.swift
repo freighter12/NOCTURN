@@ -185,6 +185,15 @@ struct LyricsView: View {
     .sheet(item: $card) { req in
       LyricCardSheet(request: req)
     }
+    // trailer mode: open and close a card for the sung line
+    .onReceive(NotificationCenter.default.publisher(for: .trailerCard)) { _ in
+      let i = LyricsTiming.activeIndex(items, engine.lyricClockMs() + engine.lyricsOffset)
+      let line = items.indices.contains(i) && items[i].kind == "line" ? items[i] : items.first { $0.kind == "line" }
+      if let line {
+        card = LyricCardRequest(line: line.text, translation: nil, title: engine.current?.title ?? "", artist: engine.current?.artist ?? "", artwork: engine.artworkImage, palette: engine.palette)
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .trailerCloseCard)) { _ in card = nil }
   }
 
   /// Translate when the song's lyrics are in a language other than the phone's.

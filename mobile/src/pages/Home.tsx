@@ -4,6 +4,7 @@ import { useLibrary } from "../library";
 import { useApp } from "../state";
 import { eyebrowText, greetingText, homePrefs, type HomePrefs } from "../greeting";
 import { Art, ErrorBox, Loading, Scroller, Shelf, Tile, TrackRow } from "../ui";
+import { useTrailer } from "../trailer";
 
 /** The greeting at the top of Home. Also used as the live preview in Settings › Home Screen. */
 export function HomeHero({ prefs, onEdit, preview }: { prefs: HomePrefs; onEdit?: () => void; preview?: boolean }) {
@@ -57,7 +58,8 @@ export default function Home() {
     setError(null);
     api.home().then(setShelves).catch((e) => setError(errorText(e)));
   };
-  useEffect(load, []);
+  const trailer = useTrailer();
+  useEffect(load, [trailer]);
 
   return (
     <div className="home">

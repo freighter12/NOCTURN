@@ -200,6 +200,10 @@ final class ChromeController: NSObject, UITabBarControllerDelegate {
     return top
   }
 
+  func hideNowPlaying() {
+    nowPlaying?.dismiss(animated: true)
+  }
+
   func showNowPlaying() {
     guard installed, nowPlaying == nil, PlayerEngine.shared.current != nil else { return }
     let view = NowPlayingView(

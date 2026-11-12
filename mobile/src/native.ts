@@ -4,6 +4,7 @@
 import { addPluginListener, invoke } from "@tauri-apps/api/core";
 import { api, type Track } from "./api";
 import { sampleStats, type StatsFile } from "./stats";
+import { trailerOn } from "./trailer";
 
 export type PlayerState = {
   playing: boolean;
@@ -287,7 +288,7 @@ export const downloads = {
 };
 
 export const stats = {
-  get: (): Promise<StatsFile> => (isNative ? call<StatsFile>("get_stats") : Promise.resolve(sampleStats())),
+  get: (): Promise<StatsFile> => (isNative && !trailerOn ? call<StatsFile>("get_stats") : Promise.resolve(sampleStats())),
   clear: () => (isNative ? call("clear_stats") : Promise.resolve()),
 };
 

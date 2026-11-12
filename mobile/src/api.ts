@@ -1,5 +1,6 @@
 // Rust commands (src-tauri/src/lib.rs) and the shapes they return.
 import { invoke } from "@tauri-apps/api/core";
+import { demoShelves, trailerOn } from "./trailer";
 
 export type Track = {
   videoId: string;
@@ -85,7 +86,7 @@ async function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Pr
 export const api = {
   search: (query: string) => cached(`s:${query}`, 10 * 60_000, () => invoke<SearchResults>("yt_search", { query })),
   suggest: (input: string) => invoke<string[]>("yt_suggest", { input }),
-  home: () => cached("home", 20 * 60_000, () => invoke<Shelf[]>("yt_home")),
+  home: () => (trailerOn ? Promise.resolve(demoShelves) : cached("home", 20 * 60_000, () => invoke<Shelf[]>("yt_home"))),
   collection: (id: string) => cached(`c:${id}`, 30 * 60_000, () => invoke<Collection>("yt_collection", { id })),
   artist: (id: string) => cached(`a:${id}`, 30 * 60_000, () => invoke<ArtistPage>("yt_artist", { id })),
   radio: (videoId: string) => invoke<Track[]>("yt_radio", { videoId }),

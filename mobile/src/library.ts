@@ -156,6 +156,19 @@ export const library = {
     const newLiked = liked.filter((t) => !have.has(t.videoId));
     set({ ...lib, mine: [...added, ...kept], liked: [...lib.liked, ...newLiked] });
   },
+  /** Trailer mode: made-up playlists and songs (never saved over a real library: simulator only). */
+  loadDemo(tracks: Track[]) {
+    const pl = (i: number, title: string, list: Track[]): MyPlaylist => ({ id: `mine:demo${i}`, title, source: i === 0 ? "PC" : "Spotify", artwork: list[0]?.artwork, tracks: list, created: Date.now() - i * 1000 });
+    set({
+      ...lib,
+      mine: [pl(0, "Night Drive", tracks.slice(0, 6)), pl(1, "Rainy Day", tracks.slice(4, 10)), pl(2, "Gym", tracks.slice(6, 12))],
+      liked: tracks.slice(2, 9),
+      recent: tracks.slice(0, 8),
+      albums: [],
+      playlists: [],
+      artists: [],
+    });
+  },
   clearSearches() {
     set({ ...lib, searches: [] });
   },

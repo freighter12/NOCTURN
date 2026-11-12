@@ -117,6 +117,11 @@ export const sync = {
     return r;
   },
 
+  /** Trailer mode: the banner, as if the PC were playing this. */
+  showDemoHandoff(track: Track) {
+    set({ handoff: { track, positionMs: 64_000, playing: true, ageMs: 2_000 } });
+  },
+
   dismissHandoff() {
     handledTitle = state.handoff?.track?.title ?? handledTitle;
     set({ handoff: null });

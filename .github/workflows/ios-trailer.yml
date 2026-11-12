@@ -1,0 +1,112 @@
+# Records the trailer footage of Nocturn Music in the iPhone simulator. The
+# app's trailer mode (NOCTURN_DEMO=trailer, see Trailer.swift / trailer.ts)
+# walks through the app by itself with made-up songs, so nothing personal
+# is shown. The video is uploaded as an artifact (iphone-trailer).
+name: iPhone trailer (simulator recording)
+
+on:
+  # runs when the trailer timeline or this file changes
+  push:
+    branches: [ios-music]
+    paths:
+      - .github/workflows/ios-trailer.yml
+      - mobile/plugins/nocturn/ios/Sources/Trailer.swift
+      - mobile/src/trailer.ts
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "macos-26 (Apple Silicon, faster) or macos-26-intel"
+        default: macos-26
+
+concurrency:
+  group: ios-trailer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  record:
+    runs-on: ${{ inputs.runner || 'macos-26' }}
+    timeout-minutes: 75
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Pick the simulator architecture
+        id: arch
+        run: |
+          if [ "$(uname -m)" = "arm64" ]; then
+            echo "rust=aarch64-apple-ios-sim" >> "$GITHUB_OUTPUT"; echo "tauri=aarch64-sim" >> "$GITHUB_OUTPUT"
+          else
+            echo "rust=x86_64-apple-ios" >> "$GITHUB_OUTPUT"; echo "tauri=x86_64" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rust for the simulator
+        run: rustup target add ${{ steps.arch.outputs.rust }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mobile/src-tauri -> target
+          key: trailer-${{ steps.arch.outputs.rust }}
+
+      - name: Tools
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      - name: Install packages
+        run: npm ci
+
+      - name: Generate the Xcode project
+        run: |
+          npx tauri ios init --ci
+          npx tauri icon app-icon.svg -o src-tauri/icons
+
+      - name: Add the live lyrics widget
+        run: ruby scripts/add-widget.rb
+
+      - name: Build for the simulator
+        run: npx tauri ios build --ci --debug --no-sign --target ${{ steps.arch.outputs.tauri }}
+
+      - name: Record the trailer
+        run: |
+          set -uo pipefail
+          APP=$(find src-tauri/gen/apple -name 'Nocturn Music.app' -not -path '*/Payload/*' | head -n 1)
+          [ -z "$APP" ] && APP=$(find src-tauri/gen/apple -name '*.app' -not -path '*/Payload/*' | head -n 1)
+          echo "App: $APP"
+          test -n "$APP"
+          BUNDLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          RUNTIME=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["runtimes"] if x["isAvailable"] and x["platform"]=="iOS"]; print(sorted(r,key=lambda x:[int(p) for p in x["version"].split(".")])[-1]["identifier"])')
+          mkdir -p ../trailer
+          UDID=$(xcrun simctl create "Trailer" com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro "$RUNTIME")
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b >/dev/null
+          xcrun simctl ui "$UDID" appearance dark || true
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4 --operatorName "" || true
+          xcrun simctl install "$UDID" "$APP"
+          # warm-up launch (first launch compiles shaders), then a clean one to record
+          SIMCTL_CHILD_NOCTURN_DEMO=nowplaying xcrun simctl launch "$UDID" "$BUNDLE"
+          sleep 25
+          xcrun simctl terminate "$UDID" "$BUNDLE" || true
+          xcrun simctl uninstall "$UDID" "$BUNDLE" || true
+          xcrun simctl install "$UDID" "$APP"
+          sleep 3
+          xcrun simctl io "$UDID" recordVideo --codec=h264 --force ../trailer/iphone-trailer.mov &
+          REC=$!
+          sleep 1.5
+          SIMCTL_CHILD_NOCTURN_DEMO=trailer xcrun simctl launch "$UDID" "$BUNDLE"
+          sleep 63
+          kill -INT "$REC"
+          wait "$REC" || true
+          xcrun simctl io "$UDID" screenshot ../trailer/end.png || true
+          ls -la ../trailer
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iphone-trailer
+          path: trailer/

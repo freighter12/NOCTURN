@@ -14,6 +14,7 @@ import ArtistView from "./pages/Artist";
 import { ActionSheet, ImportSheet, QueueSheet } from "./sheets";
 import { buildLabel, updates, useUpdates } from "./update";
 import { sync, useSync } from "./sync";
+import { demoTracks, enableTrailer } from "./trailer";
 import { buildItems } from "@shared/lyricsTiming";
 
 const TABS: { id: TabId; title: string; symbol: string; search?: boolean }[] = [
@@ -145,6 +146,39 @@ export default function App() {
   }, []);
   useEffect(() => updates.startupCheck(), []);
   useEffect(() => sync.startup(), []);
+  // Trailer mode: the native timeline (Trailer.swift) says what to show next.
+  useEffect(() => {
+    const off = chrome.onAction((kind, value) => {
+      if (kind !== "trailer" || !value) return;
+      if (value === "setup") {
+        enableTrailer();
+        library.loadDemo(demoTracks);
+      } else if (value === "home") {
+        setStacks((s) => ({ ...s, home: [{ kind: "root" }] }));
+        setTab("home");
+        window.scrollTo({ top: 0 });
+      } else if (value === "handoff") sync.showDemoHandoff(demoTracks[0]);
+      else if (value === "hidehandoff") sync.dismissHandoff();
+      else if (value === "library") {
+        setStacks((s) => ({ ...s, library: [{ kind: "root" }] }));
+        setTab("library");
+        window.scrollTo({ top: 0 });
+      } else if (value === "wrapped") {
+        nav.current = "push";
+        setStacks((s) => ({ ...s, library: [{ kind: "root" }, { kind: "stats" }] }));
+        setTab("library");
+        window.scrollTo({ top: 0 });
+      } else if (value === "themes") {
+        nav.current = "push";
+        setStacks((s) => ({ ...s, library: [{ kind: "root" }, { kind: "settings" }, { kind: "settings", section: "appearance" }] }));
+        setTab("library");
+        window.scrollTo({ top: 0 });
+      } else if (value.startsWith("scroll:")) window.scrollTo({ top: Number(value.slice(7)), behavior: "smooth" });
+    });
+    return () => {
+      off.then((f) => f());
+    };
+  }, []);
   const toast = useCallback((text: string) => {
     setToastText(text);
     clearTimeout(toastTimer.current);

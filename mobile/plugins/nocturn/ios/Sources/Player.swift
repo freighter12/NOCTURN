@@ -303,14 +303,19 @@ final class PlayerEngine {
 
   /// Fills the player with a sample song and lyrics, with a fake clock, so
   /// Now Playing can be screenshotted in the simulator without audio.
-  func startDemo() {
-    let t = TrackDTO(videoId: "demo0000000", title: "A Very Long Song Title That Should Truncate Gracefully (Extended Mix)", artist: "Nocturn Test Artist & Friends", album: "Night Sky", artwork: nil, durationMs: 214_000)
-    queue = [t]
+  func startDemo(trailer: Bool = false) {
+    let t = trailer
+      ? TrackDTO(videoId: "demo0000000", title: "Moonlight Drive", artist: "Lunar Echo", album: "Moonlight Drive", artwork: nil, durationMs: 214_000)
+      : TrackDTO(videoId: "demo0000000", title: "A Very Long Song Title That Should Truncate Gracefully (Extended Mix)", artist: "Nocturn Test Artist & Friends", album: "Night Sky", artwork: nil, durationMs: 214_000)
+    queue = trailer
+      ? [t, TrackDTO(videoId: "demo0000001", title: "Velvet Static", artist: "Neon Harbour", album: nil, artwork: nil, durationMs: 187_000),
+         TrackDTO(videoId: "demo0000002", title: "Paper Comets", artist: "Glass Avenue", album: nil, artwork: nil, durationMs: 194_000)]
+      : [t]
     index = 0
     durationMs = 214_000
-    positionMs = 41_000
+    positionMs = trailer ? 10_000 : 41_000
     playing = true
-    demoStart = Date().addingTimeInterval(-41)
+    demoStart = Date().addingTimeInterval(trailer ? -10.5 : -41)
     artworkFor = t.videoId
     artworkImage = PlayerEngine.demoArtwork()
     palette = Palette.colors(from: artworkImage!)

@@ -5,6 +5,7 @@
 import { useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isNative, settings } from "./native";
+import { trailerOn } from "./trailer";
 
 export type Latest = { version: string; build: string; date: string; notes: string };
 export type UpdateState = {
@@ -49,7 +50,7 @@ function dismissedFor(): string | null {
 
 export const updates = {
   async check() {
-    if (state.checking) return;
+    if (state.checking || trailerOn) return;
     set({ checking: true, error: null });
     try {
       const [s, latest] = await Promise.all([settings.get(), invoke<Latest>("check_update")]);

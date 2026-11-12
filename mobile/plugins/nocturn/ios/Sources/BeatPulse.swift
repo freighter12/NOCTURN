@@ -14,7 +14,16 @@ enum BeatMeter {
   /// Loudness of the latest audio buffer (RMS), as Float bits.
   static let level = Atomic<UInt32>(0)
 
-  static var current: Float { Float(bitPattern: level.load(ordering: .relaxed)) }
+  static var current: Float {
+    if synthetic {
+      // trailer mode: a steady 120 bpm kick (there's no audio in the simulator recording)
+      let beat = Date().timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 0.5) / 0.5
+      return Float(0.03 + 0.16 * exp(-beat * 9))
+    }
+    return Float(bitPattern: level.load(ordering: .relaxed))
+  }
+  /// Trailer mode: a made-up beat instead of the audio tap.
+  nonisolated(unsafe) static var synthetic = false
 
   /// Adds the tap to a song once its audio track is known (doesn't delay playback).
   static func attach(to item: AVPlayerItem) {
