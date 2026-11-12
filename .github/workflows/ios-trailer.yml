@@ -66,14 +66,36 @@ jobs:
           npx tauri ios init --ci
           npx tauri icon app-icon.svg -o src-tauri/icons
 
+      # `tauri ios build` always archives, and Xcode 26 archives for a device
+      # even with -sdk iphonesimulator. So the CLI only serves its build options
+      # (--open: builds the web assets, then waits) and xcodebuild builds the
+      # simulator app; the project's "Build Rust Code" phase asks the CLI for them.
       - name: Build for the simulator
-        run: npx tauri ios build --ci --debug --no-sign --target ${{ steps.arch.outputs.tauri }}
+        run: |
+          set -euo pipefail
+          npx tauri ios build --ci --debug --open --target ${{ steps.arch.outputs.tauri }} > ../tauri-cli.log 2>&1 &
+          CLI=$!
+          for i in $(seq 1 180); do
+            [ -f src-tauri/gen/apple/.tauri/cli-options-server.json ] && break
+            kill -0 "$CLI" 2>/dev/null || { cat ../tauri-cli.log; exit 1; }
+            sleep 2
+          done
+          test -f src-tauri/gen/apple/.tauri/cli-options-server.json || { cat ../tauri-cli.log; exit 1; }
+          cat ../tauri-cli.log
+          ARCH=$([ "$(uname -m)" = "arm64" ] && echo arm64 || echo x86_64)
+          cd src-tauri/gen/apple
+          xcodebuild -project nocturn-music.xcodeproj -scheme nocturn-music_iOS \
+            -sdk iphonesimulator -configuration debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ../../../build/dd \
+            ARCHS="$ARCH" ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO \
+            build
+          kill "$CLI" || true
 
       - name: Record the trailer
         run: |
           set -uo pipefail
-          APP=$(find src-tauri/gen/apple -name 'Nocturn Music.app' -not -path '*/Payload/*' | head -n 1)
-          [ -z "$APP" ] && APP=$(find src-tauri/gen/apple -name '*.app' -not -path '*/Payload/*' | head -n 1)
+          APP=$(find build/dd/Build/Products -maxdepth 2 -name '*.app' -path '*iphonesimulator*' | head -n 1)
           echo "App: $APP"
           test -n "$APP"
           BUNDLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
