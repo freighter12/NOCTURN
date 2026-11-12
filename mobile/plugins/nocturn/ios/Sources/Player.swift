@@ -46,6 +46,8 @@ final class PlayerEngine {
   var lyricsPlain = ""
   /// The user's timing nudge for the current song's lyrics (ms; positive = earlier).
   private(set) var lyricsOffset: Double = 0
+  /// real song lengths (seconds) for the queued player items, see capLength
+  private var realLength: [ObjectIdentifier: Double] = [:]
   /// Nocturn's smart shuffle (planned on the web/Rust side, see ai.rs).
   private(set) var aiShuffle = UserDefaults.standard.bool(forKey: "aiShuffle")
   /// Waiting for an AI Shuffle plan.
@@ -291,6 +293,7 @@ final class PlayerEngine {
     lastError = nil
     player.removeAllItems()
     itemIndex.removeAll()
+    realLength.removeAll()
     preparedNext = nil
     playing = play
     updateNowPlaying()
@@ -320,11 +323,32 @@ final class PlayerEngine {
     }
   }
 
+  /// Ends the song at its real length. The player sometimes reads a song as
+  /// much longer than it is (on iOS 27 beta it doubled some) and then plays
+  /// silence until that time, so we tell it where the song really ends.
+  private func capLength(_ item: AVPlayerItem, seconds: Double?) {
+    guard let s = seconds, s > 5 else {
+      realLength.removeValue(forKey: ObjectIdentifier(item))
+      return
+    }
+    realLength[ObjectIdentifier(item)] = s
+    item.forwardPlaybackEndTime = CMTime(seconds: s, preferredTimescale: 1000)
+  }
+
+  /// The song's real length when known, else what the player says.
+  private func lengthMs(of item: AVPlayerItem?) -> Double? {
+    guard let item else { return nil }
+    if let s = realLength[ObjectIdentifier(item)] { return s * 1000 }
+    let d = item.duration.seconds
+    return d.isFinite && d > 0 ? d * 1000 : nil
+  }
+
   private func makeItem(for track: TrackDTO) async throws -> AVPlayerItem {
     // downloaded songs play from the phone, no internet needed
     if let local = Downloads.shared.audioURL(track.videoId) {
       let item = AVPlayerItem(asset: AVURLAsset(url: local))
       item.audioTimePitchAlgorithm = .spectral
+      capLength(item, seconds: MP4Length.seconds(of: local))
       return item
     }
     let s = try await YouTube.shared.stream(track.videoId)
@@ -336,6 +360,7 @@ final class PlayerEngine {
     let item = AVPlayerItem(asset: asset)
     item.preferredForwardBufferDuration = 30
     item.audioTimePitchAlgorithm = .spectral
+    capLength(item, seconds: s.durationMs.map { $0 / 1000 })
     return item
   }
 
@@ -366,6 +391,7 @@ final class PlayerEngine {
     if let p = preparedNext {
       player.remove(p)
       itemIndex.removeValue(forKey: ObjectIdentifier(p))
+      realLength.removeValue(forKey: ObjectIdentifier(p))
       preparedNext = nil
     }
   }
@@ -398,6 +424,7 @@ final class PlayerEngine {
     loadToken += 1
     player.removeAllItems()
     itemIndex.removeAll()
+    realLength.removeAll()
     preparedNext = nil
     queue = []
     index = -1
@@ -439,7 +466,7 @@ final class PlayerEngine {
       MainActor.assumeIsolated {
         guard let self else { return }
         if t.seconds.isFinite { self.positionMs = t.seconds * 1000 }
-        if let d = self.player.currentItem?.duration.seconds, d.isFinite, d > 0 { self.durationMs = d * 1000 }
+        if let d = self.lengthMs(of: self.player.currentItem) { self.durationMs = d }
         let isPlaying = self.player.timeControlStatus == .playing
         let waiting = self.player.timeControlStatus == .waitingToPlayAtSpecifiedRate
         if self.loading && isPlaying { self.loading = false }

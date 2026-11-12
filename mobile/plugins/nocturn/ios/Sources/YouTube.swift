@@ -17,6 +17,45 @@ struct ResolvedStream {
   /// YouTube refuses the link (403) before this moment.
   let availableAt: TimeInterval
   let loudnessDb: Double?
+  /// The real length of the audio (YouTube's approxDurationMs, which matches the file).
+  let durationMs: Double?
+}
+
+/// Reads the length written in an M4A file's header (the mvhd box).
+/// Used for downloaded songs, because the player can misjudge it (it reported
+/// some songs as twice as long and kept playing silence to the end).
+enum MP4Length {
+  static func seconds(of url: URL) -> Double? {
+    guard let fh = try? FileHandle(forReadingFrom: url) else { return nil }
+    defer { try? fh.close() }
+    guard let data = try? fh.read(upToCount: 512 * 1024), data.count > 32 else { return nil }
+    let bytes = [UInt8](data)
+    let tag: [UInt8] = Array("mvhd".utf8)
+    var i = 4
+    while i + 4 < bytes.count {
+      if bytes[i] == tag[0] && bytes[i + 1] == tag[1] && bytes[i + 2] == tag[2] && bytes[i + 3] == tag[3] {
+        let body = i + 4
+        func u32(_ o: Int) -> UInt64 {
+          guard o + 4 <= bytes.count else { return 0 }
+          return UInt64(bytes[o]) << 24 | UInt64(bytes[o + 1]) << 16 | UInt64(bytes[o + 2]) << 8 | UInt64(bytes[o + 3])
+        }
+        let version = bytes[body]
+        let scale: UInt64
+        let length: UInt64
+        if version == 1 {
+          scale = u32(body + 20)
+          length = u32(body + 24) << 32 | u32(body + 28)
+        } else {
+          scale = u32(body + 12)
+          length = u32(body + 16)
+        }
+        guard scale > 0, length > 0 else { return nil }
+        return Double(length) / Double(scale)
+      }
+      i += 1
+    }
+    return nil
+  }
 }
 
 enum YouTubeError: LocalizedError {
@@ -146,7 +185,8 @@ actor YouTube {
       url: url,
       expiresAt: num("expire") ?? Date().timeIntervalSince1970 + 3600,
       availableAt: num("available_at") ?? 0,
-      loudnessDb: loudness)
+      loudnessDb: loudness,
+      durationMs: (pick["approxDurationMs"] as? String).flatMap(Double.init))
   }
 
   // MARK: radio (keeps the music going when the queue runs out in the background)
