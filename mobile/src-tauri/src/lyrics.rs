@@ -339,6 +339,9 @@ pub async fn get(artist: &str, title: &str, album: Option<&str>, duration_ms: Op
         titles.push(base);
     }
     // Exact lookups only for the original version (a slowed edit's own entry rarely exists).
+    // An exact entry with words but no timings is kept as a fallback: another
+    // entry for the same song often has them, so the search below still runs.
+    let mut unsynced: Option<Hit> = None;
     if secs > 0 && variants(title).is_empty() {
         for (i, t) in titles.iter().enumerate() {
             let mut url = format!("{API}/get?artist_name={}&track_name={}&duration={secs}", enc(artist_first), enc(t));
@@ -346,8 +349,11 @@ pub async fn get(artist: &str, title: &str, album: Option<&str>, duration_ms: Op
                 url.push_str(&format!("&album_name={}", enc(a.trim())));
             }
             if let Some(h) = fetch_json::<Hit>(&url).await? {
-                if h.has_lyrics() {
+                if h.instrumental || nonempty(&h.synced) {
                     return Ok(Some(to_lyrics(&h)));
+                }
+                if h.has_lyrics() && unsynced.is_none() {
+                    unsynced = Some(h);
                 }
             }
         }
@@ -361,11 +367,14 @@ pub async fn get(artist: &str, title: &str, album: Option<&str>, duration_ms: Op
         let url = format!("{API}/search?track_name={}&artist_name={}", enc(t), enc(artist_first));
         if let Some(hits) = fetch_json::<Vec<Hit>>(&url).await? {
             if let Some(h) = best(&q, hits) {
-                return Ok(Some(to_lyrics(&h)));
+                // A synced (or stretched) result beats the exact entry's plain words.
+                if unsynced.is_none() || h.instrumental || nonempty(&h.synced) {
+                    return Ok(Some(to_lyrics(&h)));
+                }
             }
         }
     }
-    Ok(None)
+    Ok(unsynced.map(|h| to_lyrics(&h)))
 }
 
 #[cfg(test)]

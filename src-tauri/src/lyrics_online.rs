@@ -240,6 +240,10 @@ async fn fetch(q: &Query) -> AppResult<Option<Hit>> {
     if !base.is_empty() && base != titles[0] {
         titles.push(base);
     }
+    let has_sync = |h: &Hit| h.synced.as_deref().is_some_and(|s| !s.trim().is_empty());
+    // An exact entry with words but no timings is only a fallback: another entry
+    // for the same song often has them, so the search still runs.
+    let mut unsynced: Option<Hit> = None;
     if secs > 0 {
         for t in &titles {
             let mut url = format!("{API}/get?artist_name={}&track_name={}&duration={secs}", enc(artist), enc(t));
@@ -247,8 +251,11 @@ async fn fetch(q: &Query) -> AppResult<Option<Hit>> {
                 url.push_str(&format!("&album_name={}", enc(q.album.trim())));
             }
             if let Some(h) = get_json::<Hit>(&url).await? {
-                if h.has_lyrics() {
+                if h.instrumental || has_sync(&h) {
                     return Ok(Some(h));
+                }
+                if h.has_lyrics() && unsynced.is_none() {
+                    unsynced = Some(h);
                 }
             }
         }
@@ -257,11 +264,13 @@ async fn fetch(q: &Query) -> AppResult<Option<Hit>> {
         let url = format!("{API}/search?track_name={}&artist_name={}", enc(t), enc(artist));
         if let Some(hits) = get_json::<Vec<Hit>>(&url).await? {
             if let Some(h) = best(q, hits) {
-                return Ok(Some(h));
+                if unsynced.is_none() || h.instrumental || has_sync(&h) {
+                    return Ok(Some(h));
+                }
             }
         }
     }
-    Ok(None)
+    Ok(unsynced)
 }
 
 fn to_lyrics(h: &Hit) -> Option<Lyrics> {

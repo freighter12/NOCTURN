@@ -29,6 +29,24 @@ class AutoplayArgs: Decodable {
   let on: Bool
 }
 
+class LyricsLookArgs: Decodable {
+  let color: String?
+  let style: String?
+  let size: Double?
+  let align: String?
+  let blur: Bool?
+  let words: Bool?
+}
+
+struct LyricsLookResult: Encodable {
+  let color: String
+  let style: String
+  let size: Double
+  let align: String
+  let blur: Bool
+  let words: Bool
+}
+
 class CrossfadeArgs: Decodable {
   let seconds: Double
 }
@@ -106,6 +124,7 @@ struct SettingsResult: Encodable {
   let mixWithOthers: Bool
   let autoResume: Bool
   let crossfade: Double
+  let lyrics: LyricsLookResult
   /// This build's numbers (CFBundleShortVersionString / CFBundleVersion).
   let version: String
   let build: String
@@ -207,6 +226,27 @@ class NocturnPlugin: Plugin {
     onMain(invoke) { PlayerEngine.shared.setRepeat(a.mode) }
   }
 
+  static func lyricsLook() -> LyricsLookResult {
+    let d = UserDefaults.standard
+    return LyricsLookResult(
+      color: d.string(forKey: "lyrics.color") ?? "white", style: d.string(forKey: "lyrics.style") ?? "fill",
+      size: d.object(forKey: "lyrics.size") as? Double ?? 1, align: d.string(forKey: "lyrics.align") ?? "left",
+      blur: d.object(forKey: "lyrics.blur") as? Bool ?? true, words: d.object(forKey: "lyrics.wordSync") as? Bool ?? true)
+  }
+
+  @objc public func setLyricsLook(_ invoke: Invoke) throws {
+    let a = try invoke.parseArgs(LyricsLookArgs.self)
+    onMain(invoke) {
+      let d = UserDefaults.standard
+      if let v = a.color, LyricsLook.colors.contains(v) { d.set(v, forKey: "lyrics.color") }
+      if let v = a.style, LyricsLook.styles.contains(v) { d.set(v, forKey: "lyrics.style") }
+      if let v = a.size { d.set(min(1.4, max(0.7, v)), forKey: "lyrics.size") }
+      if let v = a.align, ["left", "center"].contains(v) { d.set(v, forKey: "lyrics.align") }
+      if let v = a.blur { d.set(v, forKey: "lyrics.blur") }
+      if let v = a.words { d.set(v, forKey: "lyrics.wordSync") }
+    }
+  }
+
   @objc public func setCrossfade(_ invoke: Invoke) throws {
     let a = try invoke.parseArgs(CrossfadeArgs.self)
     onMain(invoke) { PlayerEngine.shared.setCrossfade(a.seconds) }
@@ -292,6 +332,7 @@ class NocturnPlugin: Plugin {
           refresh: ThemeStore.shared.refresh, maxFps: ThemeStore.maxFps,
           mixWithOthers: PlayerEngine.shared.mixWithOthers, autoResume: PlayerEngine.shared.autoResume,
           crossfade: PlayerEngine.shared.crossfade,
+          lyrics: NocturnPlugin.lyricsLook(),
           version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
           build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "")
       }

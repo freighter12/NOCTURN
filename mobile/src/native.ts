@@ -38,7 +38,10 @@ export type DownloadState = {
   failed: string[];
 };
 
-export type ThemeName = "artwork" | "lunar" | "aurora" | "nebula" | "synthwave" | "ocean" | "snow" | "fireflies" | "black" | "photo";
+export type ThemeName =
+  | "artwork" | "seasons" | "lunar" | "aurora" | "nebula" | "synthwave" | "ocean" | "snow" | "fireflies"
+  | "rain" | "meteors" | "galaxy" | "lava" | "waveform" | "city" | "bokeh" | "blossom" | "summer" | "leaves" | "christmas"
+  | "black" | "photo";
 export type Settings = {
   theme: ThemeName;
   photo: string | null;
@@ -63,6 +66,8 @@ export type Settings = {
   mixWithOthers: boolean;
   /** start again after another app or a call is done with the sound */
   autoResume: boolean;
+  /** how synced lyrics look in Now Playing */
+  lyrics: LyricsLook;
   /** seconds one song fades into the next (0 = off, gapless) */
   crossfade: number;
   /** this build's version numbers (empty on the computer) */
@@ -70,10 +75,20 @@ export type Settings = {
   build: string;
 };
 export type IntroMode = "full" | "short" | "off";
+export type LyricsLook = {
+  color: "white" | "artwork" | "moon" | "gold" | "rose" | "mint" | "violet";
+  style: "fill" | "glow" | "bounce" | "rise";
+  size: number;
+  align: "left" | "center";
+  blur: boolean;
+  /** word by word (off = whole lines light up) */
+  words: boolean;
+};
 export type Refresh = "auto" | "120" | "saver";
 export const defaultSettings: Settings = {
   theme: "artwork", photo: null, liveLyrics: true, speed: 1, dim: 1, still: false, autoplay: true, aiShuffle: false,
   intro: "full", introPlaying: false, refresh: "auto", maxFps: 60, mixWithOthers: false, autoResume: true, crossfade: 0, version: "", build: "",
+  lyrics: { color: "white", style: "fill", size: 1, align: "left", blur: true, words: true },
 };
 
 export type TabSpec = { id: string; title: string; symbol: string; search?: boolean };
@@ -270,6 +285,10 @@ export const settings = {
   setLook(look: { speed?: number; dim?: number; still?: boolean; intro?: IntroMode; refresh?: Refresh }) {
     if (!isNative) return Promise.resolve(saveLocal(look));
     return call("set_look", look);
+  },
+  setLyricsLook(look: Partial<LyricsLook>) {
+    if (!isNative) return Promise.resolve(saveLocal({ lyrics: { ...localSettings().lyrics, ...look } }));
+    return call("set_lyrics_look", look);
   },
   setCrossfade(seconds: number) {
     if (!isNative) return Promise.resolve(saveLocal({ crossfade: seconds }));

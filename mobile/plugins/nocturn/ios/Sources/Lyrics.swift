@@ -53,10 +53,88 @@ enum LyricsTiming {
   }
 }
 
+/// How lyrics look (Settings › Lyrics). Stored in UserDefaults, so the
+/// lyrics view follows changes straight away.
+enum LyricsLook {
+  static let colors = ["white", "artwork", "moon", "gold", "rose", "mint", "violet"]
+  static let styles = ["fill", "glow", "bounce", "rise"]
+
+  /// The colour of the words being sung.
+  static func accent(_ name: String, palette: [UIColor]) -> Color {
+    switch name {
+    case "artwork":
+      guard let c = palette.first else { return .white }
+      // the artwork's strongest colour, lifted so it reads on dark backgrounds
+      var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+      c.getHue(&h, saturation: &sat, brightness: &b, alpha: &a)
+      return Color(hue: Double(h), saturation: Double(min(sat, 0.55)), brightness: 1)
+    case "moon": return Color(red: 0.78, green: 0.86, blue: 1)
+    case "gold": return Color(red: 1, green: 0.84, blue: 0.5)
+    case "rose": return Color(red: 1, green: 0.7, blue: 0.78)
+    case "mint": return Color(red: 0.6, green: 1, blue: 0.84)
+    case "violet": return Color(red: 0.8, green: 0.7, blue: 1)
+    default: return .white
+    }
+  }
+}
+
+/// Words laid out like text, but each its own view so it can move on its own
+/// (the Bounce and Rise styles).
+struct WordFlow: Layout {
+  var center = false
+
+  private func rows(_ subviews: Subviews, width: CGFloat) -> [[(Int, CGSize)]] {
+    var rows: [[(Int, CGSize)]] = [[]]
+    var x: CGFloat = 0
+    for (i, v) in subviews.enumerated() {
+      let sz = v.sizeThatFits(.unspecified)
+      if x > 0 && x + sz.width > width {
+        rows.append([])
+        x = 0
+      }
+      rows[rows.count - 1].append((i, sz))
+      x += sz.width
+    }
+    return rows
+  }
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let width = proposal.width ?? .infinity
+    let rs = rows(subviews, width: width)
+    let h = rs.reduce(CGFloat(0)) { $0 + ($1.map(\.1.height).max() ?? 0) }
+    let w = rs.map { $0.reduce(CGFloat(0)) { $0 + $1.1.width } }.max() ?? 0
+    return CGSize(width: proposal.width ?? w, height: h)
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    var y = bounds.minY
+    for row in rows(subviews, width: bounds.width) {
+      let rowW = row.reduce(CGFloat(0)) { $0 + $1.1.width }
+      let rowH = row.map(\.1.height).max() ?? 0
+      var x = center ? bounds.minX + (bounds.width - rowW) / 2 : bounds.minX
+      for (i, sz) in row {
+        subviews[i].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(sz))
+        x += sz.width
+      }
+      y += rowH
+    }
+  }
+}
+
 struct LyricsView: View {
   let engine: PlayerEngine
   @AppStorage("lyrics.wordSync") private var wordSync = true
+  @AppStorage("lyrics.color") private var colorName = "white"
+  @AppStorage("lyrics.style") private var style = "fill"
+  @AppStorage("lyrics.size") private var sizeScale = 1.0
+  @AppStorage("lyrics.align") private var align = "left"
+  @AppStorage("lyrics.blur") private var blurOthers = true
   @State private var lastUserScroll = Date.distantPast
+
+  private var accent: Color { LyricsLook.accent(colorName, palette: engine.palette) }
+  private var centered: Bool { align == "center" }
+  private var hAlign: HorizontalAlignment { centered ? .center : .leading }
+  private var frameAlign: Alignment { centered ? .center : .leading }
 
   private var mine: Bool { engine.lyricsTrackId == engine.current?.videoId }
   private var items: [LyricItem] { mine ? engine.lyricItems : [] }
@@ -64,7 +142,7 @@ struct LyricsView: View {
   var body: some View {
     GeometryReader { g in
       // Big and readable, scaled to the screen: ~27 pt on small iPhones, up to 32 on Pro Max.
-      let size = min(32, max(24, g.size.width * 0.072))
+      let size = min(32, max(24, g.size.width * 0.072)) * CGFloat(min(1.4, max(0.7, sizeScale)))
       Group {
         if !mine {
           artworkFallback(text: "Looking for lyrics…", in: g.size)
@@ -91,7 +169,7 @@ struct LyricsView: View {
         let t = engine.lyricClockMs() + engine.lyricsOffset
         let active = LyricsTiming.activeIndex(items, t)
         ScrollView(.vertical, showsIndicators: false) {
-          LazyVStack(alignment: .leading, spacing: size * 0.62) {
+          LazyVStack(alignment: hAlign, spacing: size * 0.62) {
             Color.clear.frame(height: 28)
             ForEach(Array(items.enumerated()), id: \.offset) { i, item in
               row(item, index: i, active: active, size: size)
@@ -101,11 +179,29 @@ struct LyricsView: View {
                   engine.seek(ms: max(0, item.start + engine.outputLatencyMs - engine.lyricsOffset))
                   lastUserScroll = .distantPast
                 }
+                .contextMenu {
+                  if item.kind == "line" {
+                    // The fix for lyrics that run early or late: hold the line you're hearing.
+                    Button {
+                      engine.setLyricsOffset(item.start - engine.lyricClockMs())
+                      lastUserScroll = .distantPast
+                    } label: {
+                      Label("Sync to This Line", systemImage: "metronome")
+                    }
+                  }
+                  if engine.lyricsOffset != 0 {
+                    Button {
+                      engine.setLyricsOffset(nil)
+                    } label: {
+                      Label("Reset Timing", systemImage: "arrow.counterclockwise")
+                    }
+                  }
+                }
             }
             Color.clear.frame(height: 160)
           }
           .padding(.horizontal, 24)
-          .frame(maxWidth: .infinity, alignment: .leading)
+          .frame(maxWidth: .infinity, alignment: frameAlign)
         }
         .scrollBounceBehavior(.basedOnSize)
         .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in lastUserScroll = Date() })
@@ -128,7 +224,7 @@ struct LyricsView: View {
   private func row(_ item: LyricItem, index i: Int, active: Int, size: CGFloat) -> some View {
     let distance = active < 0 ? 99 : abs(i - active)
     let scrolling = Date().timeIntervalSince(lastUserScroll) < 3.5
-    let blur: CGFloat = scrolling || i == active ? 0 : (distance == 1 ? 0.5 : distance == 2 ? 1.1 : 1.8)
+    let blur: CGFloat = !blurOthers || scrolling || i == active ? 0 : (distance == 1 ? 0.5 : distance == 2 ? 1.1 : 1.8)
     Group {
       if i == active {
         // every frame for the line being sung
@@ -144,11 +240,11 @@ struct LyricsView: View {
       }
     }
     .fixedSize(horizontal: false, vertical: true)
-    .multilineTextAlignment(.leading)
+    .multilineTextAlignment(centered ? .center : .leading)
     .blur(radius: blur)
-    .scaleEffect(i == active ? 1 : 0.96, anchor: .leading)
+    .scaleEffect(i == active ? 1 : 0.96, anchor: centered ? .center : .leading)
     .animation(.spring(response: 0.45, dampingFraction: 0.85), value: active)
-    .frame(maxWidth: .infinity, alignment: .leading)
+    .frame(maxWidth: .infinity, alignment: frameAlign)
   }
 
   @ViewBuilder
@@ -156,21 +252,50 @@ struct LyricsView: View {
     if item.kind == "gap" {
       GapDots(progress: LyricsTiming.progress(item, t))
     } else if !item.words.isEmpty && (wordSync || item.estimated != true) {
-      // word by word: each word brightens as it's sung
       let wp = LyricsTiming.wordProgress(item, t)
-      item.words.enumerated().reduce(Text("")) { acc, pair in
-        let (j, w) = pair
-        let p = j < wp.count ? wp[j] : 0
-        return acc + Text(w.w).foregroundStyle(.white.opacity(0.35 + 0.65 * p))
+      let glow = style == "glow"
+      if style == "bounce" || style == "rise" {
+        // each word its own view: it hops (Bounce) or lifts and settles (Rise) as it's sung
+        WordFlow(center: centered) {
+          ForEach(Array(item.words.enumerated()), id: \.offset) { j, w in
+            let p: Double = j < wp.count ? wp[j] : 0
+            let hop: CGFloat = CGFloat(wordHop(p))
+            let lift: CGFloat = style == "bounce" ? 0.16 : 0.1
+            let dy: CGFloat = -hop * size * lift
+            let grow: CGFloat = 1 + hop * 0.06
+            let sung: Color = accent.opacity(0.45 + 0.55 * p)
+            Text(w.w)
+              .font(.system(size: size, weight: .bold))
+              .foregroundStyle(p > 0 ? sung : Color.white.opacity(0.35))
+              .offset(y: dy)
+              .scaleEffect(grow, anchor: .bottom)
+          }
+        }
+        .shadow(color: accent.opacity(0.3), radius: 12)
+      } else {
+        // word by word: each word brightens (and glows) as it's sung
+        item.words.enumerated().reduce(Text("")) { acc, pair in
+          let (j, w) = pair
+          let p = j < wp.count ? wp[j] : 0
+          return acc + Text(w.w).foregroundStyle(p > 0 ? accent.opacity(0.35 + 0.65 * p) : .white.opacity(0.35))
+        }
+        .font(.system(size: size, weight: .bold))
+        .shadow(color: accent.opacity(glow ? 0.75 : 0.28), radius: glow ? 18 : 12)
+        .shadow(color: accent.opacity(glow ? 0.4 : 0), radius: glow ? 4 : 0)
       }
-      .font(.system(size: size, weight: .bold))
-      .shadow(color: .white.opacity(0.28), radius: 12)
     } else {
       Text(item.text)
         .font(.system(size: size, weight: .bold))
-        .foregroundStyle(.white)
-        .shadow(color: .white.opacity(0.28), radius: 12)
+        .foregroundStyle(accent)
+        .shadow(color: accent.opacity(style == "glow" ? 0.75 : 0.28), radius: style == "glow" ? 18 : 12)
     }
+  }
+
+  /// How far a word is lifted while it's sung (0 at rest, 1 at the top).
+  private func wordHop(_ p: Double) -> Double {
+    if style == "bounce" { return sin(p * .pi) }
+    // rise quickly, then settle back while the word is sung
+    return p > 0 && p < 1 ? (1 - p) * min(1, p * 6) : 0
   }
 
   // MARK: plain (not synced) and no lyrics

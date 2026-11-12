@@ -546,6 +546,31 @@ h1, h2, h3, p { margin: 0; }
 .import-error { margin-top: 12px; color: #f2b3b3; font-size: 14px; line-height: 1.4; }
 .import .glass-pill.wide { margin: 18px 0 4px; width: 100%; }
 .glass-pill:disabled { opacity: 0.45; }
+/* ---------------------------------------------------------------- lyrics look */
+.lyric-preview { margin: 4px var(--gutter) 18px; padding: 18px 20px; border-radius: 20px; background: linear-gradient(160deg, rgba(60, 64, 90, 0.55), rgba(16, 17, 24, 0.7)); border: 0.5px solid var(--line-2); font-weight: 700; font-size: calc(19px * var(--ls, 1)); line-height: 1.3; overflow: hidden; }
+.lyric-preview.center { text-align: center; }
+.lyric-preview p { margin: 0 0 10px; }
+.lyric-preview .past { color: rgba(255, 255, 255, 0.38); }
+.lyric-preview .next { color: rgba(255, 255, 255, 0.32); margin: 0; }
+.lyric-preview .next.blur { filter: blur(0.8px); }
+.lyric-preview .now span { display: inline-block; white-space: pre; color: rgba(255, 255, 255, 0.35); animation: lyric-word 3.6s linear infinite; animation-delay: var(--d); }
+.lyric-preview .now span.line { animation: lyric-line 3.6s linear infinite; }
+.lyric-preview.st-glow .now span { animation-name: lyric-glow; }
+.lyric-preview.st-bounce .now span { animation-name: lyric-bounce; }
+.lyric-preview.st-rise .now span { animation-name: lyric-rise; }
+@keyframes lyric-word { 0% { color: rgba(255, 255, 255, 0.35); } 8%, 85% { color: var(--lc); } 100% { color: rgba(255, 255, 255, 0.35); } }
+@keyframes lyric-line { 0%, 85% { color: var(--lc); } 100% { color: rgba(255, 255, 255, 0.35); } }
+@keyframes lyric-glow { 0% { color: rgba(255, 255, 255, 0.35); text-shadow: none; } 8%, 85% { color: var(--lc); text-shadow: 0 0 14px var(--lc); } 100% { color: rgba(255, 255, 255, 0.35); text-shadow: none; } }
+@keyframes lyric-bounce { 0% { color: rgba(255, 255, 255, 0.35); transform: none; } 4% { transform: translateY(-5px); } 9% { color: var(--lc); transform: none; } 85% { color: var(--lc); } 100% { color: rgba(255, 255, 255, 0.35); } }
+@keyframes lyric-rise { 0% { color: rgba(255, 255, 255, 0.35); transform: none; } 2% { transform: translateY(-4px) scale(1.05); } 10% { color: var(--lc); transform: none; } 85% { color: var(--lc); } 100% { color: rgba(255, 255, 255, 0.35); } }
+:root[data-motion="off"] .lyric-preview .now span { animation: none; color: var(--lc); }
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; padding: 12px; }
+.swatch { display: grid; justify-items: center; gap: 6px; padding: 4px 0; }
+.swatch i { width: 34px; height: 34px; border-radius: 50%; box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.3); transition: transform 0.2s var(--ease); }
+.swatch.on i { box-shadow: 0 0 0 2px var(--bg, #000), 0 0 0 4px #fff; transform: scale(1.05); }
+.swatch small { font-size: 11px; color: var(--ink-2); }
+.swatch.on small { color: var(--ink-0, #fff); }
+
 /* ---------------------------------------------------------------- update available */
 .update-banner { position: fixed; z-index: 60; top: calc(env(safe-area-inset-top) + 8px); left: 12px; right: 12px; display: flex; align-items: center; border-radius: 18px; background: rgba(28, 30, 38, 0.82); -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6); border: 0.5px solid var(--line-2); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); animation: update-in 0.5s var(--ease) both; }
 .update-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px 4px 12px 16px; text-align: left; }
@@ -900,6 +925,133 @@ header.home-hero:not(.preview):active .hero-title { opacity: 0.7; }
   animation: th-glow 3s ease-in-out infinite alternate;
 }
 @keyframes th-glow { from { filter: brightness(0.7); } to { filter: brightness(1.35); } }
+/* the newer backgrounds */
+.th-season { position: absolute !important; inset: 0; border-radius: inherit; }
+.th-badge { position: absolute; left: 8px; top: 8px; padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; background: rgba(255, 255, 255, 0.85); color: #111; }
+.th-rain {
+  --d: 0.8s;
+  background:
+    repeating-linear-gradient(100deg, transparent 0 9px, rgba(190, 210, 240, 0.22) 9px 10px),
+    radial-gradient(circle at 25% 85%, rgba(255, 160, 80, 0.45), transparent 30%),
+    radial-gradient(circle at 70% 90%, rgba(90, 200, 230, 0.4), transparent 28%),
+    linear-gradient(180deg, #07090f, #0e1119);
+  background-size: 100% 40px, 100% 100%, 100% 100%, 100% 100%;
+  animation: th-rain 0.8s linear infinite;
+}
+@keyframes th-rain { to { background-position: -6px 40px, 0 0, 0 0, 0 0; } }
+.th-meteors {
+  --d: 3s;
+  background:
+    radial-gradient(1px 1px at 15% 30%, #fff 50%, transparent), radial-gradient(1px 1px at 60% 20%, #fff 50%, transparent),
+    radial-gradient(1px 1px at 85% 60%, rgba(255, 255, 255, 0.7) 50%, transparent), radial-gradient(1px 1px at 35% 75%, rgba(255, 255, 255, 0.7) 50%, transparent),
+    linear-gradient(180deg, #04040e, #0a0b1d);
+}
+.th-meteors::after {
+  content: "";
+  position: absolute;
+  width: 46%;
+  height: 1.5px;
+  top: 20%;
+  left: 60%;
+  background: linear-gradient(90deg, #fff, transparent);
+  transform: rotate(-24deg);
+  transform-origin: left center;
+  animation: th-meteor 3s ease-in infinite;
+}
+@keyframes th-meteor { 0% { opacity: 0; translate: 0 0; } 10% { opacity: 1; } 35% { opacity: 0; translate: -70% 40%; } 100% { opacity: 0; translate: -70% 40%; } }
+.th-galaxy {
+  --d: 20s;
+  background:
+    radial-gradient(ellipse 18% 12% at 50% 42%, #fff4dd, rgba(255, 230, 200, 0.4) 50%, transparent),
+    conic-gradient(from 0deg at 50% 42%, transparent, rgba(150, 140, 255, 0.5), transparent 20%, rgba(120, 160, 255, 0.45), transparent 45%, rgba(170, 130, 255, 0.5), transparent 70%),
+    linear-gradient(180deg, #020208, #07041a);
+  animation: th-hue 20s linear infinite;
+}
+.th-lava {
+  --d: 8s;
+  background:
+    radial-gradient(circle at 35% 70%, #ff7340 0 14%, transparent 15%),
+    radial-gradient(circle at 62% 35%, #f0336f 0 12%, transparent 13%),
+    radial-gradient(circle at 48% 15%, #b13ad0 0 9%, transparent 10%),
+    linear-gradient(180deg, #1a0412, #0c020a);
+  background-size: 100% 160%, 100% 140%, 100% 180%, 100% 100%;
+  animation: th-lava 8s ease-in-out infinite alternate;
+  filter: blur(0.6px);
+}
+@keyframes th-lava { from { background-position: 0 0, 0 100%, 0 0, 0 0; } to { background-position: 0 100%, 0 0, 0 100%, 0 0; } }
+.th-waveform {
+  --d: 2.5s;
+  background:
+    radial-gradient(ellipse 40% 6% at 30% 45%, rgba(80, 220, 255, 0.8), transparent 70%),
+    radial-gradient(ellipse 35% 5% at 65% 40%, rgba(170, 120, 255, 0.8), transparent 70%),
+    radial-gradient(ellipse 30% 5% at 50% 50%, rgba(255, 100, 190, 0.7), transparent 70%),
+    linear-gradient(180deg, #040410, #06061a);
+  animation: th-glow 2.5s ease-in-out infinite alternate;
+}
+.th-city { --d: 5s; background: radial-gradient(circle at 50% 120%, rgba(255, 120, 90, 0.35), transparent 60%), linear-gradient(180deg, #07071a, #1c0f33 55%, #472034); }
+.th-city::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(255, 210, 130, 0.85) 0 1px, transparent 1.6px) 0 0 / 7px 8px, #0b0a14;
+  -webkit-mask: linear-gradient(#000, #000) 0% 100% / 20% 46% no-repeat, linear-gradient(#000, #000) 27% 100% / 16% 64% no-repeat, linear-gradient(#000, #000) 50% 100% / 20% 38% no-repeat, linear-gradient(#000, #000) 75% 100% / 15% 72% no-repeat, linear-gradient(#000, #000) 100% 100% / 19% 52% no-repeat;
+  mask: linear-gradient(#000, #000) 0% 100% / 20% 46% no-repeat, linear-gradient(#000, #000) 27% 100% / 16% 64% no-repeat, linear-gradient(#000, #000) 50% 100% / 20% 38% no-repeat, linear-gradient(#000, #000) 75% 100% / 15% 72% no-repeat, linear-gradient(#000, #000) 100% 100% / 19% 52% no-repeat;
+  animation: th-glow 5s steps(5) infinite alternate;
+}
+.th-bokeh {
+  --d: 10s;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(255, 180, 100, 0.55), transparent 16%),
+    radial-gradient(circle at 70% 25%, rgba(130, 190, 255, 0.5), transparent 20%),
+    radial-gradient(circle at 55% 70%, rgba(255, 130, 180, 0.5), transparent 18%),
+    radial-gradient(circle at 85% 80%, rgba(180, 140, 255, 0.45), transparent 14%),
+    linear-gradient(180deg, #08060f, #0c0816);
+  background-size: 120% 120%;
+  animation: th-aurora 10s ease-in-out infinite alternate;
+}
+.th-blossom, .th-leaves, .th-christmas {
+  --d: 7s;
+  background-size: 100% 50%, 100% 50%, 100% 50%, 100% 50%, 100% 100%;
+  animation: th-fall 7s linear infinite;
+}
+@keyframes th-fall {
+  from { background-position: 0 0, 0 0, 0 0, 0 0, 0 0; }
+  to { background-position: 6px 200%, -5px 200%, 4px 200%, -6px 200%, 0 0; }
+}
+.th-blossom {
+  background-image:
+    radial-gradient(ellipse 4px 2.5px at 20% 10%, #ffc7d9 60%, transparent), radial-gradient(ellipse 3px 2px at 65% 30%, #ffb0c8 60%, transparent),
+    radial-gradient(ellipse 4px 2.5px at 80% 62%, #ffd6e2 60%, transparent), radial-gradient(ellipse 3px 2px at 38% 78%, #ff9fbd 60%, transparent),
+    linear-gradient(180deg, #1a1233, #522a52 55%, #8c4d6b);
+}
+.th-leaves {
+  background-image:
+    radial-gradient(ellipse 4px 2.5px at 20% 10%, #f07326 60%, transparent), radial-gradient(ellipse 4px 2.5px at 65% 30%, #d9401f 60%, transparent),
+    radial-gradient(ellipse 4px 2.5px at 80% 62%, #f9b233 60%, transparent), radial-gradient(ellipse 4px 2.5px at 38% 78%, #9a4d1f 60%, transparent),
+    linear-gradient(180deg, #100a1a, #33141a 55%, #612914);
+}
+.th-christmas {
+  background-image:
+    radial-gradient(2px 2px at 20% 10%, #fff 50%, transparent), radial-gradient(1.5px 1.5px at 65% 30%, #fff 50%, transparent),
+    radial-gradient(2px 2px at 80% 62%, #fff 50%, transparent), radial-gradient(1.5px 1.5px at 38% 78%, #fff 50%, transparent),
+    radial-gradient(circle at 15% 14%, #ff5050 0 2px, transparent 7px), radial-gradient(circle at 38% 18%, #5aff80 0 2px, transparent 7px),
+    radial-gradient(circle at 62% 18%, #ffd25a 0 2px, transparent 7px), radial-gradient(circle at 85% 14%, #66a6ff 0 2px, transparent 7px),
+    linear-gradient(180deg, #05070f, #0a0f26 80%, #8a93ad 80%);
+  background-size: 100% 50%, 100% 50%, 100% 50%, 100% 50%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+  animation-name: th-fall-xmas;
+}
+@keyframes th-fall-xmas {
+  from { background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0; }
+  to { background-position: 6px 200%, -5px 200%, 4px 200%, -6px 200%, 0 0, 0 0, 0 0, 0 0, 0 0; }
+}
+.th-summer {
+  --d: 4s;
+  background:
+    radial-gradient(circle at 50% 60%, #ffdb8c 0 13%, rgba(255, 180, 90, 0.5) 18%, transparent 36%) 0 0 / 100% 100%,
+    repeating-linear-gradient(180deg, rgba(255, 200, 120, 0.35) 0 2px, transparent 2px 7px) 50% 100% / 34% 40% no-repeat,
+    linear-gradient(180deg, #1f1a4d, #b34d59 45%, #ff9f4d 60%, #4d2433 60%, #0d0814);
+  animation: th-glow 4s ease-in-out infinite alternate;
+}
 @media (prefers-reduced-motion: reduce) {
   .theme-preview, .theme-preview *, .theme-preview::after { animation-play-state: paused !important; }
 }

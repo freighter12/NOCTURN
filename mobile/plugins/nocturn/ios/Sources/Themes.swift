@@ -11,13 +11,19 @@ import UIKit
 ///   ocean     – night waves under the moon
 ///   snow      – gentle snowfall
 ///   fireflies – glowing fireflies drifting in the dark
+///   seasons   – changes with the season (blossom, golden hour, leaves, Christmas)
+///   rain, meteors, galaxy, lava, waveform, city, bokeh, blossom, summer, leaves, christmas
 ///   black     – pure black
 ///   photo     – a picture of your own, blurred and darkened
 @MainActor
 @Observable
 final class ThemeStore {
   static let shared = ThemeStore()
-  static let names = ["artwork", "lunar", "aurora", "nebula", "synthwave", "ocean", "snow", "fireflies", "black", "photo"]
+  static let names = [
+    "artwork", "seasons", "lunar", "aurora", "nebula", "synthwave", "ocean", "snow", "fireflies",
+    "rain", "meteors", "galaxy", "lava", "waveform", "city", "bokeh", "blossom", "summer", "leaves", "christmas",
+    "black", "photo",
+  ]
 
   private(set) var theme: String
   private(set) var photo: UIImage?
@@ -119,6 +125,30 @@ struct ThemeBackground: View {
           Snowfall()
         case "fireflies":
           Fireflies()
+        case "seasons":
+          Seasons()
+        case "rain":
+          RainyNight()
+        case "meteors":
+          MeteorShower()
+        case "galaxy":
+          SpiralGalaxy()
+        case "lava":
+          LavaLamp()
+        case "waveform":
+          Waveform()
+        case "city":
+          CityLights()
+        case "bokeh":
+          Bokeh()
+        case "blossom":
+          Blossom()
+        case "summer":
+          GoldenHour()
+        case "leaves":
+          AutumnLeaves()
+        case "christmas":
+          ChristmasLights()
         case "black":
           Color.black
         case "photo":
@@ -601,6 +631,569 @@ struct Fireflies: View {
           c.fill(Path(ellipseIn: CGRect(x: x - 1.6, y: y - 1.6, width: 3.2, height: 3.2)), with: .color(rgb(1, 0.96, 0.7).opacity(b)))
         }
       }
+    }
+  }
+}
+
+// MARK: - shared bits for the newer themes
+
+/// A repeatable 0–1 number for a pair of integers (window lights, meteor paths).
+func hash01(_ a: Int, _ b: Int) -> Double {
+  let x = sin(Double(a) * 127.1 + Double(b) * 311.7) * 43_758.5453
+  return x - x.rounded(.down)
+}
+
+func fillCircle(_ c: GraphicsContext, _ x: Double, _ y: Double, _ r: Double, _ color: Color) {
+  c.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)), with: .color(color))
+}
+
+func glowCircle(_ c: GraphicsContext, _ x: Double, _ y: Double, _ r: Double, _ color: Color, _ alpha: Double) {
+  let center = CGPoint(x: x, y: y)
+  c.fill(
+    Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
+    with: .radialGradient(Gradient(colors: [color.opacity(alpha), .clear]), center: center, startRadius: 0, endRadius: r))
+}
+
+func skyFill(_ c: GraphicsContext, _ size: CGSize, _ colors: [Color]) {
+  c.fill(Path(CGRect(origin: .zero, size: size)), with: verticalGradient(colors, from: 0, to: size.height))
+}
+
+// MARK: - rainy night
+
+/// Rain streaking past a window, city lights glowing out of focus below.
+struct RainyNight: View {
+  private struct Drop {
+    let x: Double, y: Double, len: Double, speed: Double, alpha: Double
+  }
+  private struct Bead {
+    let x: Double, y: Double, r: Double, slide: Double, phase: Double
+  }
+  private struct Light {
+    let x: Double, y: Double, r: Double, color: Color
+  }
+
+  private static let drops: [Drop] = {
+    var rng = SeededRandom(seed: 0x2A1E_D20F_0000_1111)
+    return (0..<150).map { _ in
+      let d = rng.next()
+      return Drop(x: rng.next(), y: rng.next(), len: 12 + d * 28, speed: 0.45 + d * 0.7, alpha: 0.06 + d * 0.2)
+    }
+  }()
+  private static let beads: [Bead] = {
+    var rng = SeededRandom(seed: 0xBEAD_BEAD_2222_3333)
+    return (0..<34).map { _ in
+      Bead(x: rng.next(), y: rng.next(), r: 1.5 + rng.next() * 3.5, slide: rng.next() < 0.3 ? 0.02 + rng.next() * 0.03 : 0, phase: rng.next() * 6.28)
+    }
+  }()
+  private static let lights: [Light] = {
+    var rng = SeededRandom(seed: 0x11FE_C17E_4444_5555)
+    let palette = [rgb(1, 0.62, 0.3), rgb(0.35, 0.8, 0.9), rgb(1, 0.4, 0.45), rgb(0.95, 0.85, 0.5)]
+    return (0..<14).map { i in
+      Light(x: rng.next(), y: 0.62 + rng.next() * 0.36, r: 30 + rng.next() * 60, color: palette[i % palette.count])
+    }
+  }()
+
+  var body: some View {
+    ThemeClock(fps: 30) { t in
+      Canvas { c, size in
+        let w = Double(size.width), h = Double(size.height)
+        skyFill(c, size, [rgb(0.03, 0.04, 0.07), rgb(0.05, 0.07, 0.11), rgb(0.08, 0.08, 0.12)])
+        for (i, l) in RainyNight.lights.enumerated() {
+          let breathe: Double = 0.7 + 0.3 * sin(t * 0.3 + Double(i))
+          glowCircle(c, l.x * w, l.y * h, l.r, l.color, 0.22 * breathe)
+        }
+        var streaks = Path()
+        for d in RainyNight.drops {
+          let fall: Double = (d.y + t * d.speed).truncatingRemainder(dividingBy: 1)
+          let y: Double = fall * (h + d.len) - d.len
+          let x: Double = d.x * w + fall * 18
+          streaks.move(to: CGPoint(x: x, y: y))
+          streaks.addLine(to: CGPoint(x: x + d.len * 0.12, y: y + d.len))
+        }
+        c.stroke(streaks, with: .color(rgb(0.75, 0.82, 0.95).opacity(0.22)), lineWidth: 1)
+        for b in RainyNight.beads {
+          let slid: Double = b.slide > 0 ? (b.y + t * b.slide).truncatingRemainder(dividingBy: 1) : b.y
+          let x = b.x * w, y = slid * h
+          fillCircle(c, x, y, b.r, rgb(0.7, 0.78, 0.9).opacity(0.14))
+          fillCircle(c, x - b.r * 0.3, y - b.r * 0.35, b.r * 0.35, Color.white.opacity(0.35))
+        }
+      }
+    }
+  }
+}
+
+// MARK: - meteor shower
+
+/// A starry sky with shooting stars streaking across now and then.
+struct MeteorShower: View {
+  private static let stars = StarField.make(170, seed: 0x3E7E_0125_6789_ABCD)
+
+  var body: some View {
+    ThemeClock(fps: 30) { t in
+      Canvas { c, size in
+        let w = Double(size.width), h = Double(size.height)
+        skyFill(c, size, [rgb(0.02, 0.02, 0.07), rgb(0.03, 0.04, 0.11), rgb(0.05, 0.04, 0.12)])
+        StarField.draw(c, MeteorShower.stars, size: size, t: t)
+        for slot in 0..<5 {
+          let period: Double = 5 + Double(slot) * 1.7
+          let local: Double = t + Double(slot) * 2.3
+          let cycle = Int((local / period).rounded(.down))
+          let age: Double = local - Double(cycle) * period
+          let life: Double = 1.3
+          guard age < life else { continue }
+          let p: Double = age / life
+          let sx: Double = (0.2 + 0.9 * hash01(cycle, slot)) * w
+          let sy: Double = (0.02 + 0.35 * hash01(slot, cycle + 7)) * h
+          let travel: Double = (0.35 + 0.25 * hash01(cycle + 3, slot)) * w
+          let hx: Double = sx - travel * p
+          let hy: Double = sy + travel * 0.45 * p
+          let tail: Double = 90 + 80 * hash01(slot + 9, cycle)
+          let fade: Double = sin(p * .pi)
+          let head = CGPoint(x: hx, y: hy)
+          let end = CGPoint(x: hx + tail * 0.9, y: hy - tail * 0.4)
+          var line = Path()
+          line.move(to: head)
+          line.addLine(to: end)
+          c.stroke(line, with: .linearGradient(Gradient(colors: [Color.white.opacity(0.95 * fade), .clear]), startPoint: head, endPoint: end), lineWidth: 1.8)
+          glowCircle(c, hx, hy, 7, rgb(0.8, 0.88, 1), 0.8 * fade)
+        }
+      }
+    }
+  }
+}
+
+// MARK: - galaxy
+
+/// A spiral galaxy turning slowly; the middle turns faster than the edge.
+struct SpiralGalaxy: View {
+  private struct Dot {
+    let r: Double, angle: Double, size: Double, color: Color, spread: Double
+  }
+
+  private static let stars = StarField.make(110, seed: 0x6A1A_C7E0_1111_2222)
+  private static let dots: [Dot] = {
+    var rng = SeededRandom(seed: 0x5917_A1A1_3333_4444)
+    return (0..<620).map { i in
+      let arm = Double(i % 3)
+      let r: Double = pow(rng.next(), 1.5)
+      let angle: Double = arm * 2.0944 + r * 4.4 + (rng.next() - 0.5) * 0.5
+      let warm: Double = max(0, 1 - r * 2.2)
+      let color = rgb(0.55 + 0.45 * warm, 0.55 + 0.35 * warm, 1 - 0.25 * warm)
+      return Dot(r: r, angle: angle, size: 0.5 + rng.next() * 1.3, color: color, spread: (rng.next() - 0.5) * 0.06)
+    }
+  }()
+
+  var body: some View {
+    ThemeClock(fps: 24) { t in
+      Canvas { c, size in
+        let w = Double(size.width), h = Double(size.height)
+        skyFill(c, size, [rgb(0.01, 0.01, 0.04), rgb(0.03, 0.02, 0.08), rgb(0.01, 0.01, 0.03)])
+        StarField.draw(c, SpiralGalaxy.stars, size: size, t: t, alpha: 0.7)
+        let cx = w * 0.5, cy = h * 0.36
+        let scale: Double = min(w, h) * 0.62
+        glowCircle(c, cx, cy, scale * 0.55, rgb(0.5, 0.4, 0.9), 0.18)
+        for d in SpiralGalaxy.dots {
+          let spin: Double = t * 0.05 / (0.25 + d.r)
+          let a: Double = d.angle + spin
+          let rr: Double = (d.r + d.spread) * scale
+          let x: Double = cx + cos(a) * rr
+          let y: Double = cy + sin(a) * rr * 0.5
+          let alpha: Double = 0.35 + 0.6 * (1 - d.r)
+          fillCircle(c, x, y, d.size, d.color.opacity(alpha))
+        }
+        glowCircle(c, cx, cy, scale * 0.16, rgb(1, 0.92, 0.8), 0.75)
+      }
+    }
+  }
+}
+
+// MARK: - lava lamp
+
+/// Warm blobs rising, merging and splitting like a lava lamp.
+struct LavaLamp: View {
+  private struct Blob {
+    let x: Double, r: Double, speed: Double, phase: Double, sway: Double
+  }
+
+  private static let blobs: [Blob] = {
+    var rng = SeededRandom(seed: 0x1A7A_1A3D_5555_6666)
+    return (0..<8).map { _ in
+      Blob(x: 0.15 + rng.next() * 0.7, r: 0.09 + rng.next() * 0.09, speed: 0.05 + rng.next() * 0.07, phase: rng.next() * 6.28, sway: 0.03 + rng.next() * 0.06)
+    }
+  }()
+
+  var body: some View {
+    ThemeClock(fps: 24) { t in
+      ZStack {
+        LinearGradient(colors: [rgb(0.1, 0.02, 0.08), rgb(0.05, 0.01, 0.06)], startPoint: .top, endPoint: .bottom)
+        LinearGradient(colors: [rgb(1, 0.45, 0.25), rgb(0.95, 0.2, 0.45), rgb(0.6, 0.15, 0.7)], startPoint: .top, endPoint: .bottom)
+          .hueRotation(.degrees(18 * sin(t * 0.07)))
+          .mask(
+            Canvas { c, size in
+              let w = Double(size.width), h = Double(size.height)
+              c.addFilter(.alphaThreshold(min: 0.5, color: .white))
+              c.addFilter(.blur(radius: 26))
+              c.drawLayer { layer in
+                for b in LavaLamp.blobs {
+                  let y: Double = 0.5 + 0.46 * sin(t * b.speed + b.phase)
+                  let x: Double = b.x + b.sway * sin(t * b.speed * 1.7 + b.phase)
+                  let r: Double = b.r * min(w, h)
+                  fillCircle(layer, x * w, y * h, r, .white)
+                }
+              }
+            }
+          )
+          .opacity(0.85)
+      }
+    }
+  }
+}
+
+// MARK: - waveform
+
+/// Glowing sound waves flowing across the screen.
+struct Waveform: View {
+  private static let lines: [(Color, Double, Double, Double)] = [
+    (rgb(0.3, 0.85, 1), 1.0, 0.0, 1.3),
+    (rgb(0.65, 0.45, 1), 0.8, 1.7, 1.0),
+    (rgb(1, 0.4, 0.75), 0.65, 3.1, 1.6),
+    (rgb(0.4, 1, 0.75), 0.5, 4.4, 0.8),
+  ]
+
+  var body: some View {
+    ThemeClock(fps: 30) { t in
+      ZStack {
+        LinearGradient(colors: [rgb(0.02, 0.02, 0.06), rgb(0.03, 0.03, 0.09), rgb(0.01, 0.01, 0.04)], startPoint: .top, endPoint: .bottom)
+        Canvas { c, size in
+          let w = Double(size.width), h = Double(size.height)
+          let mid: Double = h * 0.42
+          for (color, amp, phase, freq) in Waveform.lines {
+            var p = Path()
+            for i in 0...80 {
+              let x: Double = Double(i) / 80
+              let envelope: Double = sin(x * .pi)
+              let wave: Double = sin(x * 7 * freq + t * 0.9 + phase) + 0.4 * sin(x * 13 * freq - t * 1.3 + phase)
+              let breathe: Double = 0.6 + 0.4 * sin(t * 0.35 + phase)
+              let y: Double = mid + wave * envelope * amp * breathe * h * 0.09
+              let pt = CGPoint(x: x * w, y: y)
+              if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+            }
+            c.stroke(p, with: .color(color.opacity(0.25)), lineWidth: 9)
+            c.stroke(p, with: .color(color.opacity(0.9)), lineWidth: 1.6)
+          }
+        }
+        .blur(radius: 1.5)
+        .blendMode(.screen)
+      }
+    }
+  }
+}
+
+// MARK: - city lights
+
+/// A city skyline at night; windows light up and go dark one by one.
+struct CityLights: View {
+  private struct Building {
+    let x: Double, width: Double, height: Double, near: Bool, cols: Int, rows: Int
+  }
+
+  private static let stars = StarField.make(60, seed: 0xC171_57A2_7777_8888)
+  private static let buildings: [Building] = {
+    var rng = SeededRandom(seed: 0xB01D_1265_9999_0000)
+    var out: [Building] = []
+    for near in [false, true] {
+      var x = -0.02
+      while x < 1.02 {
+        let bw: Double = near ? 0.09 + rng.next() * 0.1 : 0.06 + rng.next() * 0.08
+        let bh: Double = near ? 0.16 + rng.next() * 0.26 : 0.22 + rng.next() * 0.22
+        out.append(Building(x: x, width: bw, height: bh, near: near, cols: max(2, Int(bw * 40)), rows: max(4, Int(bh * 55))))
+        x += bw + (near ? 0.006 : 0.004)
+      }
+    }
+    return out
+  }()
+
+  var body: some View {
+    ThemeClock(fps: 12) { t in
+      Canvas { c, size in
+        let w = Double(size.width), h = Double(size.height)
+        skyFill(c, size, [rgb(0.03, 0.03, 0.1), rgb(0.1, 0.06, 0.2), rgb(0.28, 0.12, 0.25)])
+        StarField.draw(c, CityLights.stars, size: CGSize(width: w, height: h * 0.4), t: t, alpha: 0.6)
+        glowCircle(c, w * 0.5, h, h * 0.55, rgb(1, 0.5, 0.35), 0.18)
+        for (bi, b) in CityLights.buildings.enumerated() {
+          let left: Double = b.x * w, bw: Double = b.width * w, bh: Double = b.height * h
+          let top: Double = h - bh
+          let body = b.near ? rgb(0.04, 0.035, 0.07) : rgb(0.08, 0.06, 0.13)
+          c.fill(Path(CGRect(x: left, y: top, width: bw, height: bh)), with: .color(body))
+          let cw: Double = bw / Double(b.cols), rh: Double = min(9, bh / Double(b.rows))
+          let tick = Int((t / (b.near ? 9 : 14)).rounded(.down))
+          var lit = Path()
+          for r in 1..<b.rows {
+            let wy: Double = top + Double(r) * rh + 2
+            if wy > h - 6 { break }
+            for col in 0..<b.cols {
+              let seed = bi * 1000 + r * 37 + col
+              let change = Int(hash01(seed, 3) * 5)
+              guard hash01(seed, tick + change) > 0.62 else { continue }
+              lit.addRect(CGRect(x: left + Double(col) * cw + cw * 0.25, y: wy, width: cw * 0.5, height: rh * 0.5))
+            }
+          }
+          c.fill(lit, with: .color(rgb(1, 0.82, 0.5).opacity(b.near ? 0.75 : 0.4)))
+        }
+        // a red light blinking on the tallest tower
+        if let tall = CityLights.buildings.filter({ $0.near }).max(by: { $0.height < $1.height }) {
+          let on: Double = sin(t * 2.4) > 0.6 ? 1 : 0.15
+          glowCircle(c, (tall.x + tall.width / 2) * w, h - tall.height * h - 4, 8, rgb(1, 0.2, 0.2), 0.9 * on)
+        }
+      }
+    }
+  }
+}
+
+// MARK: - bokeh
+
+/// Soft out-of-focus lights drifting and breathing.
+struct Bokeh: View {
+  private struct Orb {
+    let x: Double, y: Double, r: Double, color: Color, drift: Double, phase: Double
+  }
+
+  private static let orbs: [Orb] = {
+    var rng = SeededRandom(seed: 0xB0CE_0000_ABCD_1234)
+    let palette = [rgb(1, 0.7, 0.4), rgb(0.5, 0.75, 1), rgb(1, 0.5, 0.7), rgb(0.7, 0.55, 1), rgb(0.55, 1, 0.85)]
+    return (0..<28).map { i in
+      Orb(x: rng.next(), y: rng.next(), r: 18 + rng.next() * 70, color: palette[i % palette.count], drift: 0.004 + rng.next() * 0.012, phase: rng.next() * 6.28)
+    }
+  }()
+
+  var body: some View {
+    ThemeClock(fps: 20) { t in
+      Canvas { c, size in
+        let w = Double(size.width), h = Double(size.height)
+        skyFill(c, size, [rgb(0.03, 0.02, 0.06), rgb(0.05, 0.03, 0.09), rgb(0.02, 0.02, 0.04)])
+        for o in Bokeh.orbs {
+          let y: Double = (o.y - t * o.drift).truncatingRemainder(dividingBy: 1.2)
+          let yy: Double = (y < 0 ? y + 1.2 : y) * h - 0.1 * h
+          let x: Double = o.x * w + 24 * sin(t * 0.1 + o.phase)
+          let breathe: Double = 0.55 + 0.45 * sin(t * 0.4 + o.phase)
+          glowCircle(c, x, yy, o.r, o.color, 0.32 * breathe)
+          c.stroke(Path(ellipseIn: CGRect(x: x - o.r * 0.62, y: yy - o.r * 0.62, width: o.r * 1.24, height: o.r * 1.24)), with: .color(o.color.opacity(0.1 * breathe)), lineWidth: 1.2)
+        }
+      }
+      .blur(radius: 2)
+    }
+  }
+}
+
+// MARK: - falling things (blossom, leaves)
+
+private struct Faller {
+  let x: Double, y: Double, size: Double, speed: Double, sway: Double, spin: Double, phase: Double, tint: Int
+
+  static func make(_ n: Int, seed: UInt64) -> [Faller] {
+    var rng = SeededRandom(seed: seed)
+    return (0..<n).map { _ in
+      let depth = rng.next()
+      return Faller(
+        x: rng.next(), y: rng.next(), size: 3 + depth * 6, speed: 0.025 + depth * 0.05, sway: 10 + rng.next() * 30,
+        spin: 0.4 + rng.next() * 1.4, phase: rng.next() * 6.28, tint: Int(rng.next() * 4))
+    }
+  }
+
+  /// Where this one is at time t, its turn and its flip (for a tumbling look).
+  func place(t: Double, w: Double, h: Double) -> (x: Double, y: Double, angle: Double, flip: Double) {
+    let fall: Double = (y + t * speed).truncatingRemainder(dividingBy: 1)
+    let yy: Double = fall * (h + 40) - 20
+    let xx: Double = x * w + sway * sin(t * 0.5 + phase) + fall * 40
+    return (xx, yy, t * spin + phase, cos(t * spin * 1.3 + phase))
+  }
+}
+
+func drawFaller(_ c: GraphicsContext, _ f: (x: Double, y: Double, angle: Double, flip: Double), shape: Path, color: Color) {
+  var g = c
+  g.translateBy(x: f.x, y: f.y)
+  g.rotate(by: .radians(f.angle))
+  g.scaleBy(x: max(0.15, abs(f.flip)), y: 1)
+  g.fill(shape, with: .color(color))
+}
+
+/// Spring: cherry blossom petals drifting through a pink dusk.
+struct Blossom: View {
+  private static let petals = Faller.make(70, seed: 0x5A4B_0BB0_1357_2468)
+  private static let tints = [rgb(1, 0.78, 0.86), rgb(1, 0.68, 0.8), rgb(1, 0.88, 0.92), rgb(0.98, 0.6, 0.75)]
+
+  var body: some View {
+    ThemeClock(fps: 30) { t in
+      Canvas { c, size in
+        let w = Double(size.width), h = Double(size.height)
+        skyFill(c, size, [rgb(0.1, 0.07, 0.2), rgb(0.32, 0.16, 0.32), rgb(0.55, 0.3, 0.42)])
+        glowCircle(c, w * 0.72, h * 0.16, w * 0.3, rgb(1, 0.85, 0.9), 0.25)
+        fillCircle(c, w * 0.72, h * 0.16, w * 0.06, rgb(1, 0.95, 0.96).opacity(0.9))
+        for p in Blossom.petals {
+          let s = p.size
+          let petal = Path(ellipseIn: CGRect(x: -s, y: -s * 0.55, width: s * 2, height: s * 1.1))
+          drawFaller(c, p.place(t: t, w: w, h: h), shape: petal, color: Blossom.tints[p.tint].opacity(0.85))
+        }
+      }
+    }
+  }
+}
+
+/// Autumn: leaves tumbling down under a low harvest moon.
+struct AutumnLeaves: View {
+  private static let leaves = Faller.make(46, seed: 0xA070_1EAF_8642_9753)
+  private static let tints = [rgb(0.95, 0.45, 0.15), rgb(0.85, 0.25, 0.12), rgb(0.98, 0.7, 0.2), rgb(0.6, 0.3, 0.12)]
+
+  private static func leaf(_ s: Double) -> Path {
+    var p = Path()
+    p.move(to: CGPoint(x: -s * 1.4, y: 0))
+    p.addQuadCurve(to: CGPoint(x: s * 1.4, y: 0), control: CGPoint(x: 0, y: -s * 1.3))
+    p.addQuadCurve(to: CGPoint(x: -s * 1.4, y: 0), control: CGPoint(x: 0, y: s * 1.3))
+    return p
+  }
+
+  var body: some View {
+    ThemeClock(fps: 30) { t in
+      Canvas { c, size in
+        let w = Double(size.width), h = Double(size.height)
+        skyFill(c, size, [rgb(0.06, 0.04, 0.1), rgb(0.2, 0.08, 0.1), rgb(0.38, 0.16, 0.08)])
+        glowCircle(c, w * 0.3, h * 0.24, w * 0.35, rgb(1, 0.6, 0.25), 0.28)
+        fillCircle(c, w * 0.3, h * 0.24, w * 0.09, rgb(1, 0.8, 0.5).opacity(0.92))
+        for l in AutumnLeaves.leaves {
+          drawFaller(c, l.place(t: t * 0.9, w: w, h: h), shape: AutumnLeaves.leaf(l.size), color: AutumnLeaves.tints[l.tint].opacity(0.9))
+        }
+      }
+    }
+  }
+}
+
+// MARK: - golden hour
+
+/// Summer: the sun setting into a glittering sea, warm specks of light in the air.
+struct GoldenHour: View {
+  private static let motes = Faller.make(30, seed: 0x6011_DE40_0000_FFFF)
+
+  var body: some View {
+    ThemeClock(fps: 24) { t in
+      Canvas { c, size in
+        let w = Double(size.width), h = Double(size.height)
+        let horizon: Double = h * 0.6
+        c.fill(
+          Path(CGRect(x: 0, y: 0, width: w, height: horizon)),
+          with: verticalGradient([rgb(0.12, 0.1, 0.3), rgb(0.7, 0.3, 0.35), rgb(1, 0.62, 0.3)], from: 0, to: horizon))
+        let r: Double = w * 0.17
+        glowCircle(c, w * 0.5, horizon, r * 3.2, rgb(1, 0.7, 0.35), 0.45)
+        var sky = c
+        sky.clip(to: Path(CGRect(x: 0, y: 0, width: w, height: horizon)))
+        fillCircle(sky, w * 0.5, horizon - r * 0.35, r, rgb(1, 0.86, 0.55))
+        c.fill(
+          Path(CGRect(x: 0, y: horizon, width: w, height: h - horizon)),
+          with: verticalGradient([rgb(0.55, 0.25, 0.25), rgb(0.15, 0.08, 0.18), rgb(0.05, 0.03, 0.08)], from: horizon, to: h))
+        // the sun's path on the water
+        for j in 0..<22 {
+          let fj = Double(j)
+          let y: Double = horizon + 4 + fj * fj * 0.9
+          if y > h { break }
+          let flicker: Double = 0.5 + 0.5 * sin(t * 2 + fj * 1.9)
+          let half: Double = r * (0.4 + fj * 0.07) * (0.6 + 0.4 * flicker)
+          let x: Double = w * 0.5 - half + 5 * sin(t * 0.8 + fj)
+          c.fill(Path(roundedRect: CGRect(x: x, y: y, width: half * 2, height: 2.5), cornerRadius: 1.2), with: .color(rgb(1, 0.8, 0.5).opacity(0.18 + 0.3 * flicker)))
+        }
+        for m in GoldenHour.motes {
+          let p = m.place(t: -t * 0.6, w: w, h: horizon)
+          let tw: Double = 0.4 + 0.6 * abs(sin(t * m.spin + m.phase))
+          glowCircle(c, p.x, p.y, m.size * 1.6, rgb(1, 0.85, 0.55), 0.5 * tw)
+        }
+      }
+    }
+  }
+}
+
+// MARK: - christmas
+
+/// Winter: snow falling past strings of twinkling fairy lights, pine trees below.
+struct ChristmasLights: View {
+  private static let flakes = Faller.make(120, seed: 0xC4A1_5735_0000_1225)
+  private static let bulbColors = [rgb(1, 0.3, 0.3), rgb(0.35, 1, 0.5), rgb(1, 0.82, 0.35), rgb(0.4, 0.65, 1)]
+
+  private static func tree(_ c: GraphicsContext, x: Double, base: Double, height: Double) {
+    let green = rgb(0.03, 0.12, 0.08)
+    for k in 0..<3 {
+      let fk = Double(k)
+      let top: Double = base - height + fk * height * 0.22
+      let half: Double = height * (0.22 + fk * 0.1)
+      let bottom: Double = top + height * 0.42
+      var p = Path()
+      p.move(to: CGPoint(x: x, y: top))
+      p.addLine(to: CGPoint(x: x + half, y: bottom))
+      p.addLine(to: CGPoint(x: x - half, y: bottom))
+      p.closeSubpath()
+      c.fill(p, with: .color(green))
+    }
+  }
+
+  var body: some View {
+    ThemeClock(fps: 30) { t in
+      Canvas { c, size in
+        let w = Double(size.width), h = Double(size.height)
+        skyFill(c, size, [rgb(0.02, 0.03, 0.09), rgb(0.04, 0.06, 0.15), rgb(0.08, 0.1, 0.2)])
+        // fairy lights hanging in two loops
+        for (row, y0) in [0.07, 0.17].enumerated() {
+          let sag: Double = h * 0.05
+          var wire = Path()
+          let n = 16
+          for i in 0...n {
+            let x: Double = Double(i) / Double(n)
+            let u: Double = 2 * x - 1
+            let y: Double = y0 * h + sag * (1 - u * u)
+            if i == 0 { wire.move(to: CGPoint(x: x * w, y: y)) } else { wire.addLine(to: CGPoint(x: x * w, y: y)) }
+          }
+          c.stroke(wire, with: .color(Color.white.opacity(0.12)), lineWidth: 1)
+          for i in 1..<n {
+            let x: Double = Double(i) / Double(n)
+            let u: Double = 2 * x - 1
+            let y: Double = y0 * h + sag * (1 - u * u) + 5
+            let color = ChristmasLights.bulbColors[(i + row) % 4]
+            let tw: Double = 0.45 + 0.55 * max(0, sin(t * 1.6 + Double(i * 3 + row * 5)))
+            glowCircle(c, x * w, y, 14, color, 0.55 * tw)
+            fillCircle(c, x * w, y, 2.6, color.opacity(0.5 + 0.5 * tw))
+          }
+        }
+        // snowy ground and trees
+        c.fill(Path(CGRect(x: 0, y: h * 0.86, width: w, height: h * 0.14)), with: verticalGradient([rgb(0.55, 0.6, 0.72), rgb(0.3, 0.34, 0.45)], from: h * 0.86, to: h))
+        for (i, x) in [0.12, 0.3, 0.78, 0.92].enumerated() {
+          ChristmasLights.tree(c, x: x * w, base: h * 0.88, height: h * (0.16 + 0.05 * Double(i % 2)))
+        }
+        for f in ChristmasLights.flakes {
+          let p = f.place(t: t * 0.8, w: w, h: h)
+          fillCircle(c, p.x, p.y, f.size * 0.35, Color.white.opacity(0.35 + 0.08 * f.size))
+        }
+      }
+    }
+  }
+}
+
+// MARK: - seasons
+
+/// The special one: the scene changes with the season — blossom in spring,
+/// golden hour in summer, falling leaves in autumn, Christmas lights in winter.
+struct Seasons: View {
+  /// "spring" | "summer" | "autumn" | "christmas" for a date (northern hemisphere).
+  static func season(_ d: Date = Date()) -> String {
+    switch Calendar.current.component(.month, from: d) {
+    case 3...5: return "spring"
+    case 6...8: return "summer"
+    case 9...11: return "autumn"
+    default: return "christmas"
+    }
+  }
+
+  var body: some View {
+    switch Seasons.season() {
+    case "spring": Blossom()
+    case "summer": GoldenHour()
+    case "autumn": AutumnLeaves()
+    default: ChristmasLights()
     }
   }
 }

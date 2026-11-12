@@ -3,14 +3,24 @@ import { invoke } from "@tauri-apps/api/core";
 import { fmtBytes, offline, useDownloads } from "../downloads";
 import { DAY_PARTS, defaultHome, greetingText, homePrefs, type HomePrefs } from "../greeting";
 import { library, useLibrary, type Motion } from "../library";
-import { defaultSettings, settings, type IntroMode, type Refresh, type Settings, type ThemeName } from "../native";
+import { defaultSettings, settings, type IntroMode, type LyricsLook, type Refresh, type Settings, type ThemeName } from "../native";
 import { useApp, type SettingsSection } from "../state";
 import { Icon, PageHeader } from "../ui";
 import { HomeHero } from "./Home";
 import { buildLabel, updates, useUpdates } from "../update";
 
+/** The season the Seasons background shows right now (northern hemisphere, like the phone side). */
+function seasonNow(): { name: string; id: ThemeName } {
+  const m = new Date().getMonth() + 1;
+  if (m >= 3 && m <= 5) return { name: "Spring blossom", id: "blossom" };
+  if (m >= 6 && m <= 8) return { name: "Summer golden hour", id: "summer" };
+  if (m >= 9 && m <= 11) return { name: "Autumn leaves", id: "leaves" };
+  return { name: "Christmas lights", id: "christmas" };
+}
+
 const THEMES: { id: ThemeName; name: string; about: string }[] = [
   { id: "artwork", name: "Moving Artwork", about: "The song's colours, slowly drifting" },
+  { id: "seasons", name: "Seasons", about: `Changes with the season. Now: ${seasonNow().name}` },
   { id: "lunar", name: "Lunar", about: "Night sky with tonight's real moon" },
   { id: "aurora", name: "Aurora", about: "Northern lights rippling over stars" },
   { id: "nebula", name: "Nebula", about: "Swirling clouds of deep space" },
@@ -18,6 +28,17 @@ const THEMES: { id: ThemeName; name: string; about: string }[] = [
   { id: "ocean", name: "Night Ocean", about: "Waves rolling under the moon" },
   { id: "snow", name: "Snowfall", about: "Soft snow drifting down" },
   { id: "fireflies", name: "Fireflies", about: "Little lights glowing in the dark" },
+  { id: "rain", name: "Rainy Night", about: "Rain on the glass, city lights below" },
+  { id: "meteors", name: "Meteor Shower", about: "Shooting stars across the sky" },
+  { id: "galaxy", name: "Galaxy", about: "A spiral galaxy, slowly turning" },
+  { id: "lava", name: "Lava Lamp", about: "Warm blobs rising and melting together" },
+  { id: "waveform", name: "Waveform", about: "Glowing sound waves flowing by" },
+  { id: "city", name: "City Lights", about: "A skyline where windows light up" },
+  { id: "bokeh", name: "Bokeh", about: "Soft, blurry lights drifting" },
+  { id: "blossom", name: "Blossom", about: "Spring petals in a pink dusk" },
+  { id: "summer", name: "Golden Hour", about: "Summer sun setting into the sea" },
+  { id: "leaves", name: "Autumn Leaves", about: "Leaves tumbling under a harvest moon" },
+  { id: "christmas", name: "Christmas", about: "Fairy lights, snow and pine trees" },
   { id: "black", name: "Pure Black", about: "Sharp on your screen, saves battery" },
   { id: "photo", name: "Your Photo", about: "A picture of your own, blurred" },
 ];
@@ -193,7 +214,7 @@ function Root() {
     appearance: s ? `${theme}${s.still ? " · Still" : ""}` : "",
     home: `“${greetingText(homePrefs(lib))}”`,
     playback: [app.player.autoplay ? "Autoplay on" : "Autoplay off", app.player.aiShuffle ? "AI Shuffle on" : "", s?.crossfade ? `Crossfade ${s.crossfade}s` : ""].filter(Boolean).join(" · "),
-    lyrics: s ? (s.liveLyrics ? "Live lyrics on" : "Live lyrics off") : "",
+    lyrics: s ? [LYRIC_COLORS.find((c) => c.v === s.lyrics?.color)?.label ?? "White", LYRIC_STYLES.find((x) => x.v === s.lyrics?.style)?.label ?? "Fill"].join(" · ") : "",
     downloads: dl.tracks.length ? `${dl.tracks.length} songs · ${fmtBytes(dl.bytes)}` : "None yet",
     history: `${lib.recent.length} recently played`,
     about: "Version and resets",
@@ -261,6 +282,8 @@ function Appearance() {
                 {t.id === "lunar" && <i className="th-moon" />}
                 {t.id === "synthwave" && <i className="th-sun" />}
                 {t.id === "ocean" && <i className="th-wave" />}
+                {t.id === "seasons" && <span className={`th-season th-${seasonNow().id}`} />}
+                {t.id === "seasons" && <span className="th-badge">Special</span>}
                 {t.id === "photo" && s?.photo && <img src={`data:image/jpeg;base64,${s.photo}`} alt="" />}
                 {t.id === "photo" && !s?.photo && <span className="th-add">+</span>}
                 {on && (
@@ -480,19 +503,104 @@ function Playback() {
   );
 }
 
+const LYRIC_COLORS: { v: LyricsLook["color"]; label: string; css: string }[] = [
+  { v: "white", label: "White", css: "#ffffff" },
+  { v: "artwork", label: "Artwork", css: "conic-gradient(#ff8a8a, #ffd27a, #8affc1, #8ab8ff, #d08aff, #ff8a8a)" },
+  { v: "moon", label: "Moon", css: "#c7dbff" },
+  { v: "gold", label: "Gold", css: "#ffd680" },
+  { v: "rose", label: "Rose", css: "#ffb3c7" },
+  { v: "mint", label: "Mint", css: "#99ffd6" },
+  { v: "violet", label: "Violet", css: "#ccb3ff" },
+];
+const LYRIC_STYLES: { v: LyricsLook["style"]; label: string }[] = [
+  { v: "fill", label: "Fill" },
+  { v: "glow", label: "Glow" },
+  { v: "bounce", label: "Bounce" },
+  { v: "rise", label: "Rise" },
+];
+
 function Lyrics() {
+  const app = useApp();
   const [s, patch] = useSettings();
+  const look = s?.lyrics ?? defaultSettings.lyrics;
+  const set = (p: Partial<LyricsLook>) => {
+    patch({ lyrics: { ...look, ...p } });
+    settings.setLyricsLook(p).catch((e) => app.toast(String(e)));
+  };
+  const color = LYRIC_COLORS.find((c) => c.v === look.color) ?? LYRIC_COLORS[0];
   return (
-    <Group note="The line being sung shows at the top of the screen and on the lock screen while music plays.">
-      <Toggle
-        title="Live Lyrics in the Dynamic Island"
-        on={s?.liveLyrics ?? true}
-        set={(on) => {
-          patch({ liveLyrics: on });
-          settings.setLiveLyrics(on);
-        }}
-      />
-    </Group>
+    <>
+      <div className={`lyric-preview ${look.align === "center" ? "center" : ""} st-${look.style}`} style={{ ["--lc" as string]: color.v === "artwork" ? "#ffd27a" : color.css, ["--ls" as string]: look.size }} aria-hidden="true">
+        <p className="past">I been running through the night</p>
+        <p className="now">
+          {"Moonlight on the window glass".split(" ").map((w, i) => (
+            <span key={i} style={{ ["--d" as string]: `${i * 0.45}s` }} className={look.words ? "" : "line"}>
+              {w}{" "}
+            </span>
+          ))}
+        </p>
+        <p className={`next ${look.blur ? "blur" : ""}`}>Every city sleeps but I</p>
+      </div>
+
+      <Group title="Colour" note="The colour the words light up in. Artwork picks it from each song's cover.">
+        <div className="swatches">
+          {LYRIC_COLORS.map((c) => (
+            <button key={c.v} className={`swatch ${c.v === look.color ? "on" : ""}`} onClick={() => set({ color: c.v })} aria-label={c.label} aria-pressed={c.v === look.color}>
+              <i style={{ background: c.css }} />
+              <small>{c.label}</small>
+            </button>
+          ))}
+        </div>
+      </Group>
+
+      <Group title="Effect" note="Fill brightens each word as it's sung. Glow adds a halo. Bounce and Rise make the words move.">
+        <div className="set-row">
+          <Segmented value={look.style} options={LYRIC_STYLES} set={(v) => set({ style: v })} />
+        </div>
+        <Toggle title="Word by Word" sub="Off lights up the whole line at once." on={look.words} set={(on) => set({ words: on })} />
+      </Group>
+
+      <Group title="Text">
+        <div className="set-row">
+          <Segmented
+            value={look.size}
+            options={[
+              { v: 0.85, label: "Small" },
+              { v: 1, label: "Normal" },
+              { v: 1.15, label: "Large" },
+              { v: 1.3, label: "Huge" },
+            ]}
+            set={(v) => set({ size: v })}
+          />
+        </div>
+        <div className="set-row">
+          <Segmented
+            value={look.align}
+            options={[
+              { v: "left", label: "Left" },
+              { v: "center", label: "Centre" },
+            ]}
+            set={(v) => set({ align: v })}
+          />
+        </div>
+        <Toggle title="Soften Other Lines" sub="Lines that aren't being sung are slightly blurred." on={look.blur} set={(on) => set({ blur: on })} />
+      </Group>
+
+      <Group
+        title="Timing"
+        note="Lyrics running early or late on a song? In Now Playing, press and hold the line you're hearing and choose Sync to This Line. Nocturn remembers it for that song."
+      >
+        <Toggle
+          title="Live Lyrics in the Dynamic Island"
+          sub="The line being sung shows at the top of the screen and on the lock screen."
+          on={s?.liveLyrics ?? true}
+          set={(on) => {
+            patch({ liveLyrics: on });
+            settings.setLiveLyrics(on);
+          }}
+        />
+      </Group>
+    </>
   );
 }
 
