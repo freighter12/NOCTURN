@@ -51,8 +51,8 @@ h1, h2, h3, p { margin: 0; }
   animation: page-tab 0.42s var(--spring) both;
 }
 /* going deeper slides in from the right, Back from the left, tabs fade and settle */
-.page.nav-push { animation: page-push 0.46s var(--spring) both; }
-.page.nav-back { animation: page-back 0.4s var(--spring) both; }
+.page.go-push { animation: page-push 0.46s var(--spring) both; }
+.page.go-back { animation: page-back 0.4s var(--spring) both; }
 @keyframes page-tab { from { opacity: 0; transform: scale(0.985); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
 @keyframes page-push { from { opacity: 0; transform: translateX(56px); } to { opacity: 1; transform: none; } }
 @keyframes page-back { from { opacity: 0; transform: translateX(-36px); } to { opacity: 1; transform: none; } }
@@ -72,9 +72,9 @@ h1, h2, h3, p { margin: 0; }
 .page.hold { animation: none !important; opacity: 0; }
 .page.hold > * > *, .page.hold .home-hero * { animation: none !important; }
 /* after the intro, Home's greeting arrives a little more grandly */
-.page.nav-tab .home-hero .hero-title { animation: hero-in 0.8s var(--spring) 0.08s both; }
-.page.nav-tab .home-hero .eyebrow { animation: hero-in 0.8s var(--spring) both; }
-.page.nav-tab .home-hero .hero-moon { animation: moon-in 1.1s var(--spring) both; }
+.page.go-tab .home-hero .hero-title { animation: hero-in 0.8s var(--spring) 0.08s both; }
+.page.go-tab .home-hero .eyebrow { animation: hero-in 0.8s var(--spring) both; }
+.page.go-tab .home-hero .hero-moon { animation: moon-in 1.1s var(--spring) both; }
 @keyframes hero-in { from { opacity: 0; transform: translateY(14px); letter-spacing: 0.04em; filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
 @keyframes moon-in { from { opacity: 0; transform: translate(18px, 10px) rotate(-14deg) scale(0.9); } to { opacity: 0.85; transform: none; } }
 

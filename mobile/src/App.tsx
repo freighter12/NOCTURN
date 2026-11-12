@@ -364,7 +364,7 @@ export default function App() {
 
   return (
     <AppContext.Provider value={ctx}>
-      <main className={`page nav-${nav.current} ${introDone ? "" : "hold"} ${stack.length > 1 ? "pushed" : ""} ${isNative ? "native" : "web"}`} key={routeKey}>
+      <main className={`page go-${nav.current} ${introDone ? "" : "hold"} ${stack.length > 1 ? "pushed" : ""} ${isNative ? "native" : "web"}`} key={routeKey}>
         {page}
       </main>
       {!isNative && <WebChrome />}
