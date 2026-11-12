@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { fmtBytes, offline, useDownloads } from "../downloads";
 import { DAY_PARTS, defaultHome, greetingText, homePrefs, type HomePrefs } from "../greeting";
-import { library, useLibrary } from "../library";
-import { defaultSettings, settings, type Settings, type ThemeName } from "../native";
+import { library, useLibrary, type Motion } from "../library";
+import { defaultSettings, settings, type IntroMode, type Settings, type ThemeName } from "../native";
 import { useApp, type SettingsSection } from "../state";
 import { Icon, PageHeader } from "../ui";
 import { HomeHero } from "./Home";
@@ -217,6 +217,7 @@ function Root() {
 
 function Appearance() {
   const app = useApp();
+  const lib = useLibrary();
   const [s, patch] = useSettings();
   const picker = useRef<HTMLInputElement>(null);
 
@@ -242,7 +243,7 @@ function Appearance() {
     }
   };
 
-  const look = (p: { speed?: number; dim?: number; still?: boolean }) => {
+  const look = (p: { speed?: number; dim?: number; still?: boolean; intro?: IntroMode }) => {
     patch(p);
     settings.setLook(p).catch((e) => app.toast(String(e)));
   };
@@ -290,6 +291,34 @@ function Appearance() {
       <Group title="Darkness Behind Text" note="Darker makes words easier to read over bright backgrounds.">
         <div className="set-row">
           <Segmented value={s?.dim ?? 1} options={DIMS} set={(v) => look({ dim: v })} />
+        </div>
+      </Group>
+
+      <Group title="Start-up Animation" note="The moon and Nocturn name when the app opens. Tap the screen to skip it.">
+        <div className="set-row">
+          <Segmented
+            value={s?.intro ?? "full"}
+            options={[
+              { v: "full" as IntroMode, label: "Full" },
+              { v: "short" as IntroMode, label: "Quick" },
+              { v: "off" as IntroMode, label: "Off" },
+            ]}
+            set={(v) => look({ intro: v })}
+          />
+        </div>
+      </Group>
+
+      <Group title="Page Animations" note="How pages slide and fade when you move around the app.">
+        <div className="set-row">
+          <Segmented
+            value={lib.prefs?.motion ?? "full"}
+            options={[
+              { v: "full" as Motion, label: "Full" },
+              { v: "subtle" as Motion, label: "Subtle" },
+              { v: "off" as Motion, label: "Off" },
+            ]}
+            set={(v) => library.setMotion(v)}
+          />
         </div>
       </Group>
     </>

@@ -27,8 +27,15 @@ export type Library = {
   /** Settings › Home Screen (see greeting.ts) */
   home?: Partial<HomePrefs>;
   /** small app preferences kept with the library */
-  prefs?: { haptics?: boolean };
+  prefs?: { haptics?: boolean; motion?: Motion };
 };
+
+/** page animations: Settings › Appearance */
+export type Motion = "full" | "subtle" | "off";
+
+function applyMotion(m: Motion | undefined) {
+  document.documentElement.dataset.motion = m ?? "full";
+}
 
 const blank: Library = { version: 1, mine: [], liked: [], albums: [], playlists: [], artists: [], recent: [], searches: [] };
 
@@ -61,6 +68,7 @@ export async function loadLibrary() {
     const parsed = JSON.parse(await api.libraryLoad());
     lib = { ...blank, ...parsed, version: 1 };
     setHapticsOn(lib.prefs?.haptics ?? true);
+    applyMotion(lib.prefs?.motion);
   } catch {
     lib = blank;
   }
@@ -125,6 +133,10 @@ export const library = {
   },
   setHome(patch: Partial<HomePrefs> | null) {
     set({ ...lib, home: patch === null ? {} : { ...lib.home, ...patch } });
+  },
+  setMotion(m: Motion) {
+    applyMotion(m);
+    set({ ...lib, prefs: { ...lib.prefs, motion: m } });
   },
   setHaptics(on: boolean) {
     setHapticsOn(on);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, errorText, type Card, type Track } from "./api";
 import { library, loadLibrary } from "./library";
-import { chrome, isNative, player, type PlayerState } from "./native";
+import { chrome, isNative, player, settings, type PlayerState } from "./native";
 import { AppContext, useApp, type AppCtx, type Route, type TabId } from "./state";
 import { Art, Icon } from "./ui";
 import Home from "./pages/Home";
@@ -51,6 +51,30 @@ export default function App() {
   const routeKey = `${tab}:${stack.length}:${JSON.stringify(route).slice(0, 80)}`;
 
   const aiOn = useRef(false);
+  /** which way the last navigation went, for the page animation */
+  const nav = useRef<"tab" | "push" | "back">("tab");
+  // the first page waits until the start-up animation has finished
+  const [introDone, setIntroDone] = useState(!isNative);
+  useEffect(() => {
+    if (!isNative) return;
+    let done = false;
+    const finish = () => {
+      if (!done) {
+        done = true;
+        setIntroDone(true);
+      }
+    };
+    const off = chrome.onAction((kind) => kind === "intro" && finish());
+    settings
+      .get()
+      .then((s) => !s.introPlaying && finish())
+      .catch(finish);
+    const timer = setTimeout(finish, 3200);
+    return () => {
+      clearTimeout(timer);
+      off.then((f) => f());
+    };
+  }, []);
   const toast = useCallback((text: string) => {
     setToastText(text);
     clearTimeout(toastTimer.current);
@@ -67,6 +91,7 @@ export default function App() {
   const push = useCallback(
     (r: Route) => {
       saveScroll();
+      nav.current = "push";
       setStacks((s) => ({ ...s, [tab]: [...s[tab], r] }));
       player.haptic("light");
     },
@@ -74,12 +99,14 @@ export default function App() {
     [tab, routeKey],
   );
   const back = useCallback(() => {
+    nav.current = "back";
     setStacks((s) => (s[tab].length > 1 ? { ...s, [tab]: s[tab].slice(0, -1) } : s));
   }, [tab]);
 
   const selectTab = useCallback(
     (t: TabId) => {
       saveScroll();
+      nav.current = t === tab ? "back" : "tab";
       if (t === tab) {
         // tapping the current tab again goes back to its first page, like iOS
         setStacks((s) => ({ ...s, [t]: s[t].slice(0, 1) }));
@@ -240,6 +267,7 @@ export default function App() {
       chrome.onTab((id) => {
         if (id === "home" || id === "search" || id === "library") {
           setTab((cur) => {
+            nav.current = cur === id ? "back" : "tab";
             if (cur === id) setStacks((s) => ({ ...s, [id]: s[id].slice(0, 1) }));
             return id;
           });
@@ -336,7 +364,7 @@ export default function App() {
 
   return (
     <AppContext.Provider value={ctx}>
-      <main className={`page ${stack.length > 1 ? "pushed" : ""} ${isNative ? "native" : "web"}`} key={routeKey}>
+      <main className={`page nav-${nav.current} ${introDone ? "" : "hold"} ${stack.length > 1 ? "pushed" : ""} ${isNative ? "native" : "web"}`} key={routeKey}>
         {page}
       </main>
       {!isNative && <WebChrome />}

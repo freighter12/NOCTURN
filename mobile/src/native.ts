@@ -51,9 +51,15 @@ export type Settings = {
   still: boolean;
   autoplay: boolean;
   aiShuffle: boolean;
+  /** start-up animation */
+  intro: IntroMode;
+  /** the start-up animation is on screen right now */
+  introPlaying: boolean;
 };
+export type IntroMode = "full" | "short" | "off";
 export const defaultSettings: Settings = {
   theme: "artwork", photo: null, liveLyrics: true, speed: 1, dim: 1, still: false, autoplay: true, aiShuffle: false,
+  intro: "full", introPlaying: false,
 };
 
 export type TabSpec = { id: string; title: string; symbol: string; search?: boolean };
@@ -247,7 +253,7 @@ export const downloads = {
 export const settings = {
   get: () =>
     isNative ? call<Settings>("get_settings").then((s) => ({ ...defaultSettings, ...s })) : Promise.resolve(localSettings()),
-  setLook(look: { speed?: number; dim?: number; still?: boolean }) {
+  setLook(look: { speed?: number; dim?: number; still?: boolean; intro?: IntroMode }) {
     if (!isNative) return Promise.resolve(saveLocal(look));
     return call("set_look", look);
   },
