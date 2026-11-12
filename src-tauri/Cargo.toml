@@ -1,6 +1,6 @@
 [package]
 name = "nocturn"
-version = "0.6.0"
+version = "0.6.1"
 description = "NOCTURN — Windows optimisation engine and AI desktop assistant"
 edition = "2021"
 publish = false
