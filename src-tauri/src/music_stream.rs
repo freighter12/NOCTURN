@@ -110,8 +110,17 @@ pub fn score(want: &RemoteTrack, c: &Candidate) -> Option<(f64, &'static str)> {
     let mut ca = artist_set(&cand_artist);
     ca.extend(artist_set(&c.channel));
     let artist_ok = wa.is_empty() || wa.iter().any(|a| ca.iter().any(|b| a == b || (a.len() > 3 && b.contains(a.as_str())) || (b.len() > 3 && a.contains(b.as_str()))) || (a.len() > 3 && raw_cand.replace(' ', "").contains(a.as_str())));
-    if !artist_ok && !c.official {
-        return None;
+    // A different artist's upload is only trusted when it's official, the title
+    // is the same and the length agrees (credits differ between services, e.g.
+    // "Kanye West" vs "Ye") — otherwise it's a same-named song by someone else.
+    if !artist_ok && !wa.is_empty() {
+        let len_ok = match (want.duration_ms, c.duration_ms) {
+            (Some(w), Some(d)) => (w - d).abs() <= 3000,
+            _ => false,
+        };
+        if !(c.official && sim >= 0.95 && len_ok) {
+            return None;
+        }
     }
 
     let mut s = sim * 3.0 + if contained { 0.5 } else { 0.0 };

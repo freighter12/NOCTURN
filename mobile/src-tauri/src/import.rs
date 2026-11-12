@@ -17,6 +17,7 @@ use crate::yt::{self, Track};
 
 const MAX_ITEMS: usize = 2000;
 const MAX_BODY: usize = 12 * 1024 * 1024;
+const MAX_TEXT: usize = 2 * 1024 * 1024;
 const UA: &str = "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1";
 
 #[derive(Debug, Clone, PartialEq)]
@@ -163,6 +164,7 @@ struct RemoteTrack {
     title: String,
     artist: String,
     duration_ms: Option<i64>,
+    explicit: Option<bool>,
 }
 
 struct RemoteList {
@@ -184,12 +186,134 @@ fn parse_spotify_embed(html: &str) -> Result<RemoteList, String> {
                 .filter_map(|t| {
                     let title = t.get("title")?.as_str()?.trim().to_string();
                     let artist = t.get("subtitle").and_then(Value::as_str).unwrap_or("").replace('\u{a0}', " ").trim().to_string();
-                    (!title.is_empty()).then(|| RemoteTrack { title, artist, duration_ms: t.get("duration").and_then(Value::as_i64) })
+                    (!title.is_empty()).then(|| RemoteTrack { title, artist, duration_ms: t.get("duration").and_then(Value::as_i64), explicit: t.get("isExplicit").and_then(Value::as_bool) })
                 })
                 .collect()
         })
         .unwrap_or_default();
     Ok(RemoteList { name, tracks })
+}
+
+/// Spotify song IDs in pasted text, when the text is mostly song links (what the
+/// Spotify app copies after selecting songs: any number, unlike the 100 its
+/// public playlist page shows).
+fn spotify_track_ids(text: &str) -> Vec<String> {
+    let lines: Vec<&str> = text.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let ids: Vec<String> = lines
+        .iter()
+        .filter_map(|l| {
+            let rest = l.strip_prefix("spotify:track:").or_else(|| l.split("open.spotify.com/").nth(1).and_then(|r| r.split("track/").nth(1)))?;
+            let id: String = rest.chars().take_while(char::is_ascii_alphanumeric).collect();
+            spotify_id(&id).then_some(id)
+        })
+        .take(MAX_ITEMS)
+        .collect();
+    if ids.is_empty() || ids.len() * 2 < lines.len() {
+        return Vec::new();
+    }
+    ids
+}
+
+fn parse_spotify_track(html: &str) -> Option<RemoteTrack> {
+    let start = html.find("id=\"__NEXT_DATA__\"").and_then(|i| html[i..].find('>').map(|j| i + j + 1))?;
+    let json = &html[start..start + html[start..].find("</script>")?];
+    let v: Value = serde_json::from_str(json).ok()?;
+    let e = v.pointer("/props/pageProps/state/data/entity")?;
+    let title = e.get("name").or_else(|| e.get("title")).and_then(Value::as_str)?.trim().to_string();
+    let artist = e.get("artists").and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.get("name").and_then(Value::as_str)).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+    (!title.is_empty()).then(|| RemoteTrack { title, artist, duration_ms: e.get("duration").and_then(Value::as_i64), explicit: e.get("isExplicit").and_then(Value::as_bool) })
+}
+
+/// Look up pasted Spotify song links (eight at a time), in order.
+async fn fetch_spotify_tracks(app: &AppHandle, ids: Vec<String>) -> Result<RemoteList, String> {
+    let total = ids.len();
+    let mut found: Vec<Option<RemoteTrack>> = vec![None; total];
+    let mut done = 0;
+    for chunk in (0..total).collect::<Vec<_>>().chunks(8) {
+        let mut set = tokio::task::JoinSet::new();
+        for &i in chunk {
+            let id = ids[i].clone();
+            set.spawn(async move {
+                let r = get_text(&format!("https://open.spotify.com/embed/track/{id}")).await;
+                (i, r.ok().filter(|(s, _)| *s < 400).and_then(|(_, h)| parse_spotify_track(&h)))
+            });
+        }
+        while let Some(r) = set.join_next().await {
+            if let Ok((i, t)) = r {
+                found[i] = t;
+            }
+            done += 1;
+        }
+        let _ = app.emit("import-progress", Progress { done, total, stage: "reading" });
+    }
+    let tracks: Vec<RemoteTrack> = found.into_iter().flatten().collect();
+    if tracks.is_empty() {
+        return Err("couldn't read those Spotify songs — check your connection and try again".into());
+    }
+    Ok(RemoteList { name: "Spotify songs".into(), tracks })
+}
+
+fn csv_fields(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut q = false;
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        match (c, q) {
+            ('"', true) if chars.peek() == Some(&'"') => {
+                cur.push('"');
+                chars.next();
+            }
+            ('"', _) => q = !q,
+            (',', false) => out.push(std::mem::take(&mut cur)),
+            _ => cur.push(c),
+        }
+    }
+    out.push(cur);
+    out.into_iter().map(|s| s.trim().to_string()).collect()
+}
+
+/// "Artist - Title", "Title by Artist", "3. Artist – Title", or a CSV export with a header row.
+fn parse_text(text: &str) -> Result<RemoteList, String> {
+    let lines: Vec<&str> = text.trim_start_matches('\u{feff}').lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let header = lines.first().map(|l| csv_fields(&l.to_lowercase())).unwrap_or_default();
+    let col = |names: &[&str]| header.iter().position(|h| names.iter().any(|n| h == n));
+    let (ct, ca, cd) = (col(&["track name", "title", "name", "song", "track"]), col(&["artist name(s)", "artist", "artists", "artist name"]), col(&["duration (ms)", "duration_ms", "duration"]));
+    let mut tracks = Vec::new();
+    if let (Some(ct), true) = (ct, header.len() > 1) {
+        for l in lines.iter().skip(1) {
+            let f = csv_fields(l);
+            let get = |i: Option<usize>| i.and_then(|i| f.get(i)).cloned().unwrap_or_default();
+            let title = get(Some(ct));
+            if !title.is_empty() {
+                let d = get(cd);
+                let duration_ms = d.parse::<i64>().ok().map(|n| if n < 10_000 { n * 1000 } else { n }).or_else(|| yt::parse_len(&d));
+                tracks.push(RemoteTrack { title, artist: get(ca).replace(';', ", "), duration_ms, explicit: None });
+            }
+        }
+    } else {
+        for l in &lines {
+            let l = l.trim_start_matches(|c: char| c.is_ascii_digit()).trim_start_matches(['.', ')', '-', ' ', '\t']);
+            if l.is_empty() || l.starts_with('#') || l.starts_with("http") {
+                continue;
+            }
+            let (artist, title) = if let Some((a, t)) = [" - ", " – ", " — ", "\t"].iter().find_map(|s| l.split_once(s)) {
+                (a.trim().to_string(), t.trim().to_string())
+            } else if let Some((t, a)) = l.rsplit_once(" by ") {
+                (a.trim().to_string(), t.trim().to_string())
+            } else {
+                (String::new(), l.to_string())
+            };
+            if !title.is_empty() {
+                tracks.push(RemoteTrack { title, artist, duration_ms: None, explicit: None });
+            }
+        }
+    }
+    if tracks.is_empty() {
+        return Err("couldn't find any songs — paste one per line, like \"Artist - Title\"".into());
+    }
+    tracks.truncate(MAX_ITEMS);
+    Ok(RemoteList { name: "Imported songs".into(), tracks })
 }
 
 async fn fetch_deezer(kind: &str, id: &str) -> Result<RemoteList, String> {
@@ -212,6 +336,7 @@ async fn fetch_deezer(kind: &str, id: &str) -> Result<RemoteList, String> {
                 title,
                 artist: t.pointer("/artist/name").and_then(Value::as_str).unwrap_or("").to_string(),
                 duration_ms: t.get("duration").and_then(Value::as_i64).map(|s| s * 1000),
+                explicit: t.get("explicit_lyrics").and_then(Value::as_bool),
             });
         }
         pages += 1;
@@ -227,35 +352,154 @@ async fn fetch_deezer(kind: &str, id: &str) -> Result<RemoteList, String> {
 
 // ---------------------------------------------------------------- matching on YouTube Music
 
-/// The best YouTube Music song for a track from another service, if any is close enough.
-fn pick(want: &RemoteTrack, candidates: &[Track]) -> Option<Track> {
-    let wt = clean_title(&want.title);
-    let mut best: Option<(f64, &Track)> = None;
-    for (rank, c) in candidates.iter().take(8).enumerate() {
-        let sim = title_sim(&wt, &clean_title(&c.title));
-        if sim < 0.5 {
-            continue;
-        }
-        let artist_ok = want.artist.is_empty() || artists_overlap(&want.artist, &c.artist);
-        let dur = match (want.duration_ms, c.duration_ms) {
-            (Some(a), Some(b)) => Some((a - b).abs()),
-            _ => None,
-        };
-        if dur.is_some_and(|d| d > 30_000) {
-            continue;
-        }
-        let mut score = sim * 2.0 + if artist_ok { 1.5 } else { 0.0 } - rank as f64 * 0.08;
-        if let Some(d) = dur {
-            score += if d <= 3000 { 0.8 } else if d <= 10_000 { 0.3 } else { 0.0 };
-        }
-        if !artist_ok && sim < 0.95 {
-            continue;
-        }
-        if best.is_none_or(|(s, _)| score > s) {
-            best = Some((score, c));
+/// Words that mark a different version of a song. A candidate with one the
+/// wanted title doesn't have is never picked (same list as the desktop app).
+const VERSION_WORDS: &[&str] = &[
+    "live", "cover", "karaoke", "instrumental", "nightcore", "sped up", "speed up", "slowed", "reverb", "8d", "remix", "acoustic", "piano", "reaction", "tutorial", "lesson",
+    "hour", "loop", "extended", "edit", "mashup", "bass boosted", "mix", "version", "demo", "concert", "tribute", "parody", "chipmunk", "lofi", "lo fi", "orchestral", "unplugged",
+    "session", "rehearsal", "isolated", "acapella", "a cappella", "backing track", "minus one", "shorts", "snippet", "432hz", "528hz", "8 bit", "music box", "ringtone", "reverse",
+    "reversed", "clean", "radio edit", "vip", "flip", "bootleg", "rework", "cut", "intro", "outro", "interlude", "skit", "chopped", "screwed",
+];
+
+fn lower_words(s: &str) -> String {
+    s.to_lowercase().chars().map(|c| if c.is_alphanumeric() { c } else { ' ' }).collect::<String>().split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn has_word(hay: &str, w: &str) -> bool {
+    format!(" {hay} ").contains(&format!(" {w} "))
+}
+
+/// Version words in `cand` that `want` doesn't have.
+fn extra_versions(want: &str, cand: &str) -> bool {
+    VERSION_WORDS.iter().any(|w| has_word(cand, w) && !has_word(want, w))
+}
+
+/// How well a YouTube Music song fits a wanted track, or None if it's a
+/// different song, version or performer.
+fn score(want: &RemoteTrack, c: &Track) -> Option<f64> {
+    let raw_want = lower_words(&want.title);
+    let raw_cand = lower_words(&c.title);
+    if extra_versions(&raw_want, &raw_cand) || TRIBUTE.iter().any(|w| has_word(&raw_cand, w) && !has_word(&raw_want, w)) {
+        return None;
+    }
+    // Videos are often titled "Artist - Song (Official Video)": take the song part,
+    // and count the artist named there.
+    let mut title = c.title.as_str();
+    let mut named_artist = false;
+    if c.video {
+        if let Some((a, t)) = c.title.split_once(" - ") {
+            if !want.artist.is_empty() && artists_overlap(&want.artist, a) {
+                title = t;
+                named_artist = true;
+            }
         }
     }
-    best.map(|(_, c)| c.clone())
+    let wt = clean_title(&want.title);
+    let ct = clean_title(title);
+    if wt.is_empty() || ct.is_empty() {
+        return None;
+    }
+    let sim = title_sim(&wt, &ct);
+    // Every wanted word is in the candidate ("Stay" vs "Stay (with Justin Bieber)" after cleaning).
+    let contained = has_word(&ct, &wt);
+    let dur = match (want.duration_ms, c.duration_ms) {
+        (Some(a), Some(b)) => Some((a - b).abs()),
+        _ => None,
+    };
+    // Album audio of the same recording is within a few seconds; more is another cut or song.
+    if dur.is_some_and(|d| d > 20_000) {
+        return None;
+    }
+    // Uploads (not album audio) must prove their length when the wanted length is known.
+    if c.video && want.duration_ms.is_some() && dur.is_none() {
+        return None;
+    }
+    let close = dur.is_some_and(|d| d <= 3000);
+    if !(sim >= 0.8 || (contained && (close || dur.is_none()) && sim >= 0.5)) {
+        return None;
+    }
+    // The performer must match: a same-named song by someone else (or a cover
+    // band's copy with the same length) is the wrong song.
+    let artist_ok = want.artist.is_empty() || named_artist || artists_overlap(&want.artist, &c.artist);
+    if !artist_ok {
+        return None;
+    }
+    let mut s = sim * 3.0 + 2.0;
+    if let Some(d) = dur {
+        s += if d <= 2000 { 1.5 } else if d <= 5000 { 0.8 } else { 0.0 } - d as f64 / 1000.0 / 8.0;
+    }
+    if c.video {
+        s -= 1.0; // videos carry intros and skits; album audio first
+        if !artists_overlap(&want.artist, &c.artist) {
+            s -= 1.0; // someone else's upload (lyric channels)
+        }
+        if has_word(&raw_cand, "lyrics") || has_word(&raw_cand, "lyric") {
+            s -= 0.3;
+        }
+    }
+    if let Some(e) = want.explicit {
+        if e == c.explicit {
+            s += 0.6;
+        } else if e && !c.explicit {
+            s -= 0.6; // a clean edit of an explicit song
+        }
+    }
+    Some(s)
+}
+
+/// Phrases karaoke and tribute releases put in their titles.
+const TRIBUTE: &[&str] = &["made popular by", "originally performed by", "in the style of", "made famous by", "as performed by", "tribute to", "made popular", "originally by"];
+
+/// The best YouTube Music song for a track from another service, if any is close enough.
+fn pick(want: &RemoteTrack, candidates: &[Track]) -> Option<Track> {
+    candidates
+        .iter()
+        .take(12)
+        .enumerate()
+        .filter_map(|(rank, c)| score(want, c).map(|s| (s - rank as f64 * 0.05, c)))
+        .max_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, c)| c.clone())
+}
+
+/// The top result card of a search, as a track (it isn't repeated in the list
+/// below it, and is often the one wanted). Subtitle: "Artist • Album • 3:20"
+/// for a song, "Artist • 1.2B views • 3:35" for a video.
+fn top_track(card: &yt::Card) -> Option<Track> {
+    if card.kind != "song" {
+        return None;
+    }
+    let parts: Vec<&str> = card.subtitle.split(" • ").collect();
+    Some(Track {
+        video_id: card.id.clone(),
+        title: card.title.clone(),
+        artist: parts.first().copied().unwrap_or("").to_string(),
+        artist_id: None,
+        album: None,
+        album_id: None,
+        duration_ms: parts.last().and_then(|p| yt::parse_len(p)),
+        artwork: card.artwork.clone(),
+        explicit: false,
+        video: parts.iter().any(|p| p.ends_with(" views")),
+    })
+}
+
+/// Find a track on YouTube Music: songs search first, then a broader search
+/// with every artist (songs missing from the songs filter, official videos).
+async fn find(want: &RemoteTrack) -> Option<Track> {
+    let artists: Vec<&str> = want.artist.split([',', '&']).map(str::trim).filter(|a| !a.is_empty()).collect();
+    let title = want.title.split(" - ").next().unwrap_or(&want.title).trim();
+    let first = artists.first().copied().unwrap_or("");
+    // Results vary between searches, so try the words both ways round before
+    // settling for a video (some songs are only on YouTube as videos).
+    let tries = [(format!("{title} {first}"), yt::SONGS), (format!("{first} {title}"), yt::SONGS), (format!("{first} {title}"), yt::VIDEOS)];
+    for (q, filter) in tries {
+        let Ok(r) = yt::search_filtered(&q, filter).await else { continue };
+        let found: Vec<Track> = r.top.as_ref().and_then(top_track).into_iter().chain(r.songs).chain(r.videos).filter(|t| (filter == yt::VIDEOS) == t.video).collect();
+        if let Some(t) = pick(want, &found) {
+            return Some(t);
+        }
+    }
+    None
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -274,6 +518,8 @@ pub struct Imported {
     pub artwork: Option<String>,
     pub tracks: Vec<Track>,
     pub missing: Vec<Missing>,
+    /// The service only showed part of a long playlist (Spotify shows 100).
+    pub truncated: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -285,6 +531,17 @@ struct Progress {
 }
 
 pub async fn import(app: &AppHandle, input: &str) -> Result<Imported, String> {
+    if input.len() > MAX_TEXT {
+        return Err("that's too long to be a playlist".into());
+    }
+    // A pasted list of songs (several lines, or Spotify song links) rather than one playlist link.
+    let ids = spotify_track_ids(input);
+    let lines = input.lines().filter(|l| !l.trim().is_empty()).count();
+    if !ids.is_empty() || (lines > 1 && parse_link(input).is_err()) {
+        let _ = app.emit("import-progress", Progress { done: 0, total: ids.len(), stage: "reading" });
+        let list = if ids.is_empty() { parse_text(input)? } else { fetch_spotify_tracks(app, ids).await? };
+        return match_all(app, list, "List", String::new(), false).await;
+    }
     let link = match parse_link(input) {
         Ok(l) => l,
         Err(_) if is_short_link(extract_link(input)) => resolve_short(input).await?,
@@ -298,7 +555,7 @@ pub async fn import(app: &AppHandle, input: &str) -> Result<Imported, String> {
         if c.tracks.is_empty() {
             return Err("that playlist is empty, private, or a mix YouTube makes on the fly".into());
         }
-        return Ok(Imported { title: c.title, source: "YouTube Music".into(), url: link.page_url(), artwork: c.artwork, tracks: c.tracks, missing: vec![] });
+        return Ok(Imported { title: c.title, source: "YouTube Music".into(), url: link.page_url(), artwork: c.artwork, tracks: c.tracks, missing: vec![], truncated: false });
     }
 
     let list = match &link {
@@ -315,6 +572,13 @@ pub async fn import(app: &AppHandle, input: &str) -> Result<Imported, String> {
     if list.tracks.is_empty() {
         return Err("that playlist has no songs (or is private)".into());
     }
+    // Spotify's public page lists at most 100 songs of a playlist.
+    let truncated = matches!(link, Link::Spotify { kind: "playlist", .. }) && list.tracks.len() >= 100;
+    match_all(app, list, link.source(), link.page_url(), truncated).await
+}
+
+/// Find every song of a list on YouTube Music, a few at a time.
+async fn match_all(app: &AppHandle, list: RemoteList, source: &str, url: String, truncated: bool) -> Result<Imported, String> {
     let wanted: Vec<RemoteTrack> = list.tracks.into_iter().take(MAX_ITEMS).collect();
     let total = wanted.len();
 
@@ -326,9 +590,7 @@ pub async fn import(app: &AppHandle, input: &str) -> Result<Imported, String> {
         for &i in chunk {
             let w = wanted[i].clone();
             set.spawn(async move {
-                let first = w.artist.split([',', '&']).next().unwrap_or("").trim().to_string();
-                let q = format!("{} {}", w.title, first);
-                let hit = yt::search_songs(&q).await.ok().and_then(|c| pick(&w, &c));
+                let hit = find(&w).await;
                 (i, hit)
             });
         }
@@ -354,7 +616,7 @@ pub async fn import(app: &AppHandle, input: &str) -> Result<Imported, String> {
         return Err("none of those songs could be found on YouTube Music".into());
     }
     let artwork = tracks.first().and_then(|t| t.artwork.clone());
-    Ok(Imported { title: list.name, source: link.source().into(), url: link.page_url(), artwork, tracks, missing })
+    Ok(Imported { title: list.name, source: source.into(), url, artwork, tracks, missing, truncated })
 }
 
 #[cfg(test)]
@@ -370,6 +632,61 @@ mod tests {
         assert!(parse_link("https://evil.example/playlist/37i9dQZF1DXcBWIGoYBM5M").is_err());
         assert!(parse_link("https://open.spotify.com/track/37i9dQZF1DXcBWIGoYBM5M").is_err());
         assert!(is_short_link("https://spotify.link/abc123"));
+    }
+
+    #[test]
+    fn pasted_lists() {
+        let ids = spotify_track_ids("https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT?si=1\nhttps://open.spotify.com/intl-de/track/7qiZfU4dY1lWllzX7mPBI3\n");
+        assert_eq!(ids, vec!["4cOdK2wGLETKBW3PvgPWqT", "7qiZfU4dY1lWllzX7mPBI3"]);
+        assert!(spotify_track_ids("The Beatles - Hey Jude\nAdele - Hello").is_empty());
+        let l = parse_text("1. The Beatles - Hey Jude\nBlinding Lights by The Weeknd").unwrap();
+        assert_eq!((l.tracks[0].artist.as_str(), l.tracks[0].title.as_str()), ("The Beatles", "Hey Jude"));
+        assert_eq!((l.tracks[1].artist.as_str(), l.tracks[1].title.as_str()), ("The Weeknd", "Blinding Lights"));
+        let c = parse_text("Track Name,Artist Name(s),Duration (ms)\n\"Hey Jude\",The Beatles,431333").unwrap();
+        assert_eq!(c.tracks[0].duration_ms, Some(431333));
+    }
+
+    fn t(title: &str, artist: &str, secs: i64, video: bool) -> Track {
+        Track { video_id: "x".into(), title: title.into(), artist: artist.into(), artist_id: None, album: None, album_id: None, duration_ms: Some(secs * 1000), artwork: None, explicit: false, video }
+    }
+
+    #[test]
+    fn picks_the_right_song() {
+        let w = RemoteTrack { title: "Stay".into(), artist: "The Kid LAROI, Justin Bieber".into(), duration_ms: Some(141_000), explicit: Some(true) };
+        // Same artist, different song; a cover; a sped-up version; the real one.
+        let c = vec![t("Stay With Me", "Justin Bieber", 150, false), t("Stay (Cover)", "Someone", 141, false), t("Stay (Sped Up)", "The Kid LAROI", 110, false), t("STAY", "The Kid LAROI & Justin Bieber", 142, false)];
+        assert_eq!(pick(&w, &c).unwrap().title, "STAY");
+        // Same title by another artist is never taken.
+        let w2 = RemoteTrack { title: "Hello".into(), artist: "Adele".into(), duration_ms: Some(295_000), explicit: None };
+        assert!(pick(&w2, &[t("Hello", "Lionel Richie", 250, false)]).is_none());
+        // Album audio over the music video.
+        let w3 = RemoteTrack { title: "Blinding Lights".into(), artist: "The Weeknd".into(), duration_ms: Some(200_000), explicit: None };
+        assert_eq!(pick(&w3, &[t("Blinding Lights", "The Weeknd", 202, true), t("Blinding Lights", "The Weeknd", 200, false)]).unwrap().video, false);
+    }
+
+    /// cargo test --lib live_match_report -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore]
+    async fn live_match_report() {
+        let id = std::env::var("PL").unwrap_or("37i9dQZF1DX5Ejj0EkURtP".into());
+        let (_, html) = get_text(&format!("https://open.spotify.com/embed/playlist/{id}")).await.unwrap();
+        let list = parse_spotify_embed(&html).unwrap();
+        let n = list.tracks.len();
+        let mut ok = 0;
+        for chunk in list.tracks.chunks(5) {
+            let mut set = tokio::task::JoinSet::new();
+            for w in chunk.iter().cloned() {
+                set.spawn(async move { let p = find(&w).await; (w, p) });
+            }
+            while let Some(Ok((w, p))) = set.join_next().await {
+                let d = |x: Option<i64>| x.map(|m| format!("{}:{:02}", m / 60000, m / 1000 % 60)).unwrap_or("?".into());
+                match &p {
+                    Some(t) => { ok += 1; eprintln!("OK   {} — {} [{}]  =>  {} — {} [{}]{}", w.artist, w.title, d(w.duration_ms), t.artist, t.title, d(t.duration_ms), if t.video { " (video)" } else { "" }) }
+                    None => eprintln!("MISS {} — {} [{}]", w.artist, w.title, d(w.duration_ms)),
+                }
+            }
+        }
+        eprintln!("{ok}/{n} found");
     }
 
     #[tokio::test]
@@ -388,3 +705,5 @@ mod tests {
         assert!(ok >= 8);
     }
 }
+
+

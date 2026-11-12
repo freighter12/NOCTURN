@@ -29,6 +29,15 @@ class AutoplayArgs: Decodable {
   let on: Bool
 }
 
+class CrossfadeArgs: Decodable {
+  let seconds: Double
+}
+
+class AudioArgs: Decodable {
+  let mix: Bool?
+  let resume: Bool?
+}
+
 class JumpArgs: Decodable {
   let index: Int
 }
@@ -78,6 +87,7 @@ class LookArgs: Decodable {
   let speed: Double?
   let dim: Int?
   let still: Bool?
+  let refresh: String?
 }
 
 struct SettingsResult: Encodable {
@@ -91,6 +101,14 @@ struct SettingsResult: Encodable {
   let aiShuffle: Bool
   let intro: String
   let introPlaying: Bool
+  let refresh: String
+  let maxFps: Int
+  let mixWithOthers: Bool
+  let autoResume: Bool
+  let crossfade: Double
+  /// This build's numbers (CFBundleShortVersionString / CFBundleVersion).
+  let version: String
+  let build: String
 }
 
 // MARK: events to the web side
@@ -189,6 +207,16 @@ class NocturnPlugin: Plugin {
     onMain(invoke) { PlayerEngine.shared.setRepeat(a.mode) }
   }
 
+  @objc public func setCrossfade(_ invoke: Invoke) throws {
+    let a = try invoke.parseArgs(CrossfadeArgs.self)
+    onMain(invoke) { PlayerEngine.shared.setCrossfade(a.seconds) }
+  }
+
+  @objc public func setAudio(_ invoke: Invoke) throws {
+    let a = try invoke.parseArgs(AudioArgs.self)
+    onMain(invoke) { PlayerEngine.shared.setAudio(mix: a.mix, resume: a.resume) }
+  }
+
   @objc public func setAutoplay(_ invoke: Invoke) throws {
     let a = try invoke.parseArgs(AutoplayArgs.self)
     onMain(invoke) { PlayerEngine.shared.setAutoplay(a.on) }
@@ -260,7 +288,12 @@ class NocturnPlugin: Plugin {
           theme: ThemeStore.shared.theme, photo: ThemeStore.shared.photoBase64(), liveLyrics: LiveLyrics.shared.enabled,
           speed: ThemeStore.shared.speed, dim: ThemeStore.shared.dim, still: ThemeStore.shared.still,
           autoplay: PlayerEngine.shared.autoplay, aiShuffle: PlayerEngine.shared.aiShuffle,
-          intro: Intro.mode, introPlaying: Intro.playing)
+          intro: Intro.mode, introPlaying: Intro.playing,
+          refresh: ThemeStore.shared.refresh, maxFps: ThemeStore.maxFps,
+          mixWithOthers: PlayerEngine.shared.mixWithOthers, autoResume: PlayerEngine.shared.autoResume,
+          crossfade: PlayerEngine.shared.crossfade,
+          version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+          build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "")
       }
       invoke.resolve(s)
     }
@@ -274,7 +307,7 @@ class NocturnPlugin: Plugin {
   @objc public func setLook(_ invoke: Invoke) throws {
     let a = try invoke.parseArgs(LookArgs.self)
     onMain(invoke) {
-      ThemeStore.shared.setLook(speed: a.speed, dim: a.dim, still: a.still)
+      ThemeStore.shared.setLook(speed: a.speed, dim: a.dim, still: a.still, refresh: a.refresh)
       if let i = a.intro { Intro.setMode(i) }
     }
   }

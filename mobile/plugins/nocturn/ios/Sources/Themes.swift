@@ -27,6 +27,11 @@ final class ThemeStore {
   private(set) var dim: Int
   /// Freeze the movement (saves a little battery).
   private(set) var still: Bool
+  /// How smoothly backgrounds move: "auto" (each theme's own pace),
+  /// "120" (every frame on ProMotion screens) or "saver" (half the frames).
+  private(set) var refresh: String
+  /// The screen's top refresh rate (120 on ProMotion iPhones, else 60).
+  static var maxFps: Int { UIScreen.main.maximumFramesPerSecond }
 
   private let photoURL: URL = {
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -41,6 +46,7 @@ final class ThemeStore {
     speed = d.object(forKey: "theme.speed") as? Double ?? 1
     dim = d.object(forKey: "theme.dim") as? Int ?? 1
     still = d.bool(forKey: "theme.still")
+    refresh = d.string(forKey: "theme.refresh") ?? "auto"
     photo = UIImage(contentsOfFile: photoURL.path)
   }
 
@@ -56,8 +62,12 @@ final class ThemeStore {
     UserDefaults.standard.set(next, forKey: "theme")
   }
 
-  func setLook(speed newSpeed: Double?, dim newDim: Int?, still newStill: Bool?) {
+  func setLook(speed newSpeed: Double?, dim newDim: Int?, still newStill: Bool?, refresh newRefresh: String? = nil) {
     let d = UserDefaults.standard
+    if let v = newRefresh, ["auto", "120", "saver"].contains(v) {
+      refresh = v
+      d.set(v, forKey: "theme.refresh")
+    }
     if let v = newSpeed {
       speed = min(3, max(0.2, v))
       d.set(speed, forKey: "theme.speed")
@@ -144,7 +154,12 @@ struct ThemeClock<Content: View>: View {
   var body: some View {
     let store = ThemeStore.shared
     let speed = store.speed
-    TimelineView(.animation(minimumInterval: 1.0 / fps, paused: store.still)) { ctx in
+    let rate: Double = switch store.refresh {
+    case "120": Double(ThemeStore.maxFps)
+    case "saver": max(10, fps / 2)
+    default: fps
+    }
+    TimelineView(.animation(minimumInterval: 1.0 / rate, paused: store.still)) { ctx in
       content(ctx.date.timeIntervalSince(ThemeClockStart.date) * speed + 40)
     }
   }

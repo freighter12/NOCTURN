@@ -50,6 +50,13 @@ final class PlayerEngine {
   private var realLength: [ObjectIdentifier: Double] = [:]
   /// Nocturn's smart shuffle (planned on the web/Rust side, see ai.rs).
   private(set) var aiShuffle = UserDefaults.standard.bool(forKey: "aiShuffle")
+  /// Keep playing alongside other apps' sound (camera, videos, games) instead
+  /// of being paused by them. iOS shows no lock-screen controls while on.
+  private(set) var mixWithOthers = UserDefaults.standard.bool(forKey: "audio.mix")
+  /// Start again by itself when a call, video or other app is done with the sound.
+  private(set) var autoResume = UserDefaults.standard.object(forKey: "audio.resume") as? Bool ?? true
+  /// Music was playing when another app took the sound.
+  @ObservationIgnored private var interruptedWhilePlaying = false
   /// Waiting for an AI Shuffle plan.
   var aiBusy = false
   /// Last AI Shuffle explanation ("Planned 25 songs around …").
@@ -63,12 +70,27 @@ final class PlayerEngine {
   /// Called whenever something the web side cares about changes.
   @ObservationIgnored var onChange: ((PlayerState) -> Void)?
 
-  private let player = AVQueuePlayer()
+  /// Two players, so one song can fade out while the next fades in. Without
+  /// crossfade only the active one is used, with the next song queued behind
+  /// the current one (gapless).
+  @ObservationIgnored private let decks = [AVQueuePlayer(), AVQueuePlayer()]
+  @ObservationIgnored private var active = 0
+  private var player: AVQueuePlayer { decks[active] }
+  private var standby: AVQueuePlayer { decks[1 - active] }
+  /// Crossfade length in seconds (0 = off: songs follow on without a gap).
+  private(set) var crossfade = UserDefaults.standard.object(forKey: "crossfade") as? Double ?? 0
+  /// The prepared next song waits on the standby player (crossfade) rather than behind the current one.
+  @ObservationIgnored private var preparedOnStandby = false
+  @ObservationIgnored private var fadeTimer: Timer?
+  @ObservationIgnored private var fadeStart = Date()
+  @ObservationIgnored private var fadeLength: Double = 0
+  /// The player whose song is fading out.
+  @ObservationIgnored private var fadingOut: AVQueuePlayer?
   @ObservationIgnored private var itemIndex: [ObjectIdentifier: Int] = [:]
   @ObservationIgnored private var preparedNext: AVPlayerItem?
   @ObservationIgnored private var loadToken = 0
-  @ObservationIgnored private var timeObserver: Any?
-  @ObservationIgnored private var currentItemObserver: NSKeyValueObservation?
+  @ObservationIgnored private var timeObservers: [Any] = []
+  @ObservationIgnored private var currentItemObservers: [NSKeyValueObservation] = []
   @ObservationIgnored private var statusObserver: NSKeyValueObservation?
   @ObservationIgnored private var lastEmit = Date.distantPast
   @ObservationIgnored private var artworkFor: String?
@@ -76,8 +98,10 @@ final class PlayerEngine {
   @ObservationIgnored private var retried: Set<String> = []
 
   private init() {
-    player.actionAtItemEnd = .advance
-    player.automaticallyWaitsToMinimizeStalling = true
+    for d in decks {
+      d.actionAtItemEnd = .advance
+      d.automaticallyWaitsToMinimizeStalling = true
+    }
     configureSession()
     configureRemoteCommands()
     observe()
@@ -127,6 +151,7 @@ final class PlayerEngine {
   }
 
   func pause() {
+    finishFade()
     player.pause()
     playing = false
     updateNowPlaying()
@@ -173,10 +198,17 @@ final class PlayerEngine {
 
   func setRepeat(_ mode: String) {
     repeatMode = ["off", "all", "one"].contains(mode) ? mode : "off"
-    player.actionAtItemEnd = repeatMode == "one" ? .pause : .advance
+    for d in decks { d.actionAtItemEnd = repeatMode == "one" ? .pause : .advance }
     dropPrepared()
     prepareNext()
     emit(force: true)
+  }
+
+  func setCrossfade(_ seconds: Double) {
+    crossfade = max(0, min(12, seconds))
+    UserDefaults.standard.set(crossfade, forKey: "crossfade")
+    dropPrepared()
+    prepareNext()
   }
 
   func setAutoplay(_ on: Bool) {
@@ -291,10 +323,13 @@ final class PlayerEngine {
     durationMs = queue[i].durationMs ?? 0
     loading = true
     lastError = nil
+    finishFade()
+    standby.removeAllItems()
     player.removeAllItems()
     itemIndex.removeAll()
     realLength.removeAll()
     preparedNext = nil
+    preparedOnStandby = false
     playing = play
     updateNowPlaying()
     loadArtwork()
@@ -373,27 +408,108 @@ final class PlayerEngine {
       n = 0
     }
     let track = queue[n]
+    let fade = fades(into: track)
+    // the standby player is still fading the last song out; finishFade calls back
+    if fade && fadingOut != nil { return }
     let token = loadToken
     Task {
       guard let item = try? await self.makeItem(for: track), token == self.loadToken, self.preparedNext == nil,
-        let cur = self.player.currentItem
+        let cur = self.player.currentItem, !(fade && self.fadingOut != nil)
       else { return }
       // the queue may have changed while we waited
       let expected = self.index + 1 < self.queue.count ? self.index + 1 : (self.repeatMode == "all" ? 0 : -1)
       guard expected >= 0, self.queue[expected].videoId == track.videoId else { return }
       self.itemIndex[ObjectIdentifier(item)] = expected
       self.preparedNext = item
-      self.player.insert(item, after: cur)
+      self.preparedOnStandby = fade
+      if fade {
+        // waits silently, already loading, on the other player
+        self.standby.removeAllItems()
+        self.standby.volume = 0
+        self.standby.insert(item, after: nil)
+      } else {
+        self.player.insert(item, after: cur)
+      }
     }
+  }
+
+  /// Crossfade into this song? Not for songs of the same album played in a
+  /// row (albums that run into each other should stay gapless).
+  private func fades(into next: TrackDTO) -> Bool {
+    guard crossfade > 0, repeatMode != "one", let cur = current else { return false }
+    if let a = cur.album, !a.isEmpty, a == next.album { return false }
+    return true
   }
 
   private func dropPrepared() {
     if let p = preparedNext {
-      player.remove(p)
+      if preparedOnStandby { standby.removeAllItems() } else { player.remove(p) }
       itemIndex.removeValue(forKey: ObjectIdentifier(p))
       realLength.removeValue(forKey: ObjectIdentifier(p))
       preparedNext = nil
+      preparedOnStandby = false
     }
+  }
+
+  // MARK: crossfade
+
+  /// Starts the waiting song on the standby player and fades between the two
+  /// (equal-power curve, so the loudness doesn't dip in the middle).
+  private func startFade(seconds: Double) {
+    guard preparedOnStandby, let item = preparedNext, let i = itemIndex[ObjectIdentifier(item)] else { return }
+    let out = player
+    active = 1 - active
+    preparedNext = nil
+    preparedOnStandby = false
+    activateSession()
+    player.volume = seconds > 0.05 ? 0 : 1
+    player.play()
+    observeStatus(player.currentItem)
+    if seconds > 0.05 {
+      fadingOut = out
+      fadeStart = Date()
+      fadeLength = seconds
+      fadeTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+        MainActor.assumeIsolated { self?.fadeStep() }
+      }
+    } else {
+      out.pause()
+      out.removeAllItems()
+      out.volume = 1
+    }
+    didMove(to: i)
+  }
+
+  private func fadeStep() {
+    let x = min(1, Date().timeIntervalSince(fadeStart) / max(0.1, fadeLength))
+    player.volume = Float(sin(x * .pi / 2))
+    fadingOut?.volume = Float(cos(x * .pi / 2))
+    if x >= 1 { finishFade() }
+  }
+
+  /// Ends a fade now: the old song stops, the new one is at full volume.
+  private func finishFade() {
+    fadeTimer?.invalidate()
+    fadeTimer = nil
+    guard let out = fadingOut else { return }
+    fadingOut = nil
+    out.pause()
+    out.removeAllItems()
+    out.volume = 1
+    player.volume = 1
+    prepareNext()
+  }
+
+  /// The player moved on to song `i` (end of a song, or a crossfade).
+  private func didMove(to i: Int) {
+    index = i
+    positionMs = 0
+    durationMs = queue[i].durationMs ?? 0
+    loadArtwork()
+    loadLyricsOffset()
+    updateNowPlaying()
+    emit(force: true)
+    prepareNext()
   }
 
   private func fail(track: TrackDTO, error: Error) {
@@ -422,7 +538,9 @@ final class PlayerEngine {
 
   private func stopAll() {
     loadToken += 1
-    player.removeAllItems()
+    finishFade()
+    for d in decks { d.removeAllItems() }
+    preparedOnStandby = false
     itemIndex.removeAll()
     realLength.removeAll()
     preparedNext = nil
@@ -462,9 +580,29 @@ final class PlayerEngine {
   // MARK: observing AVPlayer
 
   private func observe() {
-    timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] t in
+    for n in decks.indices { observe(deck: n) }
+    NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: nil, queue: .main) { [weak self] note in
       MainActor.assumeIsolated {
-        guard let self else { return }
+        guard let self, let item = note.object as? AVPlayerItem, self.itemIndex[ObjectIdentifier(item)] == self.index else { return }
+        if self.repeatMode == "one" {
+          self.seek(ms: 0)
+          self.player.play()
+        } else if self.preparedOnStandby {
+          // ended before the fade began (a very short song): switch straight over
+          self.startFade(seconds: 0)
+        } else if self.preparedNext == nil {
+          // nothing queued up behind this song
+          self.next()
+        }
+      }
+    }
+  }
+
+  private func observe(deck n: Int) {
+    let deck = decks[n]
+    timeObservers.append(deck.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { [weak self] t in
+      MainActor.assumeIsolated {
+        guard let self, n == self.active else { return }
         if t.seconds.isFinite { self.positionMs = t.seconds * 1000 }
         if let d = self.lengthMs(of: self.player.currentItem) { self.durationMs = d }
         let isPlaying = self.player.timeControlStatus == .playing
@@ -472,42 +610,28 @@ final class PlayerEngine {
         if self.loading && isPlaying { self.loading = false }
         self.loading = self.loading || (waiting && self.playing)
         if isPlaying { self.loading = false }
+        // crossfade: start the next song when this one is about to end
+        if self.preparedOnStandby, self.fadingOut == nil, isPlaying, let len = self.lengthMs(of: self.player.currentItem) {
+          let left = (len - self.positionMs) / 1000
+          if left <= self.crossfade { self.startFade(seconds: max(0.5, left)) }
+        }
         self.emit(force: false)
         LiveLyrics.shared.update(self)
       }
-    }
-    currentItemObserver = player.observe(\.currentItem, options: [.new]) { [weak self] _, _ in
+    })
+    currentItemObservers.append(deck.observe(\.currentItem, options: [.new]) { [weak self] _, _ in
       Task { @MainActor in
-        guard let self else { return }
+        guard let self, n == self.active else { return }
         let item = self.player.currentItem
         self.observeStatus(item)
-        // nil = ran out of songs; the end-of-song handler below decides what's next
+        // nil = ran out of songs; the end-of-song handler decides what's next
         guard let item else { return }
         if let i = self.itemIndex[ObjectIdentifier(item)], i != self.index {
-          self.index = i
           if item === self.preparedNext { self.preparedNext = nil }
-          self.positionMs = 0
-          self.durationMs = self.queue[i].durationMs ?? 0
-          self.loadArtwork()
-          self.loadLyricsOffset()
-          self.updateNowPlaying()
-          self.emit(force: true)
-          self.prepareNext()
+          self.didMove(to: i)
         }
       }
-    }
-    NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: nil, queue: .main) { [weak self] note in
-      MainActor.assumeIsolated {
-        guard let self, let item = note.object as? AVPlayerItem, self.itemIndex[ObjectIdentifier(item)] == self.index else { return }
-        if self.repeatMode == "one" {
-          self.seek(ms: 0)
-          self.player.play()
-        } else if self.preparedNext == nil {
-          // nothing queued up behind this song
-          self.next()
-        }
-      }
-    }
+    })
   }
 
   private func observeStatus(_ item: AVPlayerItem?) {
@@ -530,19 +654,55 @@ final class PlayerEngine {
 
   // MARK: audio session, lock screen, remote controls
 
+  func setAudio(mix: Bool?, resume: Bool?) {
+    if let m = mix, m != mixWithOthers {
+      mixWithOthers = m
+      UserDefaults.standard.set(m, forKey: "audio.mix")
+      applyCategory()
+      if playing { activateSession() }
+      updateNowPlaying()
+    }
+    if let r = resume {
+      autoResume = r
+      UserDefaults.standard.set(r, forKey: "audio.resume")
+    }
+  }
+
+  private func applyCategory() {
+    let s = AVAudioSession.sharedInstance()
+    if mixWithOthers {
+      // Mixable: other apps' sound plays alongside instead of stopping the music.
+      // (The long-form policy can't be combined with options.)
+      try? s.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+    } else {
+      try? s.setCategory(.playback, mode: .default, policy: .longFormAudio)
+    }
+  }
+
   private func configureSession() {
     let s = AVAudioSession.sharedInstance()
-    try? s.setCategory(.playback, mode: .default, policy: .longFormAudio)
+    applyCategory()
     NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: s, queue: .main) { [weak self] note in
       let typeRaw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
       let optsRaw = note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+      let reasonRaw = note.userInfo?[AVAudioSessionInterruptionReasonKey] as? UInt
       MainActor.assumeIsolated {
         guard let self, let typeRaw, let type = AVAudioSession.InterruptionType(rawValue: typeRaw) else { return }
         if type == .began {
+          // iOS suspending the app while paused isn't another app taking the sound.
+          if let reasonRaw, AVAudioSession.InterruptionReason(rawValue: reasonRaw) == .appWasSuspended { return }
+          self.interruptedWhilePlaying = self.playing
           self.playing = false
           self.emit(force: true)
-        } else if AVAudioSession.InterruptionOptions(rawValue: optsRaw).contains(.shouldResume) {
-          self.play()
+        } else {
+          let should = AVAudioSession.InterruptionOptions(rawValue: optsRaw).contains(.shouldResume)
+          let resume = should || (self.autoResume && self.interruptedWhilePlaying)
+          self.interruptedWhilePlaying = false
+          guard resume else { return }
+          // The other app may still be letting go of the sound; give it a moment.
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            MainActor.assumeIsolated { if !self.playing { self.play() } }
+          }
         }
       }
     }

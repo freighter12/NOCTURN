@@ -55,11 +55,25 @@ export type Settings = {
   intro: IntroMode;
   /** the start-up animation is on screen right now */
   introPlaying: boolean;
+  /** background smoothness: each theme's own pace, every frame (120 Hz), or half */
+  refresh: Refresh;
+  /** the screen's top refresh rate (120 on ProMotion iPhones) */
+  maxFps: number;
+  /** keep playing alongside other apps' sound */
+  mixWithOthers: boolean;
+  /** start again after another app or a call is done with the sound */
+  autoResume: boolean;
+  /** seconds one song fades into the next (0 = off, gapless) */
+  crossfade: number;
+  /** this build's version numbers (empty on the computer) */
+  version: string;
+  build: string;
 };
 export type IntroMode = "full" | "short" | "off";
+export type Refresh = "auto" | "120" | "saver";
 export const defaultSettings: Settings = {
   theme: "artwork", photo: null, liveLyrics: true, speed: 1, dim: 1, still: false, autoplay: true, aiShuffle: false,
-  intro: "full", introPlaying: false,
+  intro: "full", introPlaying: false, refresh: "auto", maxFps: 60, mixWithOthers: false, autoResume: true, crossfade: 0, version: "", build: "",
 };
 
 export type TabSpec = { id: string; title: string; symbol: string; search?: boolean };
@@ -253,9 +267,17 @@ export const downloads = {
 export const settings = {
   get: () =>
     isNative ? call<Settings>("get_settings").then((s) => ({ ...defaultSettings, ...s })) : Promise.resolve(localSettings()),
-  setLook(look: { speed?: number; dim?: number; still?: boolean; intro?: IntroMode }) {
+  setLook(look: { speed?: number; dim?: number; still?: boolean; intro?: IntroMode; refresh?: Refresh }) {
     if (!isNative) return Promise.resolve(saveLocal(look));
     return call("set_look", look);
+  },
+  setCrossfade(seconds: number) {
+    if (!isNative) return Promise.resolve(saveLocal({ crossfade: seconds }));
+    return call("set_crossfade", { seconds });
+  },
+  setAudio(a: { mix?: boolean; resume?: boolean }) {
+    if (!isNative) return Promise.resolve(saveLocal({ ...(a.mix != null && { mixWithOthers: a.mix }), ...(a.resume != null && { autoResume: a.resume }) }));
+    return call("set_audio", a);
   },
   setAutoplay(on: boolean) {
     if (!isNative) return Promise.resolve(saveLocal({ autoplay: on }));

@@ -3,10 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { fmtBytes, offline, useDownloads } from "../downloads";
 import { DAY_PARTS, defaultHome, greetingText, homePrefs, type HomePrefs } from "../greeting";
 import { library, useLibrary, type Motion } from "../library";
-import { defaultSettings, settings, type IntroMode, type Settings, type ThemeName } from "../native";
+import { defaultSettings, settings, type IntroMode, type Refresh, type Settings, type ThemeName } from "../native";
 import { useApp, type SettingsSection } from "../state";
 import { Icon, PageHeader } from "../ui";
 import { HomeHero } from "./Home";
+import { buildLabel, updates, useUpdates } from "../update";
 
 const THEMES: { id: ThemeName; name: string; about: string }[] = [
   { id: "artwork", name: "Moving Artwork", about: "The song's colours, slowly drifting" },
@@ -191,7 +192,7 @@ function Root() {
   const detail: Record<SettingsSection, string> = {
     appearance: s ? `${theme}${s.still ? " · Still" : ""}` : "",
     home: `“${greetingText(homePrefs(lib))}”`,
-    playback: [app.player.autoplay ? "Autoplay on" : "Autoplay off", app.player.aiShuffle ? "AI Shuffle on" : ""].filter(Boolean).join(" · "),
+    playback: [app.player.autoplay ? "Autoplay on" : "Autoplay off", app.player.aiShuffle ? "AI Shuffle on" : "", s?.crossfade ? `Crossfade ${s.crossfade}s` : ""].filter(Boolean).join(" · "),
     lyrics: s ? (s.liveLyrics ? "Live lyrics on" : "Live lyrics off") : "",
     downloads: dl.tracks.length ? `${dl.tracks.length} songs · ${fmtBytes(dl.bytes)}` : "None yet",
     history: `${lib.recent.length} recently played`,
@@ -243,7 +244,7 @@ function Appearance() {
     }
   };
 
-  const look = (p: { speed?: number; dim?: number; still?: boolean; intro?: IntroMode }) => {
+  const look = (p: { speed?: number; dim?: number; still?: boolean; intro?: IntroMode; refresh?: Refresh }) => {
     patch(p);
     settings.setLook(p).catch((e) => app.toast(String(e)));
   };
@@ -286,6 +287,27 @@ function Appearance() {
           <Segmented value={SPEEDS.find((x) => x.v === s?.speed)?.v ?? 1} options={SPEEDS} set={(v) => look({ speed: v, still: false })} />
         </div>
         <Toggle title="Still Background" on={s?.still ?? false} set={(on) => look({ still: on })} />
+      </Group>
+
+      <Group
+        title="Smoothness"
+        note={
+          (s?.maxFps ?? 60) >= 120
+            ? "120 Hz draws every frame your screen can show: the smoothest backgrounds, but it uses more battery. Battery Saver draws half as many. Scrolling and lyrics are always as smooth as your phone allows."
+            : "This screen tops out at 60 Hz, so 120 Hz needs an iPhone Pro (13 Pro or newer). Battery Saver draws the background half as often."
+        }
+      >
+        <div className="set-row">
+          <Segmented<Refresh>
+            value={s?.refresh ?? "auto"}
+            options={[
+              { v: "auto", label: "Auto" },
+              { v: "120", label: (s?.maxFps ?? 60) >= 120 ? "120 Hz" : "Max" },
+              { v: "saver", label: "Battery Saver" },
+            ]}
+            set={(v) => look({ refresh: v })}
+          />
+        </div>
       </Group>
 
       <Group title="Darkness Behind Text" note="Darker makes words easier to read over bright backgrounds.">
@@ -390,6 +412,7 @@ function HomeScreen() {
 function Playback() {
   const app = useApp();
   const lib = useLibrary();
+  const [s, patch] = useSettings();
   return (
     <>
       <Group>
@@ -404,6 +427,50 @@ function Playback() {
           sub="Picks what plays next from your taste and learns from songs you skip."
           on={!!app.player.aiShuffle}
           set={(on) => app.setAIShuffle(on)}
+        />
+      </Group>
+      <Group
+        title="Crossfade"
+        note="Each song fades into the next. Songs from the same album still play straight through, so albums that run together stay seamless."
+      >
+        <div className="set-row">
+          <Segmented
+            value={s?.crossfade ?? 0}
+            options={[
+              { v: 0, label: "Off" },
+              { v: 3, label: "3s" },
+              { v: 6, label: "6s" },
+              { v: 9, label: "9s" },
+              { v: 12, label: "12s" },
+            ]}
+            set={(v) => {
+              patch({ crossfade: v });
+              settings.setCrossfade(v).catch((e) => app.toast(String(e)));
+            }}
+          />
+        </div>
+      </Group>
+      <Group
+        title="Other Apps"
+        note="With Play Alongside on, opening the camera, a video or a game won't stop your music: both play together. While it's on, iPhone hides the music controls on the lock screen. The mini player in the app still works."
+      >
+        <Toggle
+          title="Play Alongside Other Apps"
+          sub="Keep the music going when another app makes sound."
+          on={s?.mixWithOthers ?? false}
+          set={(on) => {
+            patch({ mixWithOthers: on });
+            settings.setAudio({ mix: on }).catch((e) => app.toast(String(e)));
+          }}
+        />
+        <Toggle
+          title="Carry On After Interruptions"
+          sub="After a call, a video or the camera is done with the sound, the music starts again by itself."
+          on={s?.autoResume ?? true}
+          set={(on) => {
+            patch({ autoResume: on });
+            settings.setAudio({ resume: on }).catch((e) => app.toast(String(e)));
+          }}
         />
       </Group>
       <Group title="Feel">
@@ -512,6 +579,7 @@ function History() {
 
 function About() {
   const app = useApp();
+  const u = useUpdates();
   const [, patch] = useSettings();
   const [version, setVersion] = useState("");
   useEffect(() => {
@@ -531,8 +599,41 @@ function About() {
           <rect width="1024" height="1024" fill="#e9ebf1" mask="url(#about-c)" />
         </svg>
         <b>Nocturn Music</b>
-        <small>{version || "for iPhone"}</small>
+        <small>{u.current ? `${buildLabel(u.current)} · ${version}` : version || "for iPhone"}</small>
       </div>
+      <Group
+        title="Updates"
+        note={
+          u.available
+            ? "Your songs, playlists, downloads and settings stay when you update."
+            : "Nocturn checks for a new build each time it opens."
+        }
+      >
+        {u.available && u.latest ? (
+          <div className="update-card">
+            <b>{buildLabel(u.latest.build)} is ready</b>
+            <small>You have {buildLabel(u.current)}{u.latest.date ? ` · out since ${new Date(u.latest.date).toLocaleDateString()}` : ""}</small>
+            <ol>
+              <li>Plug your iPhone into your PC and unlock it.</li>
+              <li>Open <b>iloader</b> on the PC.</li>
+              <li>Choose <b>Import IPA</b> and pick <b>NocturnMusic.ipa</b> (Claude puts the newest one in your Downloads folder).</li>
+              <li>Wait for it to finish, then open Nocturn.</li>
+            </ol>
+          </div>
+        ) : (
+          <div className="set-row">
+            <span>
+              <b>{u.checking ? "Checking…" : u.error ? "Couldn't check" : u.latest ? "You're up to date" : "Not checked yet"}</b>
+              <small>{u.error ? "Check your internet connection." : u.latest ? `Newest is ${buildLabel(u.latest.build)}` : ""}</small>
+            </span>
+          </div>
+        )}
+        <button className="set-row" disabled={u.checking} onClick={() => updates.check()}>
+          <span>
+            <b>Check for Updates</b>
+          </span>
+        </button>
+      </Group>
       <Group title="Reset">
         <button
           className="set-row danger"

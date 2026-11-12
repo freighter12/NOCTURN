@@ -632,6 +632,23 @@ pub async fn search_songs(query: &str) -> YtResult<Vec<Track>> {
     Ok(r.songs)
 }
 
+/// A filtered search (top card included): SONGS or VIDEOS.
+pub async fn search_filtered(query: &str, params: &str) -> YtResult<SearchResults> {
+    let q: String = query.trim().chars().take(150).collect();
+    if q.is_empty() {
+        return Ok(SearchResults::default());
+    }
+    let mut r = parse_search(&music_post("search", json!({ "query": q, "params": params })).await?);
+    if params == VIDEOS {
+        // The videos filter lists videos as plain rows; the parser files rows with video artwork under videos.
+        r.songs.retain(|t| t.video);
+    }
+    Ok(r)
+}
+
+pub const SONGS: &str = "EgWKAQIIAWoKEAkQBRAKEAMQBA==";
+pub const VIDEOS: &str = "EgWKAQIQAWoKEAkQChAFEAMQBA==";
+
 pub async fn suggestions(input: &str) -> YtResult<Vec<String>> {
     let q: String = input.chars().take(100).collect();
     if q.trim().is_empty() {

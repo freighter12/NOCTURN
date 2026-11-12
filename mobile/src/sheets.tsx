@@ -140,17 +140,19 @@ export function QueueSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** Import a playlist from a Spotify, YouTube Music, YouTube or Deezer link. */
+/** Import a playlist from a Spotify, YouTube Music, YouTube or Deezer link, or a pasted list of songs. */
 export function ImportSheet({ onClose }: { onClose: () => void }) {
   const app = useApp();
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number; stage: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A long Spotify playlist came in partly: explain how to bring the rest.
+  const [partial, setPartial] = useState<{ id: string; count: number } | null>(null);
 
   useEffect(() => {
     let off: (() => void) | undefined;
-    listen<{ done: number; total: number }>("import-progress", (e) => setProgress(e.payload)).then((f) => (off = f));
+    listen<{ done: number; total: number; stage: string }>("import-progress", (e) => setProgress(e.payload)).then((f) => (off = f));
     return () => off?.();
   }, []);
 
@@ -174,6 +176,11 @@ export function ImportSheet({ onClose }: { onClose: () => void }) {
       player.haptic("success");
       const total = r.tracks.length + r.missing.length;
       app.toast(r.missing.length ? `Imported ${r.tracks.length} of ${total} songs` : `Imported ${r.tracks.length} songs`);
+      if (r.truncated) {
+        setPartial({ id: p.id, count: total });
+        setBusy(false);
+        return;
+      }
       close();
       if (app.tab !== "library") app.selectTab("library");
       setTimeout(() => app.push({ kind: "mine", id: p.id }), 60);
@@ -188,18 +195,39 @@ export function ImportSheet({ onClose }: { onClose: () => void }) {
       {(close) => (
         <div className="import">
           <h2 className="sheet-title">Import a Playlist</h2>
+          {partial ? (
+            <>
+              <p className="import-help">
+                <b>Spotify only lets apps see the first 100 songs</b> of a playlist, so {partial.count} came across.
+              </p>
+              <p className="import-help">
+                To bring every song: open the playlist in Spotify <b>on a computer</b>, click one song, press <b>Ctrl+A</b> then <b>Ctrl+C</b>. Send that to your phone (a note, a message to yourself) and paste it here. Any number of songs works that way.
+              </p>
+              <button
+                className="glass-pill wide"
+                onClick={() => {
+                  close();
+                  if (app.tab !== "library") app.selectTab("library");
+                  setTimeout(() => app.push({ kind: "mine", id: partial.id }), 60);
+                }}
+              >
+                Open the playlist
+              </button>
+            </>
+          ) : (
+            <>
           <p className="import-help">
-            Paste a link to a playlist or album from <b>Spotify</b>, <b>YouTube Music</b>, <b>YouTube</b> or <b>Deezer</b>.
+            Paste a link to a playlist or album from <b>Spotify</b>, <b>YouTube Music</b>, <b>YouTube</b> or <b>Deezer</b>. Or paste a list of songs, one per line.
           </p>
           <div className="import-field">
-            <input
+            <textarea
               value={link}
               onChange={(e) => setLink(e.target.value)}
               placeholder="https://open.spotify.com/playlist/…"
               autoCapitalize="off"
               autoCorrect="off"
               spellCheck={false}
-              inputMode="url"
+              rows={link.includes("\n") ? 5 : 1}
               disabled={busy}
             />
             {!link && !busy && (
@@ -213,13 +241,15 @@ export function ImportSheet({ onClose }: { onClose: () => void }) {
               <div className="bar">
                 <i style={{ width: progress?.total ? `${(progress.done / progress.total) * 100}%` : "8%" }} />
               </div>
-              <span>{progress?.total ? `Finding songs on YouTube Music… ${progress.done} of ${progress.total}` : "Reading the playlist…"}</span>
+              <span>{progress?.total ? `${progress.stage === "reading" ? "Reading the songs" : "Finding songs on YouTube Music"}… ${progress.done} of ${progress.total}` : "Reading the playlist…"}</span>
             </div>
           )}
           {error && <p className="import-error">{error}</p>}
           <button className="glass-pill wide" disabled={busy || !link.trim()} onClick={() => run(close)}>
             {busy ? "Importing…" : "Import"}
           </button>
+            </>
+          )}
         </div>
       )}
     </Sheet>

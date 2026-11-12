@@ -24,6 +24,9 @@
 	<true/>
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
 	<true/>
+	<!-- Allow 120 Hz (ProMotion) on iPhones that have it; without this iOS caps apps at 60. -->
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>

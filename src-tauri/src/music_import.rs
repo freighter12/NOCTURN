@@ -232,6 +232,61 @@ pub(crate) fn str_at<'a>(v: &'a Value, path: &[&str]) -> Option<&'a str> {
     cur.as_str()
 }
 
+/// Spotify song IDs in pasted text, when the text is mostly song links — what
+/// the Spotify app copies after selecting songs and pressing Ctrl+C (any
+/// number of songs, unlike the 100 its public playlist page shows).
+pub fn spotify_track_ids(text: &str) -> Vec<String> {
+    let lines: Vec<&str> = text.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let ids: Vec<String> = lines
+        .iter()
+        .filter_map(|l| {
+            let rest = l.strip_prefix("spotify:track:").or_else(|| l.split("open.spotify.com/").nth(1).and_then(|r| r.split("track/").nth(1)))?;
+            let id: String = rest.chars().take_while(char::is_ascii_alphanumeric).collect();
+            spotify_id(&id).then_some(id)
+        })
+        .take(MAX_ITEMS)
+        .collect();
+    if ids.is_empty() || ids.len() * 2 < lines.len() {
+        return Vec::new();
+    }
+    ids
+}
+
+fn parse_spotify_track(html: &str) -> Option<RemoteTrack> {
+    let start = html.find("id=\"__NEXT_DATA__\"").and_then(|i| html[i..].find('>').map(|j| i + j + 1))?;
+    let json = &html[start..start + html[start..].find("</script>")?];
+    let v: Value = serde_json::from_str(json).ok()?;
+    let e = v.pointer("/props/pageProps/state/data/entity")?;
+    let title = e.get("name").or_else(|| e.get("title")).and_then(Value::as_str)?.trim().to_string();
+    let artist = e.get("artists").and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.get("name").and_then(Value::as_str)).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+    (!title.is_empty()).then(|| RemoteTrack { title, artist, album: String::new(), duration_ms: e.get("duration").and_then(Value::as_i64), path: None, video_id: None })
+}
+
+/// Look up pasted Spotify song links one by one (eight at a time), in order.
+pub async fn fetch_spotify_tracks(ids: Vec<String>) -> AppResult<RemoteList> {
+    let mut found: Vec<Option<RemoteTrack>> = vec![None; ids.len()];
+    for chunk in (0..ids.len()).collect::<Vec<_>>().chunks(8) {
+        let mut set = tokio::task::JoinSet::new();
+        for &i in chunk {
+            let id = ids[i].clone();
+            set.spawn(async move {
+                let r = get_text(&format!("https://open.spotify.com/embed/track/{id}"), &[]).await;
+                (i, r.ok().filter(|(s, _)| *s < 400).and_then(|(_, h)| parse_spotify_track(&h)))
+            });
+        }
+        while let Some(r) = set.join_next().await {
+            if let Ok((i, t)) = r {
+                found[i] = t;
+            }
+        }
+    }
+    let tracks: Vec<RemoteTrack> = found.into_iter().flatten().collect();
+    if tracks.is_empty() {
+        return Err(AppError::msg("couldn't read those Spotify songs — check your connection and try again"));
+    }
+    Ok(RemoteList { source: "Spotify".into(), name: "Spotify songs".into(), url: None, tracks, truncated: false })
+}
+
 pub fn parse_spotify_embed(html: &str) -> AppResult<RemoteList> {
     let start = html.find("id=\"__NEXT_DATA__\"").and_then(|i| html[i..].find('>').map(|j| i + j + 1));
     let json = start.and_then(|s| html[s..].find("</script>").map(|e| &html[s..s + e]));

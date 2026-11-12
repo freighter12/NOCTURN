@@ -86,6 +86,36 @@ async fn import_playlist(app: tauri::AppHandle, link: String) -> Result<import::
     import::import(&app, &link).await
 }
 
+/// The newest build on GitHub (the same file SideStore reads).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LatestBuild {
+    version: String,
+    build: String,
+    date: String,
+    notes: String,
+}
+
+#[tauri::command]
+async fn check_update() -> Result<LatestBuild, String> {
+    const URL: &str = "https://github.com/freighter12/NOCTURN/releases/download/nocturn-music-ios/source.json";
+    let res = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?
+        .get(URL)
+        .send()
+        .await
+        .map_err(|e| format!("couldn't check for updates: {}", e.without_url()))?;
+    if !res.status().is_success() {
+        return Err(format!("couldn't check for updates (GitHub answered {})", res.status().as_u16()));
+    }
+    let v: serde_json::Value = res.json().await.map_err(|_| "the update info couldn't be read".to_string())?;
+    let latest = v.pointer("/apps/0/versions/0").ok_or("the update info couldn't be read")?;
+    let s = |k: &str| latest.get(k).and_then(serde_json::Value::as_str).unwrap_or("").to_string();
+    Ok(LatestBuild { version: s("version"), build: s("buildVersion"), date: s("date"), notes: s("localizedDescription") })
+}
+
 #[tauri::command]
 async fn ai_shuffle(input: ai::Input) -> Result<ai::Plan, String> {
     ai::shuffle(input).await
@@ -134,6 +164,7 @@ pub fn run() {
             lyrics_get,
             import_playlist,
             ai_shuffle,
+            check_update,
             library_load,
             library_save
         ])

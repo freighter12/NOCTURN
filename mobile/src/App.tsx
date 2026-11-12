@@ -11,6 +11,7 @@ import SettingsPage from "./pages/Settings";
 import CollectionPage from "./pages/Collection";
 import ArtistView from "./pages/Artist";
 import { ActionSheet, ImportSheet, QueueSheet } from "./sheets";
+import { buildLabel, updates, useUpdates } from "./update";
 import { buildItems } from "@shared/lyricsTiming";
 
 const TABS: { id: TabId; title: string; symbol: string; search?: boolean }[] = [
@@ -31,6 +32,34 @@ function shuffled<T>(a: T[]): T[] {
     [b[i], b[j]] = [b[j], b[i]];
   }
   return b;
+}
+
+/** "Update available" across the top; tap for the steps in Settings › About. */
+function UpdateBanner() {
+  const app = useApp();
+  const u = useUpdates();
+  if (!u.available || u.dismissed || !u.latest) return null;
+  return (
+    <div className="update-banner" role="status">
+      <button
+        className="update-main"
+        onClick={() => {
+          updates.dismiss();
+          if (app.tab !== "library") app.selectTab("library");
+          setTimeout(() => app.push({ kind: "settings", section: "about" }), 60);
+        }}
+      >
+        <span className="update-dot" />
+        <span>
+          <b>Update available</b>
+          <small>{buildLabel(u.latest.build)} is out. Tap to see how to get it.</small>
+        </span>
+      </button>
+      <button className="update-x" aria-label="Hide" onClick={() => updates.dismiss()}>
+        <Icon name="close" size={16} />
+      </button>
+    </div>
+  );
 }
 
 export default function App() {
@@ -75,6 +104,7 @@ export default function App() {
       off.then((f) => f());
     };
   }, []);
+  useEffect(() => updates.startupCheck(), []);
   const toast = useCallback((text: string) => {
     setToastText(text);
     clearTimeout(toastTimer.current);
@@ -371,6 +401,7 @@ export default function App() {
       {actions && <ActionSheet track={actions} onClose={() => setActions(null)} />}
       {queueOpen && <QueueSheet onClose={() => setQueueOpen(false)} />}
       {importOpen && <ImportSheet onClose={() => setImportOpen(false)} />}
+      {introDone && <UpdateBanner />}
       {toastText && <div className="toast">{toastText}</div>}
     </AppContext.Provider>
   );

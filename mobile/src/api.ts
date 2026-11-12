@@ -63,6 +63,8 @@ export type ImportResult = {
   artwork?: string | null;
   tracks: Track[];
   missing: { title: string; artist: string }[];
+  /** Spotify only showed the first 100 songs of a long playlist. */
+  truncated: boolean;
 };
 
 export type AIPlan = { upcoming: Track[]; because: string; discoveries: number };

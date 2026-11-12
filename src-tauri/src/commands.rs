@@ -173,7 +173,10 @@ pub async fn music_import_preview(state: State<'_, Shared>, link: Option<String>
             let parsed = if mi::is_short_link(&l) { mi::resolve_short(&l).await? } else { mi::parse_link(&l)? };
             mi::fetch(&parsed).await?
         }
-        (None, Some(t)) => mi::parse_text(&t)?,
+        (None, Some(t)) => match mi::spotify_track_ids(&t) {
+            ids if !ids.is_empty() => mi::fetch_spotify_tracks(ids).await?,
+            _ => mi::parse_text(&t)?,
+        },
         (None, None) => return Err(AppError::Invalid("paste a playlist link or a list of songs".into())),
     };
     let st = state.inner().clone();

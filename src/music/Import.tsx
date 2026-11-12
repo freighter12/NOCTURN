@@ -136,7 +136,7 @@ export function ImportPanel({ refresh, onDone, onCancel }: { refresh?: { playlis
             </form>
           ) : (
             <div className="stack" style={{ gap: 8 }}>
-              <textarea className="textarea mono" rows={7} value={text} onChange={(e) => setText(e.target.value)} placeholder={"One song per line, e.g.\nThe Beatles - Hey Jude\nBlinding Lights by The Weeknd\n\nAlso works: a CSV export (e.g. from Exportify) or an .m3u playlist."} aria-label="Song list" spellCheck={false} />
+              <textarea className="textarea mono" rows={7} value={text} onChange={(e) => setText(e.target.value)} placeholder={"One song per line, e.g.\nThe Beatles - Hey Jude\nBlinding Lights by The Weeknd\n\nBig Spotify playlist? In the Spotify app, click a song, press Ctrl+A then Ctrl+C, and paste here: every song comes across.\nAlso works: a CSV export or an .m3u playlist."} aria-label="Song list" spellCheck={false} />
               <div className="row" style={{ gap: 8 }}>
                 <input ref={file} type="file" accept=".m3u,.m3u8,.csv,.txt" hidden onChange={(e) => readFile(e.target.files?.[0])} />
                 <button className="btn ghost sm" onClick={() => file.current?.click()}>Choose a file…</button>
@@ -161,7 +161,7 @@ export function ImportPanel({ refresh, onDone, onCancel }: { refresh?: { playlis
               <div className="small dim">{preview.source === "List" ? "From your list" : `From ${preview.source}`} · {preview.items.length - preview.matched} missing{preview.matched > 0 ? " · untick any match that's wrong" : ""}</div>
             </div>
           </div>
-          {preview.truncated && <Note tone="warning">{preview.source} only shows the first {preview.items.length} songs of long playlists to apps that aren't signed in. For the full list, export it as CSV (e.g. with Exportify) and paste that instead.</Note>}
+          {preview.truncated && <Note tone="warning">{preview.source} only shows the first {preview.items.length} songs of long playlists to apps that aren't signed in.{preview.source === "Spotify" ? " To get every song: open the playlist in the Spotify app, click one song, press Ctrl+A then Ctrl+C, and paste that under \"Paste a list or file\"." : " For the full list, export it as CSV and paste that under \"Paste a list or file\"."}</Note>}
           {preview.matched === 0 && <Note>None of these songs are in your library yet. You can still save it: the list is remembered, and songs are filled in as you add them to your music folders.</Note>}
 
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
