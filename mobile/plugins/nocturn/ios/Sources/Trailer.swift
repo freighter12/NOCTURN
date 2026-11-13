@@ -61,10 +61,12 @@ enum Trailer {
       (26.0, { look(theme: "city", style: "rise", color: "gold") }),
       (29.0, { look(theme: "seasons") }),
       (31.5, { look(theme: "christmas") }),
-      (34.0, { look(theme: "lava", style: "glow", color: "artwork") }),
+      (34.0, { look(theme: "meteors", style: "glow", color: "artwork") }),
       (36.5, { NotificationCenter.default.post(name: .trailerCard, object: nil) }),
       (41.0, { NotificationCenter.default.post(name: .trailerCloseCard, object: nil) }),
       (42.5, {
+        // a calm, dark background behind Wrapped and the theme picker (bright ones wash out the text)
+        look(theme: "aurora")
         ChromeController.shared.hideNowPlaying()
         ChromeController.shared.select("library")
         web("wrapped")

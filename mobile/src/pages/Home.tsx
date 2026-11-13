@@ -59,7 +59,15 @@ export default function Home() {
     api.home().then(setShelves).catch((e) => setError(errorText(e)));
   };
   const trailer = useTrailer();
-  useEffect(load, [trailer]);
+  // a slow answer from before trailer mode switched on must not replace the demo shelves
+  useEffect(() => {
+    let live = true;
+    setError(null);
+    api.home().then((s) => live && setShelves(s)).catch((e) => live && setError(errorText(e)));
+    return () => {
+      live = false;
+    };
+  }, [trailer]);
 
   return (
     <div className="home">
