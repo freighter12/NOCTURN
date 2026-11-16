@@ -19,7 +19,7 @@ on:
         default: macos-26
 
 concurrency:
-  group: ios-trailer-${{ github.ref }}
+  group: ios-trailer-${{ github.ref }}-${{ inputs.runner || 'default' }}
   cancel-in-progress: true
 
 jobs:
